@@ -13,12 +13,7 @@
   - [GitHub_Profile_Readme_Guidelines.md](ai_agent_refs/GitHub_Profile_Readme_Guidelines.md): 깃허브 프로필 리드미 템플릿 구성 지침
   - [Mermaid_Diagram_Guidelines.md](ai_agent_refs/Mermaid_Diagram_Guidelines.md): 에이전트 생성용 락프리 및 시퀀스 다이어그램 작성법
   - [WPF_Architecture_Guidelines.md](ai_agent_refs/WPF_Architecture_Guidelines.md): WPF MVVM 아키텍처 및 컨트롤 바인딩 규칙
-- **[MundusVivens](MundusVivens/)**: Mundus Vivens 프로젝트 아키텍처 및 기획 의도 상세 노트
-  - [CPP_Evolution_Notes.md](MundusVivens/CPP_Evolution_Notes.md): C++ 서버 로컬 BT 및 지각 시스템 고도화 로드맵
-  - [Current_Architecture.md](MundusVivens/Current_Architecture.md): C++ 물리 서버와 C# 인지 브레인 동기화 파이프라인
-  - [Smallville_Dialogue_API.md](MundusVivens/Smallville_Dialogue_API.md): 스몰빌 생성 에이전트 대화 API 호출 분석 메모
-  - [State_Machine_Limitations.md](MundusVivens/State_Machine_Limitations.md): 상태 머신 기반 시뮬레이션의 한계 및 자율 에이전트 전환 당위성
-  - [Under_Consideration.md](MundusVivens/Under_Consideration.md): 현재 아키텍처에서 고도화를 검토 중인 과제 목록
+- **[MundusVivens](MundusVivens/)**: Mundus Vivens 프로젝트의 아키텍처, 기획 의도, 고도화 과제를 다루는 기술 노트 폴더 (세부 문서 목록은 해당 디렉토리 참조)
 
 ## 에이전트 준수 규칙 (Agent Directives)
 
