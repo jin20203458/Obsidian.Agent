@@ -15,7 +15,11 @@
   - [WPF_Architecture_Guidelines.md](ai_agent_refs/WPF_Architecture_Guidelines.md): WPF MVVM 아키텍처 및 컨트롤 바인딩 규칙
 
 - **MundusVivens/**: Mundus Vivens 프로젝트의 아키텍처, 기획 의도, 고도화 과제를 다루는 기술 노트 폴더 (세부 문서 목록은 해당 디렉토리 참조)
+- **troubleshooting/**: 중앙 집중형 트러블슈팅 및 런북 보관 폴더
+  - [mundus_vivens.md](troubleshooting/mundus_vivens.md): C# AI Server & C++ Game Server 장애 조치 로그
+  - [git_and_os.md](troubleshooting/git_and_os.md): 공통 OS 및 Git 환경 오류 장애 조치 로그
+  - [unity_client.md](troubleshooting/unity_client.md): 유니티 엔진 및 클라이언트 장애 조치 로그
 
 ## 에이전트 준수 규칙 (Agent Directives)
-
 - [.agents/AGENTS.md](.agents/AGENTS.md)
+
