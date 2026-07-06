@@ -15,4 +15,4 @@
 
 ## 에이전트 준수 규칙 (Agent Directives)
 
-본 저장소를 편집하거나 문서를 최신화할 때 준수해야 하는 모든 지침은 [.agents/AGENTS.md](.agents/AGENTS.md) 파일에 단일화하여 명시되어 있습니다. 에이전트는 해당 지침을 준수하여 작업을 수행하십시오.
+- [.agents/AGENTS.md](.agents/AGENTS.md)
