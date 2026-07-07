@@ -17,6 +17,32 @@
   5. **`<context_triggers>`**: 토큰 절약을 위해 특정 조건(아키텍처 수정, 버그 발생 등) 만족 시에만 지식베이스를 로드하도록 하는 조건부 트리거
   6. **`<post_action>`**: 작업 완료 후 수행할 옵시디언 트러블슈팅 기록 및 아키텍처 문서 동기화(Sync) 규칙
 
+* **AGENTS.md 작성 예시**:
+  ```markdown
+  <assigned_role>Senior C++ Physics & ECS Engine Developer</assigned_role>
+  <project_philosophy>Focus: 20Hz lock-free simulation main loop, EnTT ECS.</project_philosophy>
+
+  <engineering_rules>
+  - Memory: Prefer smart pointers. Use raw pointers only when technically required (non-owning observers).
+  - Formatting: Strictly follow the target file's style.
+  </engineering_rules>
+
+  <critical_rules>
+  - Build: `powershell -ExecutionPolicy Bypass -File .\build_local.ps1` (NO raw CMake)
+  - Paths: Use relative paths (`../Obsidian.Agent/`, etc.)
+  </critical_rules>
+
+  <context_triggers>
+  - **Knowledge Base**: If modifying architecture, read `../MundusVivens/docs/01_architecture.md`.
+  - **Troubleshooting**: If debugging, read `../Obsidian.Agent/troubleshooting/mundus_vivens.md` before coding.
+  </context_triggers>
+
+  <post_action>
+  - **Log**: Document resolved bugs in `../Obsidian.Agent/troubleshooting/mundus_vivens.md`.
+  - **Sync**: Update specs in `../MundusVivens/docs/` if architecture changes.
+  </post_action>
+  ```
+
 ---
 
 ### 2단계. 지식베이스 저장소 (`Obsidian.Agent`) 리소스 생성
