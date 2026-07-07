@@ -22,6 +22,5 @@ Focus: Single Source of Truth, low redundancy, exact relative paths.
 </context_triggers>
 
 <post_action>
-- **Log**: Document resolved bugs in `../Obsidian.Agent/troubleshooting/mundus_vivens.md`. (Ignore simple refactors/optimizations)
-- **Sync**: Update specs in `../MundusVivens/docs/` if architecture changes.
+- **Log**: Use templates in the troubleshooting directory when logging issues.
 </post_action>
