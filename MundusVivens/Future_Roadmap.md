@@ -11,10 +11,10 @@
 ### ① 로컬 행동 트리 (Local Behavior Tree / Utility AI) 및 전투(Combat) 시스템 구축 (점진적 이관)
 * **목적**: 긴급 상황(전투, 습격, 폭발) 발생 시 대뇌(LLM)의 2~3초 지연을 기다리지 않고 즉각 척수 수준에서 대피/방어를 수행하고, 검증 가능하며 디버깅이 완벽히 통제된 방식으로 실시간 전투를 연동하기 위함.
 * **단계별 구현 계획 (디버깅 최적화 순서)**:
-  1. **1단계: 초경량 C++ 로컬 행동 트리(BT) 엔진 구축**: `Selector`, `Sequence`, `Action` 노드를 지원하는 메모리 효율적인 C++ 로컬 BT 데이터 구조 및 러너(Runner)를 서버 물리 루프에 추가.
-  2. **2단계: 기존 생존 시스템(수면/식사) 이관**: 이미 검증된 `SystemSurvivalOverride`와 `SystemAffordanceResolver` 로직을 신규 C++ BT 노드로 이관하여, 프레임워크 자체의 분기/동작 무결성을 변수가 통제된 환경에서 디버깅 및 고립(Isolation) 검증.
-  3. **3단계: 전투(HP/공격/도주) 피처 구현**: `HealthComp`를 추가하고, `Attack` 및 `Flee` 노드를 BT에 연동하여 20Hz 물리 추적(Steering/A*) 및 타격/데미지 시스템 구현.
-  4. **4단계: C# 대뇌(LLM/기억/관계) 인지 연동**: C++의 피격 이벤트를 gRPC를 통해 C# 서버로 보내 `Trauma` Witnessed 기억(Belief)으로 주입하고 관계도를 적대적으로 갱신하도록 연동.
+  1. **1단계 [완료]: 초경량 C++ 로컬 행동 트리(BT) 엔진 구축**: `Selector`, `Sequence`, `Action` 노드를 지원하는 메모리 효율적인 C++ 로컬 BT 데이터 구조 및 러너(Runner)를 서버 물리 루프에 추가.
+  2. **2단계 [완료]: 기존 생존 시스템(수면/식사) 이관**: 이미 검증된 `SystemSurvivalOverride`와 `SystemAffordanceResolver` 로직을 신규 C++ BT 노드로 이관하여, 프레임워크 자체의 분기/동작 무결성을 변수가 통제된 환경에서 디버깅 및 고립(Isolation) 검증.
+  3. **3단계 [대기]: 전투(HP/공격/도주) 피처 구현**: `HealthComp`를 추가하고, `Attack` 및 `Flee` 노드를 BT에 연동하여 20Hz 물리 추적(Steering/A*) 및 타격/데미지 시스템 구현.
+  4. **4단계 [대기]: C# 대뇌(LLM/기억/관계) 인지 연동**: C++의 피격 이벤트를 gRPC를 통해 C# 서버로 보내 `Trauma` Witnessed 기억(Belief)으로 주입하고 관계도를 적대적으로 갱신하도록 연동.
 
 ### ② 실시간 물리 추적 시스템 (Autonomous Tracking Goal)
 * **목적**: 동적으로 움직이는 타겟을 추적하여 물리적 상호작용(대화 신청, 공격 등)을 성사시키기 위함.
