@@ -4,7 +4,7 @@
 
 ---
 
-## 📌 주요 아키텍처 개요
+##  주요 아키텍처 개요
 
 ### 1. Clang-Tidy (AST 기반 구문 분석)
 * **목적**: C++ 소스코드의 AST(Abstract Syntax Tree)를 파싱하여 무기체계 SW 코딩 규칙(CWE/CERT 등) 위배 여부를 패턴 매칭 형태로 정밀 검사합니다.
@@ -20,6 +20,6 @@
 
 ---
 
-## ⚙️ 개발 및 참조 템플릿
+##  개발 및 참조 템플릿
 * **체커 상태 모델링 규칙**: 분기(Assume) 조건문 평가 시 상태 갈라짐(Post-Split) 문제를 방지하기 위해 반드시 `checkBranchCondition` 내에서 `C.getPredecessor()`를 통한 선행 상태 역추적 기법을 유지하십시오. (상세 내용은 [troubleshooting/llvm_clang.md](../troubleshooting/llvm_clang.md) 참조)
 * **빌드 스크립트 규격**: 증분 컴파일러 빌드를 위해 `Release` 사양으로 `clang` 단일 타겟 빌드를 기본으로 수행합니다.
