@@ -55,4 +55,19 @@
 
 ---
 
+## 2026-07-07: 감정 쇠퇴 및 전염 시스템의 정수 ID 기반 고속화 최적화
+
+### 현상 (Symptom)
+* 20Hz(50ms)로 작동하는 물리 메인 루프(`SystemEmotionDecay`) 내에서, 모든 NPC의 감정 상태를 스캔하고 부정 감정을 필터링할 때 매 틱마다 `std::string::find` 및 `std::string` 비교 연산이 다수 발생하여 CPU 연산 부하가 누적됨.
+* 특히 LLM(C#)의 창발적 감정 문자열 대응을 위해 감정을 동적으로 레지스트리에 추가함에 따라, 고정된 문자열 매칭으로는 신규 감정(예: `"분노함"`, `"엄청분노함"`)의 자연 쇠퇴 및 전염 조건 처리에 한계가 있었음.
+
+### 해결책 (Resolution)
+* **카테고리 기반 O(1) 분류 및 정수화**:
+  * `EmotionCategory` 열거형(`Neutral`, `Anger`, `Hostility`, `Fear`)을 추가하고, `EmotionRegistry`에 감정 ID별 카테고리를 저장하는 `category_table`(`std::vector<EmotionCategory>`)을 도입함.
+  * C# gRPC 응답으로 신규 감정 문자열이 수신되어 레지스트리에 등록되는 시점(최초 1회)에만 `.find("분노")` 등의 문자열 검사를 수행하여 카테고리를 분류하고 `category_table`에 저장함.
+  * 물리 틱 루프(`SystemEmotionDecay`) 내부에서는 문자열 연산 없이 `category_table[current_emotion_id]`를 통해 O(1) 정수 비교로 부정 감정 여부를 식별함.
+* **출력 감정 ID 캐싱**:
+  * 전염의 결과로 주입되는 표준 감정인 `"불안"`, `"경계"`의 정수 ID를 `SystemEmotionDecay` 진입 시 `static` 로컬 변수에 최초 1회 캐싱하여 틱 내 문자열 연산을 0으로 만듦.
+* **쇠퇴 판정**:
+  * `current_emotion_id != base_emotion_id` 정수 비교 판정을 수행하고, 로그 출력 시에만 역방향 조회로 문자열을 출력하도록 개선함.
 
