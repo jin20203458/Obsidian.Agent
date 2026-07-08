@@ -1,10 +1,5 @@
 # Obsidian system/workspace files
-.obsidian/workspace.json
-.obsidian/workspace-mobile.json
-.obsidian/graph.json
-.obsidian/backups/
-.obsidian/cache/
-.obsidian/plugins/obsidian-git/
+.obsidian/
 
 # OS temporary files
 .DS_Store
@@ -12,7 +7,3 @@ Thumbs.db
 
 # PixAI
 PixAI/
-
-# Junctions
-MundusVivens/docs/
-
