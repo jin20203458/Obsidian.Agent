@@ -56,7 +56,7 @@ graph TD
 
 ### 2단계: 공간 및 시뮬레이션 데이터 모델 (ECS 컴포넌트)
 게임 루프에서 엔티티가 가질 상태와 맵 데이터 구조를 학습합니다.
-*   [ ] **[GridMap.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/GridMap.h)**
+*   [x] **[GridMap.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/GridMap.h)**
     *   *리뷰 포인트*: A* 알고리즘의 타일 기반 길찾기 구조와 고정 그리드 맵 정보 로드 방식.
 *   [ ] **[BTNode.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/BTNode.h)**
     *   *리뷰 포인트*: 행동 트리(Behavior Tree)의 핵심이 되는 `Selector`, `Sequence`, `Inverter` 노드 구현체 분석.
