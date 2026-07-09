@@ -51,7 +51,7 @@ graph TD
 *   [x] **[PacketProtocol.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/PacketProtocol.h)**
     *   *리뷰 포인트*: 클라이언트(Unity)와 통신하는 TCP 패킷의 헤더 포맷(Big-Endian 4바이트) 및 패킷 ID 상수 구조 분석.
     *   *핵심 구조*: 소형 패킷의 힙 할당을 방지하기 위한 `PacketBuffer` (하이브리드 SBO) 구조 확인.
-*   [ ] **[MundusVivensClient.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/MundusVivensClient.h)**
+*   [x] **[MundusVivensClient.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/MundusVivensClient.h)**
     *   *리뷰 포인트*: C# AI 서버와 연동되는 gRPC 통신용 데이터 구조체(`DialogueResult`, `WorldBootstrapData`, `RelationshipDelta` 등)의 역할 이해.
 
 ### 2단계: 공간 및 시뮬레이션 데이터 모델 (ECS 컴포넌트)
