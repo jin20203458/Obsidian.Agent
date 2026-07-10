@@ -29,8 +29,9 @@
   - [ArqaStatic_수동_검증_기준_데이터.md](ArqaStatic_Pintos_실험_결과/ArqaStatic_수동_검증_기준_데이터.md): 51종 룰셋에 대하여 synch.c를 개발자가 직접 눈으로 분석하여 판정한 기준 데이터
   - [ArqaStatic_검출_및_미탐_분석.md](ArqaStatic_Pintos_실험_결과/ArqaStatic_검출_및_미탐_분석.md): 정량적/정성적 검출 및 매핑 분석 마스터 보고서
   - [ArqaStatic_정탐_상세_분석.md](ArqaStatic_Pintos_실험_결과/ArqaStatic_정탐_상세_분석.md): 규칙별 Clang-Tidy 매핑 및 실제 경고 대조 테이블
-  - [ArqaStatic_미탐_사유_분석.md](ArqaStatic_Pintos_실험_결과/ArqaStatic_미탐_사유_분석.md): 댕글링 포인터 및 컴파일 지연 우회 사유 분석서
+  - [ArqaStatic_미탐_사유_분석.md](ArqaStatic_Pintos_실험_결과/ArqaStatic_미탐_사유_분석.md): 스택 주소 유출 미탐 및 OS 커널/C 표준 규격 오탐 상세 분석 보고서
   - [ArqaStatic_정량적_통계_데이터.md](ArqaStatic_Pintos_실험_결과/ArqaStatic_정량적_통계_데이터.md): 규칙별 검출 수치 데이터 요약
+
 
 
 
