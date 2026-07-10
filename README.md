@@ -25,10 +25,7 @@
   - [git_and_os.md](troubleshooting/git_and_os.md): 공통 OS 및 Git 환경 오류 장애 조치 로그
   - [unity_client.md](troubleshooting/unity_client.md): 유니티 엔진 및 클라이언트 장애 조치 로그
 
-- **ArqaStatic_Pintos_실험_결과/**: Pintos `threads/synch.c`를 대상으로 국방무기체계 코딩 규칙을 적용한 ArqaStatic(Clang-Tidy) 정적 분석 실험 결과 보관 폴더
-  - [ArqaStatic_최종_실험_결과_종합_보고서.md](ArqaStatic_Pintos_실험_결과/ArqaStatic_최종_실험_결과_종합_보고서.md): 수동 검출, Clang-Tidy 정탐/미탐/오탐 목록을 일목요연하게 총괄 정리한 마스터 최종 보고서
-  - [Cppcheck_최종_실험_결과_종합_보고서.md](ArqaStatic_Pintos_실험_결과/Cppcheck_최종_실험_결과_종합_보고서.md): 수동 검출, Cppcheck 정탐/미탐/오탐 목록을 일목요연하게 총괄 정리한 마스터 최종 보고서
-  - [ArqaStatic_수동_검증_기준_데이터.md](ArqaStatic_Pintos_실험_결과/ArqaStatic_수동_검증_기준_데이터.md): 51종 룰셋에 대하여 synch.c를 개발자가 직접 눈으로 분석하여 판정한 기준 데이터
+
 
 
 
