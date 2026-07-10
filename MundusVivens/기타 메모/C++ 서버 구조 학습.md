@@ -67,12 +67,12 @@ graph TD
 
 ### 3단계: 스레드 경계와 비동기 I/O (비동기 데이터 흐름)
 게임 서버 아키텍처의 핵심인 **3-스레드 모델**에서 락(Lock)을 타지 않고 안전하게 통신하는 구조를 학습합니다.
-*   [ ] **[GrpcResultQueue.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/GrpcResultQueue.h)**
+*   [x] **[GrpcResultQueue.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/GrpcResultQueue.h)**
     *   *리뷰 포인트*: IO/gRPC 스레드가 메인 스레드로 작업을 전달할 때 임계 구역(Lock)을 최소화하기 위해 사용되는 **더블 버퍼 스왑(Double Buffer Swap - Drain 방식)** 기법 분석.
-*   [ ] **[ClientSession.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/ClientSession.h) & [TcpServer.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/TcpServer.h)**
+*   [x] **[ClientSession.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/ClientSession.h) & [TcpServer.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/TcpServer.h)**
     *   *리뷰 포인트*: Boost.Asio C++20 코루틴을 사용한 비동기 TCP 세션 수락 및 수신 패킷의 명령어 큐잉(`PlayerCommand`).
     *   *핵심 로직*: C# AI 서버 처리 지연 시 유입량을 조절하는 **백프레셔 흐름 제어(CheckBackpressure)** 설계 확인.
-*   [ ] **[AsyncGrpcClient.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/AsyncGrpcClient.h)**
+*   [x] **[AsyncGrpcClient.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/AsyncGrpcClient.h)**
     *   *리뷰 포인트*: Asio-gRPC(`agrpc`)를 활용하여 C# AI 서버로 비동기 gRPC 요청을 보내고 코루틴으로 받아오는 흐름 확인.
 
 ### 4단계: 시뮬레이션 시스템 및 도메인 로직 (비즈니스 로직)
