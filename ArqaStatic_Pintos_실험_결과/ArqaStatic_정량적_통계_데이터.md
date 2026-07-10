@@ -1,6 +1,8 @@
 # 3. ArqaStatic 규칙 검출 정량적 통계 데이터 (Pintos threads/synch.c)
 
-본 문서는 ArqaStatic(Clang-Tidy) 정적 분석기가 Pintos 커널의 핵심 동기화 모듈인 `threads/synch.c`를 대상으로 수행한 무기체계 소프트웨어 코딩 규칙 진단 성능을 **수치화(Metrics)하여 정리한 통계 자료**입니다.
+본 문서는 ArqaStatic(Clang-Tidy) 정적 분석기가 Pintos 커널의 핵심 동기화 모듈인 `threads/synch.c` 본체 코드를 대상으로 수행한 무기체계 소프트웨어 코딩 규칙 진단 성능을 **수치화(Metrics)하여 정리한 통계 자료**입니다.
+
+*본 통계는 외부 시스템 헤더(Suppressed warnings 71건)를 제외하고 오직 `synch.c` 사용자 소스 내에서 발생한 순수 경고만을 추출하여 산출하였습니다.*
 
 ## 3.1. 전역 지표 요약 (Global Metrics)
 
@@ -12,7 +14,7 @@
 | **✅ 도구 검출 성공 (Tool Detected)** | **6** | Clang-Tidy 체커에 의해 경고가 발생한 고유 규칙 수 |
 | **🔎 수동 검출 성공 (Manual Only)** | **1** | 도구 미탐이나 코드 분석상 명백히 어긴 규칙 수 (C 전용 5) |
 | **💡 고유 결함 검출 총합** | **7** | 수동 및 도구 검출을 결합한 총 규칙 위반 검출 수 |
-| **📉 검출된 분석 경고 총합 (Warnings)** | **126** | 중복 탐지 및 파일 전체 경고 발생 횟수 (Taint 경로 분석 활성화로 14개 추가 검출) |
+| **📉 검출된 분석 경고 총합 (Warnings)** | **55** | 외부 시스템 헤더(71건)를 차단하고 **`synch.c` 내부에서만 검출된 실질 경고 총합** |
 
 ---
 
@@ -32,5 +34,5 @@
 ---
 
 ## 3.3. 결론적 정량 평가
-* 본 실험을 통해 ArqaStatic(Clang-Tidy)은 핀토스 커널의 C 소스코드 내에서 **총 7종의 고유 무기체계 소프트웨어 코딩 규칙 위반을 규명**하는 데 성공하였습니다.
+* 본 실험을 통해 ArqaStatic(Clang-Tidy)은 시스템 헤더 경고를 제외한 `synch.c` 순수 소스 내에서 **총 7종의 고유 무기체계 소프트웨어 코딩 규칙 위반(55건의 개별 경고)을 규명**하는 데 성공하였습니다.
 * 특히 통신 장애 유발원이었던 `DHTestChecker3`를 제외하고 **`path-sensitive-arqa.AlwaysConstantCondition`** (경로 민감 분석)을 최종 활성화함으로써, 단순 구문 비교 수준을 넘어 기호 실행(Symbolic Execution) 분석에 기반하여 특정 실행 분기 하에서 발생하는 `while (sema->value == 0)` 등의 도달 불가능 조건(Unreachable / Always Constant) 결함을 정밀하게 포착해 냈습니다.
