@@ -12,7 +12,7 @@
 | **✅ 도구 검출 성공 (Tool Detected)** | **6** | Clang-Tidy 체커에 의해 경고가 발생한 고유 규칙 수 |
 | **🔎 수동 검출 성공 (Manual Only)** | **1** | 도구 미탐이나 코드 분석상 명백히 어긴 규칙 수 (C 전용 5) |
 | **💡 고유 결함 검출 총합** | **7** | 수동 및 도구 검출을 결합한 총 규칙 위반 검출 수 |
-| **📉 검출된 분석 경고 총합 (Warnings)** | **112** | 중복 탐지 및 파일 전체 경고 발생 횟수 |
+| **📉 검출된 분석 경고 총합 (Warnings)** | **126** | 중복 탐지 및 파일 전체 경고 발생 횟수 (Taint 경로 분석 활성화로 14개 추가 검출) |
 
 ---
 
@@ -23,7 +23,7 @@
 | Common_Style | 11 | 3 | 0 | `ast-extern-function-declaration`<br>`ast-multi-statement-per-line`<br>`ast-if-style` |
 | Common_Init | 3 | 0 | 0 | - |
 | Common_Ident | 4 | 0 | 0 | - |
-| Common_Cond | 5 | 1 | 0 | `ast-always-constant-condition` |
+| Common_Cond | 5 | 1 | 0 | `ast-always-constant-condition`<br>`path-sensitive-arqa.AlwaysConstantCondition` |
 | Common_Conv | 8 | 1 | 0 | `ast-function-call-argument-consistency` |
 | Common_PtrArray | 5 | 1 | 0 | `cfg-null-dereference-guard` |
 | Common_Expr | 9 | 0 | 0 | - |
@@ -33,4 +33,4 @@
 
 ## 3.3. 결론적 정량 평가
 * 본 실험을 통해 ArqaStatic(Clang-Tidy)은 핀토스 커널의 C 소스코드 내에서 **총 7종의 고유 무기체계 소프트웨어 코딩 규칙 위반을 규명**하는 데 성공하였습니다.
-* 특히 **`cfg-null-dereference-guard`** 체커를 통한 제어 흐름 기반 포인터 NULL 검증 누락 탐지와, **`ast-if-style`** 체커를 통한 방어적 코딩 스타일 단속 등, 기존 단순 구문 매칭 도구(Cppcheck 등)가 놓치기 쉬운 결함들을 AST와 CFG를 결합해 정밀 진단할 수 있음을 데이터로 증명하였습니다.
+* 특히 통신 장애 유발원이었던 `DHTestChecker3`를 제외하고 **`path-sensitive-arqa.AlwaysConstantCondition`** (경로 민감 분석)을 최종 활성화함으로써, 단순 구문 비교 수준을 넘어 기호 실행(Symbolic Execution) 분석에 기반하여 특정 실행 분기 하에서 발생하는 `while (sema->value == 0)` 등의 도달 불가능 조건(Unreachable / Always Constant) 결함을 정밀하게 포착해 냈습니다.

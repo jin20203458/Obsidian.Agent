@@ -29,7 +29,19 @@
 
 ---
 
-## 2.2. ⚠️ 진단 환경 특이 사항 (cURL Timeout 에러)
-* **현상**: 분석 전체 범위(`--checks=*`)로 가동 시 `Error from cURL: Timeout was reached` 경고와 함께 분석 엔진이 지연(Stall)되는 현상 발생.
-* **원인**: 커스텀 체커 모듈 중 일부 Taint 분석 또는 라이선스 연동 모듈이 외부 API 연동을 시도하다가, 오프라인 환경에 의해 30초 이상의 타임아웃 지연을 발생시킴.
-* **해결 및 대응**: 네트워크 I/O가 없는 순수 AST 및 CFG 분석 그룹인 **`ast-*,cfg-*`** 체커 그룹만 명시적으로 활성화하여 지연 현상을 완벽히 배제하고 초고속 정적 분석(1초 소요)을 구현함.
+## 2.2. ⚠️ 진단 환경 특이 사항 및 cURL 타임아웃 극복 런북
+
+### 1. cURL 타임아웃 현상의 전말
+* **원인**: `path-sensitive-arqa.*` 체커 그룹 중 일부 분석 모듈이 라이선스/동기화 등을 위해 외부 정책 서버와 웹 통신(cURL)을 강제 시도하여 타임아웃(Timeout reached) 지연 및 분석 정지 현상이 발생함.
+* **진범 식별**: 정밀 로깅 추적을 통해 cURL 원격 연동을 무조건 호출하여 지연을 발생시키는 주범이 **`path-sensitive-arqa.DHTestChecker3`** 체커 단 1개인 것으로 판명됨.
+
+### 2. TaintConfig 로컬 연동 및 타임아웃 해결책 (Solution)
+* **단계 1**: `C:\Users\user\AppData\Roaming\ArqaStatic\TaintConfig.yaml` 경로의 로컬 정책 파일을 분석 설정 파일에 매핑.
+* **단계 2**: Clang-Tidy 룰셋 정의에서 원격 통신 주범인 `DHTestChecker3` 만 명시적으로 제외(`-path-sensitive-arqa.DHTestChecker3`)하고 가동.
+* **최종 설정 예시 (`.clang-tidy`):**
+  ```yaml
+  Checks: 'ast-*,cfg-*,lex-*,path-sensitive-core.*,path-sensitive-unix.*,path-sensitive-arqa.*,-path-sensitive-arqa.DHTestChecker3'
+  CheckOptions:
+    'path-sensitive-arqa.TaintPropagation:Config': 'C:/Users/user/AppData/Roaming/ArqaStatic/TaintConfig.yaml'
+  ```
+* **결과**: 타임아웃 장애가 완벽하게 배제되어 단 1초 만에 실행이 성공하였으며, 25개의 Taint 규칙을 정상 로드하고 `path-sensitive-arqa.AlwaysConstantCondition` 등 타 14개 경로 민감 경고를 성공적으로 추가 검출함.
