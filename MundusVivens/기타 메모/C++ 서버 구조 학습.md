@@ -60,9 +60,9 @@ graph TD
     *   *리뷰 포인트*: A* 알고리즘의 타일 기반 길찾기 구조와 고정 그리드 맵 정보 로드 방식.
 *   [ ] **[BTNode.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/BTNode.h)**
     *   *리뷰 포인트*: 행동 트리(Behavior Tree)의 핵심이 되는 `Selector`, `Sequence`, `Inverter` 노드 구현체 분석.
-*   [ ] **[LocationRegistry.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/LocationRegistry.h)**
+*   [x] **[LocationRegistry.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/LocationRegistry.h)**
     *   *리뷰 포인트*: 거리 기반 스캔 속도를 최적화하기 위해 구현된 `CELL_SIZE(8.0f)` 기반 **공간 해시 그리드(Spatial Hash Grid)** 구조 분석.
-*   [ ] **[Components.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/Components.h)**
+*   [x] **[Components.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/Components.h)**
     *   *리뷰 포인트*: EnTT ECS에 등록될 NPC들의 상태 데이터 컴포넌트(`IdentityComp`, `CooldownComp`, `NeedsComp`, `AffordanceComp` 등)의 유기적 매핑 구조.
 
 ### 3단계: 스레드 경계와 비동기 I/O (비동기 데이터 흐름)
