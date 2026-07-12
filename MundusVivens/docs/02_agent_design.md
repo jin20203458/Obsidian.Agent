@@ -103,9 +103,11 @@ public class Belief
 
 1.  **중요도(Importance) 계산 공식**:
     $$\text{Importance} = (\text{Confidence} \times 0.4) + (\text{Salience} \times 0.35) + (\text{EmotionalCharge} \times 0.25)$$
-2.  **Core 예산 초과 시 강등 (Demotion)**:
+2.  **Core 자동 승격 (Promotion)**:
+    *   새로운 기억이 수집되거나 기존 기억이 업데이트될 때, 해당 기억의 중요도(Importance) 수치가 `0.95` 이상에 도달하면 `BeliefType.Core`로 자동 승격되어 영구적인 신념화가 일어납니다.
+3.  **Core 예산 초과 시 강등 (Demotion)**:
     *   `Core` 타입 믿음이 5개를 초과하면, `Importance`가 가장 낮은 `Core` 믿음이 `Witnessed` 타입으로 강등되고 `AcquiredAt` 타임스탬프가 재조정됩니다.
-3.  **전체 예산 초과 시 도태 (Eviction) 및 Cold Archive 이관**:
+4.  **전체 예산 초과 시 도태 (Eviction) 및 Cold Archive 이관**:
     *   전체 믿음 수가 40개를 초과하면, `Type != Core`인 일반 믿음 중 `Importance` 점수가 가장 낮은 객체가 `MemoryBox.Beliefs` 딕셔너리에서 방출됩니다.
     *   이때 방출된 기억은 그냥 소멸하지 않고, `OnBeliefEvicted` 이벤트를 통해 **LiteDB 영구 보관소(`cold_archive` 컬렉션)**로 이관됩니다.
 4.  **연상 기억 회상 (Heuristic Recall)**:
