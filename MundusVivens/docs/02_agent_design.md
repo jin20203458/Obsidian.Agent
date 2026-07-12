@@ -222,3 +222,16 @@ C++ 게임 서버의 20Hz 물리 엔진에서 감지된 전투 위협 요소는 
 * C++ 엔진에서 실제 전투 타격이 발생하면, C# 서버의 `BeliefEngine.ProcessCombatEventAsync`가 호출됩니다.
 * 피해량(`damage`)과 타격에 사용된 무기(`weapon`) 정보를 기반으로 고도화된 정서적 충격(`EmotionalCharge`)과 `Salience`를 지닌 새로운 `combat_...` 트라우마 기억(Belief)이 Working Memory에 강제 편입됩니다.
 * 이 트라우마는 향후 `ThreatDetectedAsync` 판정 시 강력한 보복 심리(+40 가중치)의 원인이 되며, 연상 회상(Recall) 시 복수 대화로 이어지게 됩니다.
+
+---
+
+## 8. 부록: 스탠퍼드 스몰빌(Generative Agents)과의 효율성 비교
+
+Mundus Vivens의 통합 오케스트레이션 설계는 구형 Generative Agent 모델의 치명적인 비용 문제를 개선했습니다.
+
+* **8턴 대화 1회당 API 호출 비교**:
+  * **Stanford Smallville**: **최소 12회 ~ 최대 20회** (턴당 LLM 질의, 사후 요약, 연쇄 성찰)
+  * **Mundus Vivens**: **단 1회** (Gemini JSON 모드 통합 질의로 대본, 감정 변화, 관계 변화, 스케줄을 일괄 도출)
+* **성찰(Reflection) 처리**:
+  * **Stanford Smallville**: 누적 150점 도달 시 실시간 강제 API 호출로 연쇄 지연 유발.
+  * **Mundus Vivens**: 자정 백그라운드 큐 스로틀링(10 TPS) 및 시차 분산 예측 연산으로 API 429 차단.
