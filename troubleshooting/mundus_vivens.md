@@ -99,3 +99,38 @@
 #### 해결책 (Resolution)
 * `SystemSocial.cpp`에서 대화 참여 후보 수집 시 `CombatComp`에 타겟을 둔 캐릭터를 원천적으로 `continue`로 배제함.
 * `SystemJobDriver.cpp`에서도 사망자 체크와 더불어 교전 중인 NPC는 고차원 스케줄 상태 전환을 스킵하도록 예외 조항을 추가하여 척수 반사 수준의 물리 전투 흐름의 영속성을 보장함.
+
+---
+
+## 2026-07-12: 몬스터 이동 로그 개선 및 사망 개체 대화 스팸 루프 해결
+
+### 1. 비지성체(몬스터/동물) 목적지 도달 시 "작업" 표현 노출 오류
+
+#### 현상 (Symptom)
+* 굶주린 늑대(Wolf) 등의 비지성체 몬스터가 목적지에 도착했을 때, 콘솔에 `🏁 [목적지 도착] 굶주린 늑대이(가) 목적지 [술집]에 도달하여 작업을 시작합니다.`라는 어색한 용어의 로그가 출력됨.
+
+#### 원인 (Root Cause)
+* C++ `SystemMovement.cpp`의 목적지 도착 판정 및 ToilState 전환부 로그에 `"작업을 시작합니다"`라는 표현이 모든 엔티티(지성체/비지성체 구분 없음)에 공용으로 사용되어 발생한 표현의 불일치.
+
+#### 해결책 (Resolution)
+* [SystemMovement.cpp](file:///C:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/SystemMovement.cpp)의 Direct-Seek 및 A* Path 도달 처리 로직 내에 `SentienceComp` 조회 단계를 추가함.
+* `SentienceComp::is_sentient` 필드가 `false`인 비지성체 개체의 경우, 목적지 도달 로그의 명사를 `"작업"` 대신 `"행동"`으로 동적 대체하여 `"행동을 시작합니다"`로 보다 자연스럽게 출력되도록 보정함.
+
+---
+
+### 2. [치명적 버그] 사망한 개체에 대한 대화 트리거로 인한 20Hz 사망 처리 루프 스팸 (Dead-Entity Dialogue Loop)
+
+#### 현상 (Symptom)
+* 굶주린 늑대가 사살되어 사망한 이후, C++ 서버 콘솔에 `💀 [사망 처리 완료] 굶주린 늑대의 물리 시뮬레이션이 중단되었습니다.` 로그가 매 틱마다 폭포수처럼 무한히 반복 출력되는 런타임 성능 저하 및 로그 오염 현상 발생.
+
+#### 원인 (Root Cause)
+1. `SystemSocial.cpp` 내의 `SystemSocialInteraction` (1:1 및 다자간 대화 시작) 시스템에서 대화 주도자(`initiator`) 수집 단계에서는 사망 여부(`is_dead`)가 검사되었으나, **주변 이웃 후보자(`neighbor`) 수집 단계에서는 `is_dead` 검사가 누락**되어 있었음.
+2. 이로 인해 살아있는 약탈자 고블린이 죽은 늑대를 대화 대상(Target)으로 선정하여 대화를 걸었고, 늑대의 `ActivityComp`가 `"대화 요청 중"`으로 바뀌고 `BusyTag`가 주입됨.
+3. 20Hz로 작동하는 `SystemDeath`는 매 틱마다 늑대가 죽어있는데 액티비티가 `"사망"`이 아닌 것을 감지하고 다시 `"사망"`으로 강제 복구 및 로그 출력을 수행했고, C# AI 서버의 gRPC 배치 상태 동기화 응답 등과 얽혀 틱마다 강제 덮어쓰기 루프가 반복됨.
+
+#### 해결책 (Resolution)
+* [SystemSocial.cpp](file:///C:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/SystemSocial.cpp)의 대화 대상 이웃 후보군(`neighbor`) 스캔 루프 내에 아래와 같이 **사망자 제외(Filter-out) 조건식**을 추가함.
+  ```cpp
+  if (reg.all_of<HealthComp>(neighbor) && reg.get<HealthComp>(neighbor).is_dead) continue;
+  ```
+* 이를 통해 사망한 개체에게 불필요한 대화 요청 및 상태 변경이 차단되어, 스팸 루프 및 틱 지연 현상이 완벽히 해결됨.
