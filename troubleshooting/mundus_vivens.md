@@ -214,3 +214,73 @@
 * 씬의 루트 목록(`SceneRoots.m_Roots`)에서도 해당 오브젝트의 Transform ID (`146213225`) 엔트리를 삭제함.
 * 이를 통해 씬 상에 유일한 UIManager 오브젝트만 남겨 싱글톤 선점 문제가 근본적으로 제거되었으며, 클라이언트 실행 시 정상적으로 Tick 수치, 실시간 연극 대사 로그, NPC 상세 패널이 실시간 갱신되는 것을 확인함.
 
+---
+
+## 2026-07-12: 한국어 폰트 깨짐, 3D 텍스트 겹침, 카메라 조작 및 대화 범위 한계 개선
+
+### 1. 한국어 폰트(malgun SDF) 깨짐 및 셰이더 미호환 오류
+#### 현상 (Symptom)
+* 월드 상의 NPC 머리 위에 출력되는 한글 텍스트(이름, 상태, 말풍선 대사 등)가 모두 깨져서 노란색/주황색 점선이나 박스 모양의 심각한 그래픽 노이즈 형태로 출력됨.
+#### 원인 (Root Cause)
+* 한국어 폰트 파일인 `malgun SDF.asset`이 참조하는 기본 셰이더가 이전 빌트인 파이프라인 전용 셰이더(`TextMeshPro/Distance Field`)로 설정되어 있어, URP(Universal Render Pipeline) 환경과 호환되지 않아 그래픽이 완전히 깨져 렌더링됨.
+#### 해결책 (Resolution)
+* `malgun SDF.asset` 파일의 셰이더 참조 GUID를 URP 호환 셰이더(`TextMeshPro/Mobile/Distance Field` 또는 `TextMeshPro/Distance Field SSD` 등)인 `fe393ace9b354375a9cb14cdbbc28be4`로 파일 직접 수정을 통해 변경 및 재임포트 완료.
+
+### 2. 카메라 조작성 및 줌인 한계 조절
+#### 현상 (Symptom)
+* 맵 전체가 너무 멀리(Y=150)에서 렌더링되어 관찰이 어렵고, 기존 줌 로직은 `transform.forward`에 의존하여 카메라 부모 오프셋 등에 의해 오작동함.
+#### 해결책 (Resolution)
+* `CameraController.cs` 내에서 카메라 높이 조절 기준의 최소 높이(`minHeight`)를 `20.0f`에서 `5.0f`로 낮춰 더 가까운 거리까지 줌인 가능하게 변경.
+* 마우스 휠 외에 `Q`/`E` 및 `Page Up`/`Page Down` 키를 통한 키보드 줌 조작 추가.
+* `transform.forward` 대신 카메라의 월드 Y 좌표를 물리적으로 직접 증감시키는 방식으로 줌 방식을 전면 개편하여 카메라 오프셋/회전 상태와 무관하게 부드럽게 높낮이가 조절되도록 수정.
+
+### 3. 3D 공간 상의 이름, 상태, 대화 말풍선 중복 겹침 및 말풍선 글자 바코드 현상(찌그러짐) 오류
+#### 현상 (Symptom)
+* 카메라가 수직으로 월드를 바라보는 탑다운(Top-down) 뷰 형태이므로, 텍스트들의 월드 높이(Y축)에 차이를 주더라도 화면상에서는 같은 중심선에 겹쳐서 투영되어 모든 글씨가 중복되어 뭉쳐 보이던 현상.
+* 또한, 동적으로 생성되는 말풍선 대사(`SpeechBubbleText`)가 정상적으로 읽히지 않고 얇은 노란색 세로줄(바코드 형태)로 심하게 압축되거나 비정상적으로 줄바꿈되어 출력되는 현상.
+* `술집(Tavern)`과 `뒷골목(Back Alley)` 등 인접한 구역의 랜드마크 파란색 큐브 위에 출력되는 이름 글자(예: `"술집 (Tavern)"`)가 심하게 겹치고 뭉개져 식별하기 어려운 현상.
+#### 원인 (Root Cause)
+* 탑다운 카메라 시점에서의 수직 화면 공간은 월드의 Z축에 대응하므로, Y축 오프셋은 깊이(크기)에만 영향을 줄 뿐 화면상에서는 겹치게 됨.
+* 동적으로 생성한 GameObject에 `TextMeshPro` 컴포넌트를 추가하면 기본 텍스트 박스 크기(`sizeDelta`)가 `(2, 2)`로 매우 좁게 생성되며, 기본 폰트도 한국어를 지원하지 않는 `Liberation Sans SDF`로 설정됩니다. 여기에 한국어 긴 문자열이 들어가면 글자 한두 개 단위로 줄바꿈(Word Wrapping)이 일어나며 수십 개의 텍스트 라인이 한 곳에 수직으로 겹쳐 뭉개짐에 따라 바코드처럼 보이게 되고, 폰트 파일 미지정으로 글자가 보이지 않거나 네모 칸 등의 깨짐 기호로 대체됩니다. 또한, 부모 NPC 오브젝트의 크기(Scale)가 비균등(Non-uniform)하게 찌그러져 있을 경우 하위 자식들도 강제로 동일한 찌그러짐 비율을 상속함.
+* `GameManager.cs`에서 랜드마크 스폰 시 글씨 크기(`fontSize`)가 초기 Y=150 카메라 시점용 거대 크기인 **`12.0f`**로 고정되어 있었음. 랜드마크의 물리적 배치 간격에 비해 텍스트 크기가 압도적으로 커서, 인접한 술집(30, 40)과 뒷골목(15, 50)의 글자가 서로 수백 유닛 길이로 침범하여 뭉개지고 겹쳐진 현상임.
+#### 해결책 (Resolution)
+* 탑다운 카메라 시점에서의 상/하 정렬을 위해 텍스트의 배치 오프셋을 Y축이 아닌 Z축 오프셋으로 전면 변경.
+  * **이름 텍스트**: 캐릭터 뒤쪽(Z축 +1.2)
+  * **상태 텍스트**: 캐릭터 앞쪽(Z축 -1.2)
+  * **대화 말풍선**: 캐릭터 한참 뒤쪽(Z축 +2.5)
+* 줌인에 대응하도록 폰트 크기(`fontSize`)를 기존 대비 2~3배 축소(`1.3f`~`1.8f`)하여 화면에 겹침 없이 출력되도록 개선.
+* 동적으로 생성한 말풍선 객체의 폰트에 이미 프리프레젠테이션 프리팹을 통해 URP 수정 폰트가 잘 입혀져 있는 `nameText`나 `statusText`의 `font` 속성(`tmpro.font = nameText.font`)을 런타임에 직접 복사하여 한국어 깨짐 현상을 근본적으로 차단함.
+* 동적 생성 말풍선의 스케일에 `transform.localScale = Vector3.one`을 명시하여 부모의 왜곡된 스케일 상속을 방지하고, `tmpro.rectTransform.sizeDelta = new Vector2(30f, 5f)`로 가로 크기를 충분히 크게 늘리고 자동 줄바꿈(`enableWordWrapping = true`) 조건을 적절히 지정하여 한글 대사가 찌그러짐 없이 한눈에 한 줄로 들어오도록 보정함.
+* `GameManager.cs` 내에서 랜드마크 이름 표시 글자 크기(`fontSize`)를 기존 `12.0f`에서 **`3.0f`**로 대폭 축소하고, `enableWordWrapping = false`를 주어 텍스트가 여러 줄로 쪼개져 큐브 주위를 어지럽히지 않고 깔끔한 한 줄 라인으로 정렬되도록 수정함.
+
+
+
+
+### 4. 대화 범위 비현실적 길이(20m) 및 서로 다른 구역 간 순간이동 대화(Telepathic Dialogue) 오류
+#### 현상 (Symptom)
+* `술집(Tavern)`에 있는 에바와 `뒷골목(Back Alley)`에 있는 발락이 서로 완전히 떨어져 있음에도 불구하고 원거리에서 서로 대화를 수행하는 어색한 현상 발생.
+#### 원인 (Root Cause)
+* C++ `SystemSocial.cpp`에서 대화 가능 이웃을 찾을 때, 구역 구분 없이 단순 물리적 직선거리(`MAX_DIALOGUE_DISTANCE = 20.0f`)만을 기준으로 대상을 선정했기 때문. 술집과 뒷골목의 실제 물리적 거리는 약 18m로 20m 한계값 이내에 있었음.
+#### 해결책 (Resolution)
+* [SystemSocial.cpp](file:///C:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/SystemSocial.cpp)의 이웃 검색 루프에 `location_name` 일치 여부 검사(`loc_i.location_name == loc_c.location_name`)를 추가하여, 물리적으로 가깝더라도 다른 랜드마크 구역에 있을 경우 대화 상대에서 배제하도록 설정.
+* 현실적인 실소리 수준의 대화 거리를 반영하기 위해 대화 가능 한계 거리(`MAX_DIALOGUE_DISTANCE`)를 기존 `20.0f`에서 **`3.5f`**로 축소 조율 완료.
+
+---
+
+## 2026-07-12: NPC 마우스 클릭 상세 정보 패널 활성화 오류
+
+### 현상 (Symptom)
+* 유니티 뷰어 내에서 3D 캡슐 모양의 NPC를 마우스로 직접 클릭해도, 좌측 하단의 NPC 상세 상태 정보 패널(NPC Details Panel)이 열리지 않거나 아무런 작동도 일어나지 않는 현상.
+
+### 원인 (Root Cause)
+* 유니티의 내장 클릭 이벤트 수신 메서드인 `OnMouseDown`은 **`Collider` 컴포넌트가 붙어 있는 동일한 GameObject**의 스크립트에서만 동작함.
+* 스폰 구조상 물리 클릭을 처리하는 `NpcController` 스크립트는 부모 GameObject(`go`)에 부착되어 있으나, 실제 충돌판정을 결정하는 3D `CapsuleCollider`는 `GameObject.CreatePrimitive`를 통해 자동 생성된 자식 GameObject(`capsule`)에 부착되어 있었음.
+* 이 때문에 레이캐스트(클릭) 충돌 이벤트가 부모로 전달되지 못하고 자식 레벨에서 삼켜져, 부모의 `OnMouseDown()` 메서드가 전혀 호출되지 못하고 씹히는 구조적 버그였음.
+
+### 해결책 (Resolution)
+* [GameManager.cs](file:///C:/Users/adg01/Documents/GitHub/MundusVivens.Unity/Assets/Scripts/GameManager.cs)의 NPC 스폰 로직 내에서 자식 캡슐 객체에 붙어있던 기존 콜라이더를 `Destroy()`로 즉시 파괴함.
+* `NpcController`가 부착되어 있는 부모 GameObject에 직접 `CapsuleCollider`를 추가하여 물리 판정 및 Raycast가 부모 레벨에서 직접 트리거되도록 조정함.
+  * 부모 콜라이더 규격: `center = (0, 1.5, 0)`, `height = 3.0f`, `radius = 0.75f`로 캡슐 크기에 맞춰 정밀 조율.
+* 이를 통해 유니티 실행 후 NPC를 클릭하면 정상적으로 `OnMouseDown`이 호출되어 좌측 하단에 스냅샷 데이터 기반의 감정, 생체 욕구, 관계망 정보 패널이 온전하게 활성화되는 것을 확인함.
+
+
