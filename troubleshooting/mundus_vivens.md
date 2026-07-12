@@ -134,3 +134,62 @@
   if (reg.all_of<HealthComp>(neighbor) && reg.get<HealthComp>(neighbor).is_dead) continue;
   ```
 * 이를 통해 사망한 개체에게 불필요한 대화 요청 및 상태 변경이 차단되어, 스팸 루프 및 틱 지연 현상이 완벽히 해결됨.
+
+---
+
+## 2026-07-12: 생체 위기(Hunger/Fatigue) 로컬 BT 처리 시 틱 갱신 교착 상태 해결
+
+### 현상 (Symptom)
+* NPC가 생체 욕구(허기/피로) 위기로 인해 로컬 Behavior Tree(BT)를 통해 가상 Job(999000/999001)을 발급받아 식사/취침을 시작할 때, C++ 서버에서 `🏁 [목적지 도착 - Direct Seek] ...` 및 `🔄 [Toil Transition] ...` 로그가 20Hz 물리 틱마다 폭발적으로 반복 출력되며 시뮬레이션의 논리 틱(Tick) 및 실시간 로그 진행이 완전히 정체되는 현상.
+
+### 원인 (Root Cause)
+1. **C# 서버 스케줄 덮어쓰기**: C++ 서버의 `GetPendingJobsAsync` gRPC 콜백에서 C# 서버로부터 미완료 스케줄을 받아올 때, NPC가 로컬 생존 위기를 처리 중인 상태(`is_resolving_survival == true`)인지 여부를 검사하지 않음. 이로 인해 C++의 로컬 가상 Job(999000)이 매 틱마다 C#의 정기 스케줄 Job으로 덮어써지며 `toil.state`가 `Idle`로 강제 리셋됨.
+2. **도착 판정 비교 오류**: `ActionMoveToTarget`에서 도착 완료 검사를 오직 `loc.location_name == job.target_location` 문자열 비교에만 의존함. 황무지(`Wilderness`) 등에서 로컬 가상 Job 실행 시 타겟 좌표로 직접 찾아가더라도 영역 식별 불일치(예: Wilderness vs 고블린 초소)로 인해 문자열 매칭이 영구 실패하여 `ActionMoveToTarget`이 `toil.state`를 계속 `Moving`으로 강제 전환하고 `SystemMovement`가 도착 처리(`Working` 전환 및 로그 출력)를 무한 반복함.
+3. **가상 Job 타겟 초기화 누락**: `ConditionIsHungry` 및 `ConditionIsFatigued`에서 C++ 가상 Job을 주입할 때 기존에 할당되어 있던 `target_location` 및 좌표(`target_x/y/z`) 데이터를 비워주지 않아, `ActionFindFurniture`가 이미 타겟 설정이 완료된 것으로 판단하여 자율 야영(임시 모닥불/야영지 생성) 탐색 단계를 통째로 스킵함.
+
+### 해결책 (Resolution)
+1. **Pending Job 갱신 스킵**: `main.cpp`의 `GetPendingJobsAsync` 콜백 내부에 수신 예외 조건식을 추가하여, 현재 생체 욕구 위기를 로컬에서 처리 중인 NPC(`is_resolving_survival == true`)는 C# 스케줄 주입 대상에서 즉시 제외(`continue`)함.
+2. **좌표 기반 도착 판정 추가**: [BehaviorTrees.h](file:///C:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/BehaviorTrees.h)의 `ActionMoveToTarget`에 목적지 좌표와의 물리적 거리 연산(`dist < 0.8f`)을 추가하여, 구역명 불일치 상황에서도 목적지에 도달 시 완벽하게 `Success`를 반환하도록 개선함.
+3. **가상 Job 정보 초기화**: `ConditionIsHungry` 및 `ConditionIsFatigued` 가상 Job 주입 시 `target_location = ""` 및 target 좌표들을 `0.0f`로 완전 초기화하고 명시적으로 `JobCategory::Eat/Sleep`을 주입하여 가구 탐색 및 모닥불 자율 야영 스폰이 정상 동작하도록 수정함.
+
+---
+
+## 2026-07-12: 격자 구역 오븐베이크 음수 좌표 누락 및 맨바닥 행동(노숙) 로그 스팸 해결
+
+### 1. 2D Bake Map 내의 음수 영역 좌표계 누락 및 Wilderness 판정 오류
+
+#### 현상 (Symptom)
+* 늑대 서식지(`Wolf Nest`)와 고블린 초소(`Goblin Outpost`)에 NPC들이 정상 스폰되었으나, 캐릭터들의 구역 컴포넌트(`LocationComp::location_name`)가 거점 구역명이 아닌 `"Wilderness"`(황무지)로 잘못 매핑되는 현상.
+* 이로 인해 C# 서버의 본래 계획 구역과 C++ 물리적 구역의 이름이 일치하지 않아 행동 완료 여부 판단 및 로컬 대처에 부작용이 발생함.
+
+#### 원인 (Root Cause)
+* C++ `BakeRegionMap` 및 `GetLocationNameAt`에서 사용되는 격자 맵(`region_map_`) 배열은 양수 범위(`[0, 2000)`)만을 지원하도록 구현되었으나, `world_config.json` 상에서 늑대 서식지는 `(250, -250)`, 고블린 초소는 `(-250, 250)`과 같이 음수 영역 좌표를 사용하고 있었음.
+* 음수 좌표 영역은 `std::max(0, ...)` 범위 클램핑 시 격자 인덱스 외부에 걸쳐 누락(`Bake` 누락)되었으며, 실시간 위치 갱신 조회 시에도 강제로 `0`으로 클램핑되어 구역명이 무조건 `"Wilderness"`로 어긋나 출력됨.
+
+#### 해결책 (Resolution)
+* C# `world_config.json` 파일의 `발레리아 왕국` 바운더리 하한(`MinBounds`) 및 고블린 초소와 늑대 서식지의 좌표를 모두 안전한 양수 공간으로 전면 조정함.
+  * **늑대 서식지 (Wolf Nest)**: `(250.0, 0.0, -250.0)` ➔ **`(250.0, 0.0, 10.0)`**
+  * **고블린 초소 (Goblin Outpost)**: `(-250.0, 0.0, 250.0)` ➔ **`(10.0, 0.0, 250.0)`**
+* C# 데이터베이스 재설정 및 C++ 서버 동기화를 완료하여 양수 격자 공간 내에서 정상적인 거점명(`Wolf Nest`/`Goblin Outpost`) 매핑이 완료됨을 검증함.
+
+---
+
+### 2. 맨바닥 생체 욕구 해결(노숙 식사/취침) 시의 20Hz 로그 스팸 루프
+
+#### 현상 (Symptom)
+* NPC 또는 야생 동물이 근처에 침대나 식탁 등 가구가 없어 맨바닥에서 노숙 취침(`Sleeping_On_Floor`) 또는 바닥 식사(`Eating_On_Floor`)를 할 때, 20Hz 물리 틱마다 `"⛺ [BT 노숙 취침] ..."` 또는 `"🥪 [BT 바닥 식사] ..."` 로그가 쏟아져 나오는 로그 오염 현상.
+
+#### 원인 (Root Cause)
+* [BehaviorTrees.h](file:///C:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/BehaviorTrees.h)의 `ActionInteractFurniture::Tick`에서 `needs.occupied_furniture == entt::null` 검사를 매 틱마다 시도함.
+* 맨바닥 행동 시에는 실제로 점유(Occupy)할 가구 자체가 없으므로 `occupied_furniture`가 계속 `entt::null`로 유지되어, 최초 프레임 판단 조건문 내의 로그 출력 및 Toil 초기화 코드가 매 틱 실행되었기 때문임.
+
+#### 해결책 (Resolution)
+* `ActionInteractFurniture::Tick`의 최초 진입(가구 점유 시도) 조건문에 아래와 같이 바닥 식사/취침 행동 중인지를 가려내는 필터식을 보완함.
+  ```cpp
+  if (needs.occupied_furniture == entt::null && 
+      toil.current_action != "Eating_On_Floor" && 
+      toil.current_action != "Sleeping_On_Floor")
+  ```
+* 이미 바닥에서 식사나 수면 모션을 유지 중인 캐릭터는 점유 시도 단계를 스킵하여 중복 로그 및 Toil 상태 강제 초기화가 유발되지 않고 1회만 기록되도록 교정함.
+
+
