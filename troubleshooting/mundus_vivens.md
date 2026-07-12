@@ -192,4 +192,25 @@
   ```
 * 이미 바닥에서 식사나 수면 모션을 유지 중인 캐릭터는 점유 시도 단계를 스킵하여 중복 로그 및 Toil 상태 강제 초기화가 유발되지 않고 1회만 기록되도록 교정함.
 
+---
+
+## 2026-07-12: 유니티 클라이언트 UI 업데이트 중단 및 UIManager 싱글톤 하이재킹 해결
+
+### 현상 (Symptom)
+* 유니티 클라이언트를 실행했을 때, 3D 뷰어 상의 NPC 캡슐들은 정상적으로 움직이고 백그라운드에서는 스냅샷 패킷을 계속 수신 중임에도 불구하고, 화면 상단의 Current Tick, 좌측의 실시간 로그 패널, NPC 클릭 시 노출되어야 할 상세 정보 패널 등이 전혀 갱신되지 않고 초기 상태(혹은 멈춘 상태)로 방치되는 현상.
+* 유니티 콘솔 및 `Editor.log` 상에 NullReferenceException 등 관련 에러나 예외 발생이 전혀 없이 침묵함.
+
+### 원인 (Root Cause)
+* `SampleScene.unity` 씬 파일 내에 **동일한 `UIManager` 스크립트를 포함하는 서로 다른 두 개의 GameObject가 중복 존재**하고 있었음:
+  1. 공백이 포함된 이름의 `"UIManager "` (ID 146213223) - 인스펙터 상의 UI 요소(`tickText`, `logText` 등)가 전혀 할당되지 않은 미완성 상태의 빈 오브젝트.
+  2. 정상적인 이름의 `"UIManager"` (ID 583645022) - UI 오브젝트가 올바르게 할당된 실제 연동 오브젝트.
+* 유니티가 씬을 로드하고 각 오브젝트의 `Awake()`를 실행할 때, 미완성 상태인 `"UIManager "`의 `Awake`가 먼저 호출되어 static 변수인 `UIManager.Instance` 싱글톤 참조를 선점(하이재킹)함.
+* 실제 동작해야 하는 `"UIManager"`의 `Awake`가 실행되었을 때는 이미 `Instance`가 null이 아니므로 싱글톤 갱신을 생략함.
+* 이로 인해 `PacketProcessor` 등 외부에서 `UIManager.Instance`를 통해 UI 변경을 시도할 때마다, 필드가 전부 null인 첫 번째 인스턴스를 호출하게 됨.
+* 각 UI 메서드는 null 체크(`if (tickText != null)` 등)를 안전하게 수행하고 있었기에 예외를 던지지 않고 그냥 실행을 종료하여 아무런 에러 로그도 없이 화면만 갱신되지 않는 현상이 발생함.
+
+### 해결책 (Resolution)
+* [SampleScene.unity](file:///C:/Users/adg01/Documents/GitHub/MundusVivens.Unity/Assets/Scenes/SampleScene.unity) 파일을 직접 수정하여 미완성 상태였던 중복 오브젝트 `"UIManager "` (ID 146213223) 및 하부의 MonoBehaviour, Transform 컴포넌트를 완전히 삭제함.
+* 씬의 루트 목록(`SceneRoots.m_Roots`)에서도 해당 오브젝트의 Transform ID (`146213225`) 엔트리를 삭제함.
+* 이를 통해 씬 상에 유일한 UIManager 오브젝트만 남겨 싱글톤 선점 문제가 근본적으로 제거되었으며, 클라이언트 실행 시 정상적으로 Tick 수치, 실시간 연극 대사 로그, NPC 상세 패널이 실시간 갱신되는 것을 확인함.
 
