@@ -6,7 +6,7 @@
 
 <thread_model>
 
-## [1] 3-스레드 멀티 리액터 모델 (Thread Model)
+## [1] 3-스레드 **Proactor** 모델 (Thread Model)
 
 서버는 데이터 레이스(Data Race)를 원천 차단하고 실시간 물리 연산과 비동기 통신의 지연(Latency) 병목을 분리하기 위해 3개의 스레드로 역할을 엄격하게 쪼개어 가동합니다.
 
