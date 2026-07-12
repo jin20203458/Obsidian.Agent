@@ -67,30 +67,34 @@ C++ 서버는 EnTT ECS(Entity Component System) 기법을 사용하여 에이전
 
 ## 3. C# AI 서버: 기억(Belief) 및 인지 모델 (`Models/`)
 
-### A. 통합 믿음 모델 (`Belief.cs`)
+### A. 통합 믿음 모델 (`BeliefModels.cs`)
 에이전트의 모든 기억과 사실 정보는 단일 `Belief` 클래스로 포맷팅되어 관리됩니다.
 
 ```csharp
 public class Belief
 {
-    public string BeliefId { get; set; }
-    public string SubjectId { get; set; }
-    public string Content { get; set; }
-    public BeliefType Type { get; set; } // Core, Witnessed, Heard, Overheard
+    public string BeliefId { get; set; } = string.Empty;
+    public string SubjectId { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
+    public BeliefType Type { get; set; }
     
-    public double Confidence { get; set; }      // 확신도 (0.0 ~ 1.0)
-    public double Salience { get; set; }        // 현저성 (0.0 ~ 1.0)
-    public double EmotionalCharge { get; set; } // 정서적 강도 (0.0 ~ 1.0)
+    public double Confidence { get; set; } = 0.5;
+    public double Salience { get; set; } = 1.0;
+    public double EmotionalCharge { get; set; } = 0.0;
     
-    public string SourceAgentId { get; set; }
-    public List<string> PropagationPath { get; set; }
-    public HashSet<string> SharedWith { get; set; }
-    public DateTime AcquiredAt { get; set; }
-    public float[]? ContentEmbedding { get; set; }
-
-    // 🆕 신념 인과망 연쇄 파기를 위한 필드
+    public string SourceAgentId { get; set; } = string.Empty;
+    public List<string> PropagationPath { get; set; } = new();
+    public int MutationCount { get; set; } = 0; // 와전(변형) 횟수
+    
     public string? DerivedFrom { get; set; }
     public string? SupersededBy { get; set; }
+    
+    public HashSet<string> SharedWith { get; set; } = new();
+    public DateTime AcquiredAt { get; set; } = DateTime.UtcNow;
+    public float[]? ContentEmbedding { get; set; }
+
+    // 계산식 중요도 (우선순위 및 삭제 판단 기준)
+    public double Importance => (Confidence * 0.4) + (Salience * 0.35) + (EmotionalCharge * 0.25);
 }
 ```
 
@@ -194,3 +198,27 @@ flowchart LR
 *   NPC가 위기 해결을 위해 지정 거점(술집, 거처 등)에 도착하면 주변 구역(Zone) 내의 빈 스마트 오브젝트(의자, 침대 등 `AffordanceComp` 탑재 사물)를 동적으로 스캔하여 점유합니다.
 *   가구에 Snap 이동되어 점유 상태가 유지되는 동안 틱마다 Needs 게이지가 급속 충전(이때 틱당 감쇠는 일시 면제)됩니다.
 *   충전이 완료(`Needs >= 95.0f`)되면 사물 점유를 안전하게 해제하고, C# 서버에 완료 보고를 보내 대뇌 락을 풀고 정상 AI 스케줄로 복귀시킵니다.
+
+---
+
+## 7. 위협 감지 및 전투 억제 파이프라인 (Threat & Combat Flow)
+
+C++ 게임 서버의 20Hz 물리 엔진에서 감지된 전투 위협 요소는 C# AI 서버로 비동기 보고되며, 인지 엔진에 의해 공격 억제 및 트라우마가 결정됩니다.
+
+### A. 공격 충동 및 회피 결정 (`ThreatDetectedAsync`)
+1. **위협 분석 점수 산출 (`Aggression Score`)**:
+   상대방과의 관계 및 과거 트라우마를 바탕으로 다음과 같은 가중치(`attackWeight`)를 합산합니다:
+   * 호감도 음수 값: `Math.Abs(liking) * 0.5` (최대 +50)
+   * 신뢰도 부족(30 미만): `(50 - trust) * 0.4` (최대 +20)
+   * 에이전트의 공격성(외향성 지표): `Extroversion * 30.0` (최대 +30)
+   * 해당 상대에 대한 보복 심리(`EmotionalCharge > 0.7` 트라우마 존재 시): `+40`
+
+2. **결정 분기 (Threat Action)**:
+   * **APPROVE (`>= 70`)**: 이성을 잃고 위협 대상을 향해 즉시 무기를 들고 선제공격(Aggro)을 가합니다.
+   * **SOCIALIZE (`30 ~ 69`)**: 물리적 공격 대신 말싸움(시비/언쟁)을 결심하고 대화 큐(`DialogueQueue`)에 우선 삽입합니다.
+   * **REJECT (`< 30`)**: 충동을 억제하고 회피/침묵합니다.
+
+### B. 피격 및 트라우마 생성 (`ReportCombatEventAsync`)
+* C++ 엔진에서 실제 전투 타격이 발생하면, C# 서버의 `BeliefEngine.ProcessCombatEventAsync`가 호출됩니다.
+* 피해량(`damage`)과 타격에 사용된 무기(`weapon`) 정보를 기반으로 고도화된 정서적 충격(`EmotionalCharge`)과 `Salience`를 지닌 새로운 `combat_...` 트라우마 기억(Belief)이 Working Memory에 강제 편입됩니다.
+* 이 트라우마는 향후 `ThreatDetectedAsync` 판정 시 강력한 보복 심리(+40 가중치)의 원인이 되며, 연상 회상(Recall) 시 복수 대화로 이어지게 됩니다.

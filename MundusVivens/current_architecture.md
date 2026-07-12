@@ -12,10 +12,10 @@
 
 ###  1. C++ 게임 서버 (물리 및 척수 엔진)
 * **주요 역할**: 20Hz Lock-Free 물리 시뮬레이션, EnTT ECS 관리, Spatial Hash Grid 인접 스캔 및 A* 경로 탐색, 실시간 감정 전염 연산, 대화 주도 및 수락/합류의 수학적 판정.
-* **상세 스펙**: [01_architecture.md](docs/01_architecture.md)
-  * [3-스레드 멀티 리액터 스레드 모델](docs/01_architecture.md#1-3-스레드-멀티-리액터-모델-thread-model)
-  * [ProcessWorldTick 10초 주기 동기화 흐름도](docs/01_architecture.md#2-틱-동기화-및-관계-델타-데이터-흐름-processworldtick-flow)
-  * [대화 주도/수락/다자간 합류 확률 공식 및 트리거 흐름도](docs/01_architecture.md#3-대화-트리거--다자간-합류-로직-dialogue-trigger-logic)
+* **상세 스펙**: [01_architecture.md](01_game_server_architecture.md.md)
+  * [3-스레드 멀티 리액터 스레드 모델](01_game_server_architecture.md.md#1-3-스레드-멀티-리액터-모델-thread-model)
+  * [ProcessWorldTick 10초 주기 동기화 흐름도](01_game_server_architecture.md.md#2-틱-동기화-및-관계-델타-데이터-흐름-processworldtick-flow)
+  * [대화 주도/수락/다자간 합류 확률 공식 및 트리거 흐름도](01_game_server_architecture.md.md#3-대화-트리거--다자간-합류-로직-dialogue-trigger-logic)
 
 ###  2. C# AI 서버 (대뇌 및 인지 엔진)
 * **주요 역할**: Gemini LLM API 연동 대화 추론, 소문 전파 및 왜곡, MemoryBox의 Hot 기억 관리, API 429 완화를 위한 스로틀링 큐, 성찰(Reflection) 및 일간 스케줄링(DailyPlan).
