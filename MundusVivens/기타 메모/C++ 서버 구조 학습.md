@@ -8,7 +8,7 @@
 
 ## 🗺️ 전체 로드맵 요약
 
-C++ 서버는 **3-스레드 멀티 리액터(Main, TCP I/O, gRPC)** 및 **EnTT ECS(Entity Component System)** 구조를 띄고 있습니다. 따라서 하위 데이터 모델부터 스레드 경계를 지나 메인 루프로 이어지는 아래 순서의 공부를 강력히 권장합니다.
+C++ 서버는 **3-스레드 프로액터(Main, TCP I/O, gRPC)** 및 **EnTT ECS(Entity Component System)** 구조를 띄고 있습니다. 따라서 하위 데이터 모델부터 스레드 경계를 지나 메인 루프로 이어지는 아래 순서의 공부를 강력히 권장합니다.
 
 ```mermaid
 graph TD
