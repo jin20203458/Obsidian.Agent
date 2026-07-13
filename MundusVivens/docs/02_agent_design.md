@@ -69,6 +69,65 @@ graph TD
     *   일상 스케줄(Toil FSM)을 소화하는 와중에 피격을 당하거나 생체 욕구(허기/피로)가 한계치 이하로 떨어지는 돌발 상황이 발생하면, **로컬 행동 트리(Behavior Tree)**가 Toil FSM을 일시 정지시키고 주도권을 가로챕니다(Bypass).
     *   비싼 LLM 연산이나 C# 서버 통신 대기 없이 C++ 엔진 단독으로 도망가거나 음식을 찾는 등의 즉각적인 생존 반사 행동을 수행하며, 위기가 해소되면 다시 Toil FSM으로 주도권을 반환해 일상으로 매끄럽게 복귀합니다.
     *   **트리 구조 설계**: 단일 루트 **`Selector` (선택기)** 노드 아래에 우선순위별로 나열된 **8개의 `Sequence` (순차 실행)** 노드 체인이 결합된 구조입니다. 매 틱마다 8개의 시퀀스(도주 ➔ 어그로 ➔ 전투 ➔ 기아 해결 ➔ 피로 해결 ➔ 스케줄 식사 ➔ 스케줄 수면 ➔ 기본 배회)를 순차적으로 훑어보며 현재 상황에 맞는 단 하나의 전략만 선택하여 실시간으로 실행합니다. (각 에이전트는 이 거대 트리 규칙 지침서를 개별 소유권으로 들고 매 틱마다 독립적으로 구동합니다.)
+        
+        ```mermaid
+        flowchart LR
+            Root["[Root] Selector"]
+            
+            subgraph F1 ["[1] 도주 시퀀스"]
+                FleeSeq["Sequence"] --> CondFlee1["적 타겟 존재?"]
+                CondFlee1 --> CondFlee2["체력 위험?"]
+                CondFlee2 --> ActFlee["ActionFlee (도망)"]
+            end
+            
+            subgraph F2 ["[2] 어그로 시퀀스"]
+                AggroSeq["Sequence"] --> CondAggro["어그로 점수 임계 돌파?"]
+                CondAggro --> ActAggro["ActionInhibitOrAttack (공격/억제 판정)"]
+            end
+            
+            subgraph F3 ["[3] 전투 시퀀스"]
+                CombatSeq["Sequence"] --> CondCombat["적 타겟 존재?"]
+                CondCombat --> ActCombat["ActionMeleeAttack (근접 격퇴)"]
+            end
+            
+            subgraph F4 ["[4] 배고픔 해결 시퀀스"]
+                HungerSeq["Sequence"] --> CondHunger["허기 위기 발생?"]
+                CondHunger --> ActHunger1["식사용 가구 검색"]
+                ActHunger1 --> ActHunger2["가구로 이동"]
+                ActHunger2 --> ActHunger3["식사 실행 (Needs 충전)"]
+            end
+            
+            subgraph F5 ["[5] 피로 해결 시퀀스"]
+                FatigueSeq["Sequence"] --> CondFatigue["피로 위기 발생?"]
+                CondFatigue --> ActFatigue1["수면용 가구 검색"]
+                ActFatigue1 --> ActFatigue2["가구로 이동"]
+                ActFatigue2 --> ActFatigue3["취침 실행 (Needs 충전)"]
+            end
+            
+            subgraph F6 ["[6] 스케줄 식사 시퀀스"]
+                SchedEatSeq["Sequence"] --> CondSchedEat["식사 스케줄 타임?"]
+                CondSchedEat --> ActSchedEat["식사 가구 상호작용"]
+            end
+            
+            subgraph F7 ["[7] 스케줄 수면 시퀀스"]
+                SchedSleepSeq["Sequence"] --> CondSchedSleep["수면 스케줄 타임?"]
+                CondSchedSleep --> ActSchedSleep["수면 가구 상호작용"]
+            end
+            
+            subgraph F8 ["[8] 기본 배회 시퀀스"]
+                WanderSeq["Sequence"] --> CondWander["배회 가능 상태?"]
+                CondWander --> ActWander["ActionWander (거점 주변 방랑)"]
+            end
+
+            Root --> F1
+            Root --> F2
+            Root --> F3
+            Root --> F4
+            Root --> F5
+            Root --> F6
+            Root --> F7
+            Root --> F8
+        ```
 
 ---
 
