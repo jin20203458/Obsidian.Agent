@@ -43,6 +43,24 @@ flowchart TD
 
 에이전트의 의사결정과 실제 물리적 행동은 전통적인 단일 상태 머신(FSM)에 의존하지 않고, 세 가지 계층이 역할을 분담하여 유연성을 극대화한 하이브리드 구조로 설계되었습니다.
 
+```mermaid
+graph TD
+    CS[1. C# 대뇌 서버: 고수준 Job 스케줄링] -->|gRPC 전송| JobComp[JobComp 할당]
+    JobComp --> Driver{2. C++ SystemJobDriver: Toil FSM}
+    
+    %% Toil FSM 영역
+    subgraph Toil FSM
+        Driver -->|위치 다름| Move[Moving: A* & 조향]
+        Driver -->|위치 같음| Work[Working: 틱 소모 작업]
+        Driver -->|대화 선점| Interrupted[Interrupted: 대기]
+    end
+
+    %% 실시간 예외 우회 (BT)
+    Move -->|생존 위기 / 피격 상황 발생| BT[3. 로컬 행동 트리: BT 주도권 획득]
+    Work -->|생존 위기 / 피격 상황 발생| BT
+    BT -->|해결 완료| Driver
+```
+
 1.  **C# 대뇌 서버 (고차원 스케줄링)**:
     *   에이전트의 성격, 기억, 일일 시간표에 기반하여 "여관으로 이동해라", "대장간에서 일해라" 같은 추상적이고 거시적인 작업 목표(`Job`)를 gRPC를 통해 하향식으로 할당합니다.
 2.  **C++ 척수 엔진 (마이크로 Toil FSM)**:
