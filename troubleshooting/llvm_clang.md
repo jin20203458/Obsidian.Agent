@@ -69,3 +69,19 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 3. 해결책 (Resolution)
 * `ReturnVisitor::VisitReturnStmt`의 타입 검증 시작 지점에 템플릿 종속 타입 검출 조건(`isDependentType()`)을 추가하여, 함수 반환 타입 또는 리턴문 표현식의 타입 중 하나라도 종속 타입(미확정 상태)인 경우에는 오탐 판정을 내리지 않고 매칭 성공(`TypesMatch = true`)으로 우회 처리하여 문제를 해결했습니다.
+
+---
+
+## 2026-07-14: FunctionCallArgumentConsistencyCheck 내 참조형(&) 및 종속 타입(Dependent Type) 인자 오탐지
+
+### 1. 현상 (Symptom)
+* C++에서 참조형 매개변수(`T &` 또는 `const T &`)를 취하는 함수에 인자로 동일한 타입의 Lvalue 변수를 전달하여 정상 호출하는 코드 분석 시, `"1번째 인자의 타입이 프로토타입과 일치하지 않습니다. 기대: 'T &', 실제: 'T'"`와 같은 인자 타입 불일치 오탐지(False Positive) 발생.
+* 템플릿 기반 코드 호출 분석 시 인자나 매개변수가 `<dependent type>`인 경우 타입 불일치 경고가 비정상적으로 출력됨.
+
+### 2. 원인 (Root Cause)
+* **참조형 오탐**: C++ 매개변수의 타입은 참조형(`&`)일 수 있으나, 호출 인자 표현식의 Clang AST 타입은 항상 넌-레퍼런스(`T`)로 평가됩니다. 기존 체커 코드는 이 차이를 처리하지 않고 `hasSameType()`으로 엄격 비교를 가하여 오탐을 발생시켰습니다.
+* **종속 타입 오탐**: 템플릿 코드를 해석할 때 타입이 미확정 상태인 `<dependent type>`이 유입되었을 때, 이를 우회(skip)하는 방어 코드가 없었습니다.
+
+### 3. 해결책 (Resolution)
+* **참조형 오탐**: `isAcceptableImplicitChain`의 최종 비교 단계인 `EnforceExactParamType` 블록에서 두 타입의 레퍼런스(`getNonReferenceType()`) 및 CVR 한정자(`getUnqualifiedType()`)를 안전하게 벗긴 후 비교하도록 구현을 수정하여 참조 방식에 상관없이 핵심 값이 같은지만 대조하게 개선했습니다.
+* **종속 타입 오탐**: `check`의 루프 내에 `ParamTy->isDependentType() || Arg->getType()->isDependentType()` 검출 방어 로직을 추가하여 미확정 타입인 경우 타입 체크를 건너뛰어 통과시켰습니다.
