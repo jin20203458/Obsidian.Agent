@@ -55,3 +55,17 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 ### 3. 해결책 (Resolution)
 * **`ast-representable-cast` & `ast-main-unhandled-throw`**: 상수 평가기를 호출하기 전, 해당 식의 종속 관계 여부를 체크하는 방어 조건문(`!Expr->isValueDependent() && !Expr->isTypeDependent()`)을 추가하여 템플릿 종속 식 및 오류 복구 식은 평가를 우회하게 조치함.
 * **`ast-switch-style`**: `getTypeSize` 호출 위치를 `switch (BT->getKind())` 문 내부로 안전하게 이동시킴. 크기가 확실히 존재하는 실존 내장 정수 타입(`char`, `int`, `long` 등) 및 `bool` 케이스 분기 내에서만 크기를 구하게 하고, 크기가 없는 Dependent나 Placeholder 같은 미완성 타입은 크기 연산 없이 `default: break`로 건너뛰어 탈출하도록 구조 개선. 또한, 개별 `case` 문 평가 위치(`EvaluateAsInt`) 등에서도 동일한 방어 코드(`!caseExpr->isValueDependent() && !caseExpr->isTypeDependent()`)를 일괄 적용.
+
+---
+
+## 2026-07-14: SingleExitAndReturnTypeCheck 내 템플릿 종속 타입(Dependent Type) 오탐지
+
+### 1. 현상 (Symptom)
+* 템플릿 기반 C++ 코드 혹은 컴파일 오류로 인해 헤더 파일 해석이 끊겨 일부 타입이 정의되지 않은 소스코드(예: `_APmavlink_base.cpp` 내 `check` 함수) 분석 시, 분명히 리턴문이 존재하고 리턴 타입이 매칭됨에도 불구하고 `"함수 선언 반환형(_Bool)과 반환값 타입(<dependent type>)이 일치하지 않습니다"`라는 타입 불일치 오탐지(False Positive) 발생.
+
+### 2. 원인 (Root Cause)
+* Clang AST 파서는 템플릿 기반 코드나 베이스 클래스의 멤버 타입(예: `this->_ModuleBase::check()`)을 분석할 때, 실제 타입 인스턴스화가 일어나기 전까지 반환식의 타입을 `<dependent type>` (종속 미확정 타입)으로 간주합니다.
+* `SingleExitAndReturnTypeCheck.cpp` 체커 내부의 `ReturnVisitor`는 이 `<dependent type>`을 일반적인 타입 매칭 검사기(`Ctx.hasSameType()`)에 그대로 집어넣어 비교했기 때문에 `_Bool`과 일치하지 않아 오탐지가 보고되었습니다.
+
+### 3. 해결책 (Resolution)
+* `ReturnVisitor::VisitReturnStmt`의 타입 검증 시작 지점에 템플릿 종속 타입 검출 조건(`isDependentType()`)을 추가하여, 함수 반환 타입 또는 리턴문 표현식의 타입 중 하나라도 종속 타입(미확정 상태)인 경우에는 오탐 판정을 내리지 않고 매칭 성공(`TypesMatch = true`)으로 우회 처리하여 문제를 해결했습니다.
