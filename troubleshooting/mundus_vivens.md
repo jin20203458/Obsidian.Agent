@@ -153,3 +153,76 @@
       toil.current_action != "Eating_On_Floor" && 
       toil.current_action != "Sleeping_On_Floor")
   ```
+
+---
+
+## 2026-07-14: Tracy Profiler 연동 후 ENABLE_PROFILING=OFF 빌드 시 컴파일 실패
+
+### 현상 (Symptom)
+
+* `ENABLE_PROFILING=OFF` 옵션으로 빌드 시 `#include <tracy/Tracy.hpp>`를 참조하는 모든 소스 파일에서 `fatal error C1083: 포함 파일을 열 수 없습니다. 'tracy/Tracy.hpp'` 에러가 발생하며 컴파일 실패.
+* 영향 파일: `main.cpp`, `GameLoop.cpp`, `GrpcResultQueue.h`, `SystemMovement.cpp`, `SystemPlayer.cpp`, `SystemSocial.cpp`.
+
+### 원인 (Root Cause)
+
+Tracy 헤더를 `#ifdef TRACY_ENABLE` 가드 없이 무조건적으로 `#include <tracy/Tracy.hpp>`하고 있었다. `ENABLE_PROFILING=OFF` 시 CMake의 `target_include_directories`에 Tracy 경로가 추가되지 않으므로 컴파일러가 헤더를 찾지 못한다.
+
+### 해결책 (Resolution)
+
+`TracyIntegration.h` 래퍼 헤더를 신설하여 모든 Tracy `#include`를 단일 지점으로 통합하고, `TRACY_ENABLE` 미정의 시 모든 매크로를 no-op으로 처리:
+
+```cpp
+// TracyIntegration.h
+#pragma once
+
+#ifdef TRACY_ENABLE
+#   define TRACY_ON_DEMAND
+#   include <tracy/Tracy.hpp>
+#else
+#   define FrameMark
+#   define ZoneScoped
+#   define ZoneScopedN(name)
+#   define TracyLockable(type, name) type name
+#   define LockableBase(type) type
+#endif
+```
+
+영향받은 6개 파일의 `#include <tracy/Tracy.hpp>`를 `#include "TracyIntegration.h"`로 일괄 교체.
+
+---
+
+## 2026-07-14: Tracy Profiler 활성화 시 C++ 서버가 main() 진입 전 즉시 종료 (Exit Code 1)
+
+### 현상 (Symptom)
+
+* `ENABLE_PROFILING=ON`으로 빌드한 `MundusVivensGameServer.exe`가 실행 즉시 종료됨.
+* Stdout/Stderr 출력이 **0바이트** — `main()` 함수의 첫 번째 `std::cout` 배너조차 출력되지 않음.
+* Exit Code = `1` (세그폴트/Access Violation이 아닌 정상적인 `exit()` 호출).
+* `%LOCALAPPDATA%\CrashDumps`에 당일자 덤프 파일 없음 → OS가 비정상 종료로 인식하지 않음.
+* 포트 8086 점유 프로세스 없음 (`netstat` 확인).
+* `ENABLE_PROFILING=OFF` 빌드 후 동일 코드 정상 구동 → **Tracy 초기화가 원인임을 확정**.
+
+### 원인 (Root Cause)
+
+Tracy Profiler는 `TRACY_ENABLE` 매크로가 정의되면 전역 정적 객체 `tracy::Profiler`를 자동 생성한다. 이 생성자는 `main()` 진입 이전의 **정적 초기화(Static Initialization) 단계**에서 실행되며, 내부적으로 TCP 8086 포트 바인딩 및 워커 스레드 생성을 포함한 소켓 인프라를 즉시 가동한다.
+
+`TRACY_ON_DEMAND` 매크로가 정의되지 않은 경우(vcpkg 기본값), Tracy는 프로파일러 GUI 연결 여부와 무관하게 **무조건적으로 전체 인프라를 초기화**한다. Windows 환경에서 이 초기화가 실패하면(소켓 권한 문제, 방화벽 차단, OS 레벨 제약 등) Tracy 내부에서 `exit(1)`이 호출되어 프로세스가 `main()` 진입 전에 종료된다. 이 시점은 `std::cout` 실행 이전이므로 콘솔 출력이 0바이트로 나타난다.
+
+### 해결책 (Resolution)
+
+`TracyIntegration.h` 내에서 Tracy `#include` 직전에 `TRACY_ON_DEMAND`를 정의하여, 프로파일러 GUI가 실제로 접속하기 전까지 소켓 인프라 초기화를 지연시킴:
+
+```cpp
+#ifdef TRACY_ENABLE
+#   define TRACY_ON_DEMAND   // GUI 접속 전까지 소켓 초기화 지연
+#   include <tracy/Tracy.hpp>
+#endif
+```
+
+### 검증 (Verification)
+
+1. `ENABLE_PROFILING=ON` + `TRACY_ON_DEMAND` 빌드 → 컴파일 및 실행 성공
+2. C++ 서버 20Hz 틱 루프, gRPC 배치, BT 전투까지 틱 27 이상 정상 처리 확인
+3. Tracy GUI를 `localhost:8086`으로 연결 시 실시간 Flame Graph 수신 가능 상태
+
+
