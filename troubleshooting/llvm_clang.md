@@ -42,16 +42,16 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 ## 2026-07-14: 커스텀 Tidy 체커 내 AST 상수 값 평가 중 크래시 (Expression evaluator can't be called on a dependent expression 및 Unknown builtin type)
 
 ### 1. 현상 (Symptom)
-* 템플릿 기반 C++ 코드(예: `OpenKAI-master` 프로젝트의 `_GeoFence.cpp` 및 `HttpClient.cpp`) 정적분석 진행 중, `clang-tidy` 프로세스가 아래와 같은 내부 Assertion 혹은 Unreachable 코드로 인해 비정상 종료(Crash)되는 문제 발생:
-  1. `ast-representable-cast` 규칙 검사 중:
+* 템플릿 기반 C++ 코드 혹은 컴파일 에러가 발생한 소스코드(예: `OpenKAI-master` 프로젝트의 `_GeoFence.cpp`, `HttpClient.cpp`, `main.cpp`) 정적분석 진행 중, `clang-tidy` 프로세스가 아래와 같은 내부 Assertion 혹은 Unreachable 코드로 인해 비정상 종료(Crash)되는 문제 발생:
+  1. `ast-representable-cast` 및 `ast-main-unhandled-throw` 규칙 검사 중:
      `Assertion failed: !isValueDependent() && "Expression evaluator can't be called on a dependent expression."`
   2. `ast-switch-style` 규칙 검사 중:
      `Unknown builtin type! UNREACHABLE executed at ASTContext.cpp:2005!`
 
 ### 2. 원인 (Root Cause)
-* **`ast-representable-cast`**: `RepresentableCastCheck.cpp`에서 변환 대상인 소스 표현식을 평가하기 위해 `EvaluateAsInt` 혹은 `EvaluateAsFloat`를 호출할 때, 해당 식에 템플릿 인자 등 컴파일 타임에 크기나 값이 결정되지 않은 템플릿 종속적 표현식(Value-dependent / Type-dependent expression)이 전달되어 AST 상수 평가기 내부에서 오류를 냄.
+* **`ast-representable-cast` & `ast-main-unhandled-throw`**: `RepresentableCastCheck.cpp` 및 `MainUnhandledThrowCheck.cpp`에서 변환 대상인 식 혹은 `if` 조건식을 평가하기 위해 `EvaluateAsInt`, `EvaluateAsFloat`, `EvaluateAsBooleanCondition` 등을 호출할 때, 템플릿 종속적 표현식(Value/Type-dependent) 혹은 컴파일 에러(예: 헤더 누락 등)로 인해 발생한 복구 표현식(`RecoveryExpr`) 노드가 전달되어 AST 상수 평가기 내부에서 오류를 냄.
 * **`ast-switch-style`**: `SwitchStyleCheck.cpp`에서 `switch` 조건문의 형식을 검증하기 위해 `type->getAs<BuiltinType>()`를 통해 내장 타입 판정 시, `Context->getTypeSize(type)`를 switch 조건식 가인식 영역 바로 앞에서 호출함. 이때 미확정 빌트인 타입(오버로드, 플레이스홀더, 종속형 템플릿 타입 등)이 유입되면 Clang AST 엔진 내부 크기 조회기에서 `UNREACHABLE`을 발생시켜 컴파일러가 크래시됨.
 
 ### 3. 해결책 (Resolution)
-* **`ast-representable-cast`**: 상수 평가기를 호출하기 전, 해당 식의 종속 관계 여부를 체크하는 방어 조건문(`!SrcExpr->isValueDependent() && !SrcExpr->isTypeDependent()`)을 추가하여 템플릿 종속 식은 평가를 우회하게 조치함.
-* **`ast-switch-style`**: `getTypeSize` 호출 위치를 `switch (BT->getKind())` 문 내부로 안전하게 이동시킴. 크기가 확실히 존재하는 실존 내장 정수 타입(`char`, `int`, `long` 등) 및 `bool` 케이스 분기 내에서만 크기를 구하게 하고, 크기가 없는 Dependent나 Placeholder 같은 미완성 타입은 크기 연산 없이 `default: break`로 건너뛰어 탈출하도록 구조 개선.
+* **`ast-representable-cast` & `ast-main-unhandled-throw`**: 상수 평가기를 호출하기 전, 해당 식의 종속 관계 여부를 체크하는 방어 조건문(`!Expr->isValueDependent() && !Expr->isTypeDependent()`)을 추가하여 템플릿 종속 식 및 오류 복구 식은 평가를 우회하게 조치함.
+* **`ast-switch-style`**: `getTypeSize` 호출 위치를 `switch (BT->getKind())` 문 내부로 안전하게 이동시킴. 크기가 확실히 존재하는 실존 내장 정수 타입(`char`, `int`, `long` 등) 및 `bool` 케이스 분기 내에서만 크기를 구하게 하고, 크기가 없는 Dependent나 Placeholder 같은 미완성 타입은 크기 연산 없이 `default: break`로 건너뛰어 탈출하도록 구조 개선. 또한, 개별 `case` 문 평가 위치(`EvaluateAsInt`) 등에서도 동일한 방어 코드(`!caseExpr->isValueDependent() && !caseExpr->isTypeDependent()`)를 일괄 적용.
