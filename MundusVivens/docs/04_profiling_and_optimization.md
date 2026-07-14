@@ -13,7 +13,7 @@
 ### 2) 빌드 인프라 토글 설계 (Conditional Compilation)
 프로파일링에 수반되는 미량의 런타임 오버헤드를 릴리즈 빌드에서 원천 배제할 수 있도록 CMake 및 매크로 수준의 조건부 컴파일 구조를 채택했습니다.
 * **CMake 옵션 (`ENABLE_PROFILING`)**:
-  - `ON` (기본값): 컴파일 타임 매크로 `TRACY_ENABLE`, `TRACY_ON_DEMAND`, `TRACY_NO_BROADCAST`를 전역 컴파일러 정의로 주입하고, `TracyClient.cpp` 소스 코드를 프로젝트 타겟 빌드 소스로 직접 편입하여 함께 빌드합니다. (vcpkg 정적 라이브러리 링크 시 매크로가 소실되는 현상 방지)
+  - `ON` (기본값): 컴파일 타임 매크로 `TRACY_ENABLE`, `TRACY_ON_DEMAND`, `TRACY_NO_BROADCAST`를 전역 컴파일러 정의로 주입하고, `TracyClient.cpp` 소스 코드를 프로젝트 타겟 빌드 소스로 직접 편입하여 함께 빌드합니다.
   - `OFF`: 모든 프로파일링 스코프를 컴파일 타임에 `no-op` 매크로로 완전 소거하고 라이브러리 의존성을 제거하여 무부하 릴리즈 바이너리를 빌드합니다.
 
 ---
@@ -29,8 +29,7 @@ powershell -ExecutionPolicy Bypass -File .\build_local.ps1 -Clean
 
 ### 2) Tracy Profiler 클라이언트 앱 실행 및 연동
 1. 로컬 환경에 마련된 `C:\Users\adg01\Desktop\Tracy Profiler 0.13.1\tracy-profiler.exe`를 실행합니다.
-2. 실행 시 별도의 Connect 시도 없이 빈 대기 화면 상태를 유지합니다.
-3. C++ 게임 서버 실행 파일(`MundusVivensGameServer.exe`)을 실행합니다. (서버 기동 즉시 대기 중인 Tracy GUI 클라이언트로 TCP handshake 연동이 자동 수행됩니다.)
+2. C++ 게임 서버 실행 파일(`MundusVivensGameServer.exe`)을 실행합니다. (서버 기동 즉시 대기 중인 Tracy GUI 클라이언트로 TCP handshake 연동이 자동 수행됩니다.)
 
 ---
 
@@ -45,21 +44,42 @@ powershell -ExecutionPolicy Bypass -File .\build_local.ps1 -Clean
 ### 2) 임계 구역 경합 제로화 검증 (Double-Buffered Swap)
 * **측정 영역**: `Queue Drain Swap`, `Queue Drain Dispatch`
 * **검증 결과**: 
-  * 메인 스레드가 작업을 가져올 때 `std::lock_guard`를 소유하는 시간을 포인터 주소 스왑(`std::swap`)으로 극단적으로 억제한 결과, 락 획득 대기 지연 시간(`Queue Drain Swap`)은 **평균 11.03 μs** 이하로 수렴합니다.
+  * 메인 스레드가 작업을 가져올 때 `std::lock_guard`를 소유하는 시간을 포인터 주소 스왑(`std::swap`)으로 극단적으로 억제한 결과, 락 획득 대기 지연 시간(`Queue Drain Swap`)은 **평균 12.24 μs** 이하로 수렴합니다.
   * 네트워크 및 gRPC 비동기 스레드로부터의 데이터 유입량이 증가하더라도 메인 틱의 흐름에 컨텍스트 스위칭 및 블로킹 지연을 전혀 주지 않음이 수치적으로 입증되었습니다.
 
 ---
 
 ## 4. 실측 프로파일링 분석 및 약점 개선 로드맵 (2026-07-14)
 
-실제 시뮬레이션 서버를 C# AI 서버와 연동하여 3,105 프레임(틱) 동안 구동시킨 후, Tracy Profiler의 `Statistics` 도구로 수집한 실측 통계와 성능 개선 방향입니다.
+실제 시뮬레이션 서버를 C# AI 서버와 연동하여 1,919 프레임(틱) 동안 구동시킨 후, Tracy Profiler의 `Statistics` 도구로 수집한 실측 통계와 성능 개선 방향입니다.
 
 ### 1) 실측 성능 통계 데이터 (Instrumentation Statistics)
 
 |  순위   | 측정 영역 (Zone Name)         | 총 소요 시간 (Total Time)  | 호출 횟수 (Counts) | 평균 소요 시간 (Mean Time) | 역할 및 설명                               |
 | :---: | :------------------------ | :-------------------: | :------------: | :------------------: | :------------------------------------ |
-| **1** | `SystemPathfinding`       |   **1.1 s** (0.71%)   |     3,102      |    **353.49 μs**     | A* 알고리즘 기반 목적지 경로 탐색                  |
-| **2** | `SystemMovement`          | **344.14 ms** (0.22%) |     3,102      |    **110.94 μs**     | 엔티티 이동 및 물리 좌표 갱신                     |
+| **1** | `SystemPathfinding`       | **257.6 ms** (0.27%)  |     1,916      |    **134.44 μs**     | A* 알고리즘 기반 목적지 경로 탐색                  |
+| **2** | `SystemMovement`          | **139.38 ms** (0.15%) |     1,916      |     **72.75 μs**     | 엔티티 이동 및 물리 좌표 갱신                     |
+| **3** | `gRPC Status Task`        | **46.39 ms** (0.05%)  |       10       |      **4.64 ms**     | C# AI 서버로 에이전트 상태 비동기 배치 업데이트 전송 RTT |
+| **4** | `gRPC Tick Task`          | **42.08 ms** (0.04%)  |       10       |      **4.21 ms**     | C# AI 서버로 틱 동기화 전송 및 비동기 결과 수신 RTT  |
+| **5** | `SystemPlayerCommands`    | **25.96 ms** (0.03%)  |     1,916      |     **13.55 μs**     | 플레이어 세션 입력 큐 폴링 (TCP 락 획득/반환 및 소켓 검사) |
+| **6** | `Queue Drain Swap`        | **23.47 ms** (0.02%)  |     1,917      |     **12.24 μs**     | gRPC 비동기 결과 버퍼 락-스왑                   |
+| **7** | `Queue Drain Dispatch`    |  **6.57 ms** (0.01%)  |     1,917      |      **3.43 μs**     | 스왑된 결과를 ECS 시스템에 분배                   |
+| **8** | `TCP Command Drain`       |  **5.92 ms** (0.01%)  |     1,916      |      **3.09 μs**     | 플레이어 세션 큐에서 데이터 복사 시 뮤텍스 락 점유 시간 |
+| **9** | `SystemSocialInteraction` |  **4.58 ms** (0.00%)  |       10       |    **457.54 μs**     | 주변 NPC와의 잡담/대화 트리거                    |
+| **10**| `Queue Push`              | **269.64 μs** (0.00%) |       39       |      **6.91 μs**     | 비동기 스레드에서 큐로 결과 주입                    |
+
+### 2) 발견된 성능 병목 및 원인 분석
+
+* **`SystemPathfinding` (평균 134.44 μs - 전체 계측 영역 중 최고 병목)**:
+  * **원인**: 현재 월드 맵 크기가 **`2000x2000` (총 4,000,000 타일)** 격자로 구성되어 있어 1회 길찾기 스캔 범위가 잠재적으로 광대합니다. 특히, 목적지가 장애물에 가로막혀 도달할 수 없는 상황이거나 장거리 원정을 탐색할 경우 A* 스캔 루프가 최대 제한 없이 동작하여 급격한 틱 드랍(Spike)을 유발할 위험이 잔존합니다.
+
+* **`SystemPlayerCommands` (평균 13.55 μs) & `TCP Command Drain` (평균 3.09 μs)**:
+  * **의문점**: 플레이어가 서버에 접속(로그인)하지 않은 상태에서 NPC 시뮬레이션만 가동했음에도 매 틱 호출되어 성능 지표가 감지되었습니다.
+  * **원인**: `main` 틱 루프에서 주기적으로 `SystemPlayerCommands`가 호출되면, 내부적으로 `TcpServer::DrainPlayerCommands`를 실행합니다. 이때 세션 큐에서 패킷을 안전하게 빼오기 위해 **`std::lock_guard<std::mutex>`를 획득 및 반환**(`TCP Command Drain`)하게 됩니다. 이 뮤텍스 락 경합 및 소켓 버퍼 검사 자체가 틱당 약 13μs의 고정 유휴 오버헤드를 발생시키는 것을 정밀 실측으로 파악했습니다.
+
+* **gRPC 비동기 태스크 지연 (`gRPC Status/Tick Task` - 평균 4.2ms ~ 4.6ms)**:
+  * **분석 결과**: 해당 시간은 네트워크 왕복(RTT) 및 C# AI 서버의 물리 동기화 연산 완료까지 소요되는 순수 전체 대기 비용입니다.
+  * **아키텍처 강점**: 이 작업들은 메인 물리 스레드가 아닌, `asio-grpc`가 관리하는 백그라운드 **`grpc_thread`** 상에서 완전히 독립적으로 수행됩니다. 따라서 4ms가 넘는 긴 네트워크 지연이 발생하더라도 메인 틱 루프가 블로킹(Blocking)되지 않고 20Hz를 완벽히 유지할 수 있음을 객관적인 수치로 완벽하게 규명하였습니다.
 | **3** | `SystemPlayerCommands`    | **52.98 ms** (0.03%)  |     3,103      |     **17.07 μs**     | 플레이어 세션 입력 큐 폴링 (TCP 락 획득/반환 및 소켓 검사) |
 | **4** | `Queue Drain Swap`        | **34.24 ms** (0.02%)  |     3,103      |     **11.03 μs**     | gRPC 비동기 결과 버퍼 락-스왑                   |
 | **5** | `Queue Drain Dispatch`    | **11.98 ms** (0.01%)  |     3,103      |     **3.86 μs**      | 스왑된 결과를 ECS 시스템에 분배                   |
