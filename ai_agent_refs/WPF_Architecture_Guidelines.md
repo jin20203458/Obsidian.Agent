@@ -18,19 +18,19 @@ status: stable
 역할 분담과 유지보수성을 극대화하기 위해 아래와 같은 표준 디렉터리 배치를 사용합니다.
 
 ```text
-📁 MyWpfApp/
-├── 📁 Config/           # 앱 설정 파일 (JSON, XML, 환경설정 등)
-├── 📁 Models/           # 순수 데이터 구조체 (POCO), 데이터베이스/API 엔티티
-├── 📁 Services/         # 비즈니스 로직, API 통신, 파일 I/O, DB 접근 레이어
+MyWpfApp/
+├── Config/           # 앱 설정 파일 (JSON, XML, 환경설정 등)
+├── Models/           # 순수 데이터 구조체 (POCO), 데이터베이스/API 엔티티
+├── Services/         # 비즈니스 로직, API 통신, 파일 I/O, DB 접근 레이어
 │   ├── IApiService.cs
 │   └── ApiService.cs
-├── 📁 ViewModels/       # UI 프레젠테이션 로직 (CommunityToolkit.Mvvm 상속)
+├── ViewModels/       # UI 프레젠테이션 로직 (CommunityToolkit.Mvvm 상속)
 │   ├── MainViewModel.cs
 │   └── SubViewModel.cs
-├── 📁 Views/            # XAML UI 선언 및 최소한의 비하인드 코드
+├── Views/            # XAML UI 선언 및 최소한의 비하인드 코드
 │   ├── MainWindow.xaml
 │   └── MainWindow.xaml.cs
-├── 📁 Resources/        # 정적 에셋 (아이콘, 이미지 등)
+├── Resources/        # 정적 에셋 (아이콘, 이미지 등)
 ├── App.xaml             # 애플리케이션 시작점 및 전역 리소스 정의
 ├── App.xaml.cs          # DI(의존성 주입) 설정 및 초기 구동 로직
 └── MyWpfApp.csproj      # 최신 SDK 스타일의 프로젝트 파일

@@ -42,7 +42,7 @@ status: stable
 * 또한, 계획 수립 후 대화 및 대기 시간 동안 마을 안에서 실시간으로 수치가 지속 감쇠되어 최악의 타이밍에 국경을 넘기 시작함.
 
 #### 해결책 (Resolution)
-* `SystemJobDriver`에서 150m를 초과하는 장거리 이동(`Moving`) 명령이 새롭게 주입되는 시점에 한하여, 척수 레벨에서 **허기와 피로도를 즉시 100% 완충**해 주는 **🎒 원정 준비(Journey Preparation)** 단계를 추가함.
+* `SystemJobDriver`에서 150m를 초과하는 장거리 이동(`Moving`) 명령이 새롭게 주입되는 시점에 한하여, 척수 레벨에서 **허기와 피로도를 즉시 100% 완충**해 주는 **원정 준비(Journey Preparation)** 단계를 추가함.
 * 이를 통해 장거리 길을 떠나기 전 신체 스태미나 정렬(Alignment)을 보장함.
 
 ---
@@ -68,7 +68,7 @@ status: stable
 ### 1. 도주 목적지 좌표의 맵 경계 이탈 및 `(0, 0)` 수렴으로 인한 Wilderness 거점 에러
 
 #### 현상 (Symptom)
-* 전투 중 HP가 30% 미만인 NPC가 `ActionFlee` (도주) 상태로 진입했을 때, 콘솔에 `❌ [GridMap 에러] 거점 좌표 조회 실패: 'Wilderness'을 찾을 수 없습니다.` 경고 로그가 지속적으로 발생하고 캐릭터가 비정상적인 경로로 이동하는 현상.
+* 전투 중 HP가 30% 미만인 NPC가 `ActionFlee` (도주) 상태로 진입했을 때, 콘솔에 `[Error] [GridMap 에러] 거점 좌표 조회 실패: 'Wilderness'을 찾을 수 없습니다.` 경고 로그가 지속적으로 발생하고 캐릭터가 비정상적인 경로로 이동하는 현상.
 
 #### 원인 (Root Cause)
 * 타겟의 반대 방향으로 도주 벡터를 계산할 때, 맵 구석이나 경계면 바깥(x < 0 또는 z < 0)으로 목적지가 잡히면 `IsWalkable` 검사가 실패함.
@@ -97,7 +97,7 @@ status: stable
 ### 1. 사망한 개체에 대한 대화 트리거로 인한 20Hz 사망 처리 루프 스팸 (Dead-Entity Dialogue Loop)
 
 #### 현상 (Symptom)
-* 굶주린 늑대가 사살되어 사망한 이후, C++ 서버 콘솔에 `💀 [사망 처리 완료] 굶주린 늑대의 물리 시뮬레이션이 중단되었습니다.` 로그가 매 틱마다 폭포수처럼 무한히 반복 출력되는 현상.
+* 굶주린 늑대가 사살되어 사망한 이후, C++ 서버 콘솔에 `[사망 처리 완료] 굶주린 늑대의 물리 시뮬레이션이 중단되었습니다.` 로그가 매 틱마다 폭포수처럼 무한히 반복 출력되는 현상.
 
 #### 원인 (Root Cause)
 * `SystemSocial.cpp` 내의 대화 시작 시 주변 이웃 후보자(`neighbor`) 수집 단계에서 `is_dead` 검사가 누락됨.
@@ -115,7 +115,7 @@ status: stable
 ### 2. 생체 위기(Hunger/Fatigue) 로컬 BT 처리 시 틱 갱신 교착 상태 해결
 
 #### 현상 (Symptom)
-* NPC가 생체 욕구(허기/피로) 위기로 인해 로컬 Behavior Tree(BT)를 통해 가상 Job(999000/999001)을 발급받아 식사/취침을 시작할 때, C++ 서버에서 `🏁 [목적지 도착 - Direct Seek] ...` 및 `🔄 [Toil Transition] ...` 로그가 20Hz 물리 틱마다 폭발적으로 반복 출력되며 시뮬레이션의 논리 틱(Tick) 및 실시간 로그 진행이 완전히 정체되는 현상.
+* NPC가 생체 욕구(허기/피로) 위기로 인해 로컬 Behavior Tree(BT)를 통해 가상 Job(999000/999001)을 발급받아 식사/취침을 시작할 때, C++ 서버에서 `[목적지 도착 - Direct Seek] ...` 및 `[Toil Transition] ...` 로그가 20Hz 물리 틱마다 폭발적으로 반복 출력되며 시뮬레이션의 논리 틱(Tick) 및 실시간 로그 진행이 완전히 정체되는 현상.
 
 #### 원인 (Root Cause)
 1. **C# 서버 스케줄 덮어쓰기**: `GetPendingJobsAsync` gRPC 콜백에서 NPC가 로컬 생존 위기를 처리 중인 상태(`is_resolving_survival == true`)인지 검사하지 않아 로컬 가상 Job(999000)이 매 틱마다 C#의 정기 스케줄 Job으로 덮어써지며 `toil.state`가 `Idle`로 강제 리셋됨.
@@ -150,7 +150,7 @@ status: stable
 ### 2. 맨바닥 생체 욕구 해결(노숙 식사/취침) 시의 20Hz 로그 스팸 루프
 
 #### 현상 (Symptom)
-* NPC 또는 야생 동물이 근처에 침대나 식탁 등 가구가 없어 맨바닥에서 노숙 취침(`Sleeping_On_Floor`) 또는 바닥 식사(`Eating_On_Floor`)를 할 때, 20Hz 물리 틱마다 `"⛺ [BT 노숙 취침] ..."` 또는 `"🥪 [BT 바닥 식사] ..."` 로그가 쏟아져 나오는 현상.
+* NPC 또는 야생 동물이 근처에 침대나 식탁 등 가구가 없어 맨바닥에서 노숙 취침(`Sleeping_On_Floor`) 또는 바닥 식사(`Eating_On_Floor`)를 할 때, 20Hz 물리 틱마다 `"[BT 노숙 취침] ..."` 또는 `"[BT 바닥 식사] ..."` 로그가 쏟아져 나오는 현상.
 
 #### 원인 (Root Cause)
 * `ActionInteractFurniture::Tick`에서 `needs.occupied_furniture == entt::null` 검사를 매 틱마다 시도하나, 맨바닥 행동 시에는 점유할 가구가 없어 `occupied_furniture`가 계속 `entt::null`로 유지되면서 최초 진입 조건문 내의 로그 출력 및 Toil 초기화가 매 틱 실행됨.
