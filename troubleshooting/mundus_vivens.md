@@ -254,3 +254,36 @@ Tracy Profiler는 `TRACY_ENABLE` 매크로가 정의되면 전역 정적 객체 
 ### 검증 (Verification)
 1. C++ 서버가 `exit(1)` 없이 완벽히 구동 중인 상태에서 `netstat -ano` 확인 시 `TCP 0.0.0.0:8086` 리스닝(LISTENING) 상태가 정상 검출됨.
 2. `tracy-profiler.exe`를 실행하고 `127.0.0.1:8086`으로 `Connect` 시 실시간 성능 타임라인 및 Flame Graph가 완벽하게 수신됨을 검증 완료.
+
+---
+
+## 2026-07-15: C# 벤치마크 테스트 시 데이터 정합성 충돌 및 야수/몬스터 비지성체 대화 필터링 결함
+
+### 1. `cold_archive` 컬렉션 Drop 누락으로 인한 벤치마크 테스트 데이터 간섭
+
+#### 현상 (Symptom)
+* C# 벤치마크 모드에서 기억 저장소 테스트(`memory`) 수행 후 대화 테스트(`dialogue`)를 순차 진행하면, 첫 번째 대화 생성 단계에서 `Value cannot be null. (Parameter 'key')` 에러가 발생하며 대화 생성이 실패하는 현상.
+* 에바(`npc_eva`)의 기억 풀을 스캔했을 때, 이미 리셋되었어야 할 이전 기억 테스트용 더미 데이터 1,000개가 그대로 조회됨.
+
+#### 원인 (Root Cause)
+* `Program.cs` 기동 시 `ForceResetDatabase` 설정에 따라 `PersistenceService.ResetDatabase()`를 호출하여 DB를 강제 리셋함.
+* 그러나 `ResetDatabase()` 내에서 오직 `agents` 컬렉션만 드롭(`DropCollection("agents")`)하고, 대량의 핫메모리가 도태(Evict)되어 들어간 **`cold_archive` 컬렉션은 Drop하지 않고 방치**하여 더미 데이터가 잔존함.
+* 이 더미 기억(`SubjectId = "target_npc"`)을 에바가 대화 시작 시 리콜하여 대뇌 프롬프트에 실으려 하다가, `target_npc`에 해당하는 실제 에이전트 인스턴스가 Dictionary에 없어 Null Key 에러를 유발함.
+
+#### 해결책 (Resolution)
+* `PersistenceService.cs`의 `ResetDatabase()` 내부 로직에 `_database!.DropCollection("cold_archive");`를 추가하여 데이터베이스 강제 리셋 시 모든 콜드 기억 컬렉션도 깨끗이 초기화되도록 수정함.
+
+---
+
+### 2. 비지성체(몬스터/야수)에 대한 대화 트리거 필터 누락
+
+#### 현상 (Symptom)
+* 벤치마크 종합 시뮬레이션 및 대화 테스트 중, 야생 동물인 굶주린 늑대(`npc_wolf`)가 에바와 대화를 나누고 소문을 전달받아 발락(`npc_valac`)에게까지 말로 전파하는 기획적 모순(논리 결함) 발생.
+
+#### 원인 (Root Cause)
+* C++ 물리 서버는 `SentienceComp`를 통해 `is_sentient = false`로 늑대가 비지성체임을 식별하고 있었음.
+* 그러나 C++ 대화 판정 엔진인 `SystemSocial.cpp`에서 대화 참여 주도자를 수집할 때와 주변 타겟 이웃을 스캔하여 매칭할 때 `SentienceComp` 검사가 빠져 있어 늑대가 정상 대화 상대로 짝지어짐.
+
+#### 해결책 (Resolution)
+* C++ `SystemSocial.cpp`의 대화 주도자 수집 영역과 이웃 타겟 루프 내에 `SentienceComp` 예외 처리를 추가하여, `is_sentient`가 `false`인 비지성체 야수/몬스터는 대화 후보군에서 원천 배제시킴.
+
