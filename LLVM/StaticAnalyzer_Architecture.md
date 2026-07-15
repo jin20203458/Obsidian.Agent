@@ -1,3 +1,12 @@
+---
+type: reference
+title: LLVM Static Analyzer & Tidy Architecture
+tags: [llvm, clang-tidy, static-analyzer, architecture, cpp]
+related:
+  - ../README.md
+last_updated: 2026-07-15
+status: stable
+---
 # LLVM: Static Analyzer & Tidy 커스텀 체커 아키텍처
 
 본 문서는 **LLVM/Clang** 정적 분석 엔진 상에 구현된 커스텀 체커(Clang Static Analyzer & Clang-Tidy)들의 구조적 통합 방향과 개발 아키텍처를 안내하는 문서입니다.

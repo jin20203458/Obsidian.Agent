@@ -1,3 +1,12 @@
+---
+type: reference
+title: Sims & RimWorld AI Architecture Report
+tags: [mundus-vivens, ai, sims, rimworld, reference]
+related:
+  - ../README.md
+last_updated: 2026-07-15
+status: stable
+---
 # 심즈(The Sims) & 림월드(RimWorld) AI 아키텍처 상세 분석 보고서
 
 이 보고서는 전통적 시뮬레이션 인공지능의 양대 산맥인 Maxis의 *심즈(The Sims)*와 Ludeon Studios의 *림월드(RimWorld)*의 AI 아키텍처 설계와 작동 방식을 코드 레벨에서 분석한 백서입니다.

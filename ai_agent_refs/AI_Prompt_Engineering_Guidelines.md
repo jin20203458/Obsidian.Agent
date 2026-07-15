@@ -1,3 +1,12 @@
+---
+type: guideline
+title: AI Prompt Engineering Guidelines
+tags: [ai, prompt, engineering, guidelines, grc]
+related:
+  - ../README.md
+last_updated: 2026-07-15
+status: stable
+---
 # AI 프롬프트 엔지니어링 지침서 (GRC Project)
 # AI Prompt Engineering Guidelines
 # 

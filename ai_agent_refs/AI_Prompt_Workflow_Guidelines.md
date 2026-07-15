@@ -1,3 +1,13 @@
+---
+type: guideline
+title: AI Prompt Engineering Workflow Guide
+tags: [ai, prompt, workflow, guidelines]
+related:
+  - ../README.md
+  - ./AI_Prompt_Engineering_Guidelines.md
+last_updated: 2026-07-15
+status: stable
+---
 # AI Prompt Engineering Workflow Guide
 
 본 문서는 GRC 프로젝트 내에서 AI 프롬프트를 신규로 작성하거나 기존 프롬프트를 유지보수할 때 적용해야 할 **공식 프롬프트 엔지니어링 워크플로우**를 정의합니다.

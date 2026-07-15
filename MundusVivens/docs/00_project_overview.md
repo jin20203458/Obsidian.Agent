@@ -1,3 +1,13 @@
+---
+type: spec
+title: Project Overview
+tags: [mundus-vivens, overview, architecture, ai-agent]
+related:
+  - ../README.md
+  - ./01_game_server_architecture.md
+last_updated: 2026-07-15
+status: stable
+---
 # Mundus Vivens: 프로젝트 비전 및 시스템 개요 (Project Overview)
 
 본 문서는 **Mundus Vivens** 프로젝트의 기획적 비전, 핵심 게임플레이 루프, 그리고 전체 시스템 아키텍처의 큰 틀을 설명합니다. 

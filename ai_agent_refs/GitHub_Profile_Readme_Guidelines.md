@@ -1,3 +1,12 @@
+---
+type: guideline
+title: GitHub Profile README Guidelines
+tags: [github, profile, readme, guidelines]
+related:
+  - ../README.md
+last_updated: 2026-07-15
+status: stable
+---
 # Developer Profile README Guide: Backend, Systems, Compiler, C++ & C# Archetypes
 
 프론트엔드 개발자들이 화려한 CSS, SVG 애니메이션, 그래픽 위젯을 주로 사용하는 것과 달리, **시스템 프로그래밍, 백엔드, 컴파일러, 임베디드 등의 저수준 개발자들의 프로필은 코드의 아키텍처 깊이, 오픈소스 기여도(Impact), 기술적 정갈함을 보여주는 것이 훨씬 전문적이고 신뢰감을 줍니다.**

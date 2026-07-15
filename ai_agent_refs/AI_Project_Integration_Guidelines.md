@@ -1,3 +1,12 @@
+---
+type: guideline
+title: AI Project Integration Guidelines
+tags: [ai, project, integration, guidelines]
+related:
+  - ../README.md
+last_updated: 2026-07-15
+status: stable
+---
 # AI Project Integration Guidelines: 신규 프로젝트 연동 지침
 
 본 문서는 새로운 개발 저장소(Repository)를 `Obsidian.Agent` 지식베이스 및 AI 에이전트 협업 환경과 연계하기 위해 수행해야 하는 표준 연동 절차와 행동 강령을 정의합니다.

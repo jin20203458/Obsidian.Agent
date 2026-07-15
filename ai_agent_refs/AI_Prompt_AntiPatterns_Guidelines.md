@@ -1,3 +1,13 @@
+---
+type: guideline
+title: AI Prompt Anti-Patterns Guidelines
+tags: [ai, prompt, anti-patterns, guidelines]
+related:
+  - ../README.md
+  - ./AI_Prompt_Engineering_Guidelines.md
+last_updated: 2026-07-15
+status: stable
+---
 # AI Prompt Anti-Patterns Guidelines (2024-2026)
 
 이 문서는 최신 대규모 언어 모델(LLM) 및 추론형 모델(Thinking Models)을 사용할 때 **피해야 할 안티패턴(Prompt Anti-Patterns)**을 정리한 GRC 프로젝트 공식 가이드라인입니다. 모든 프롬프트 엔지니어링 작업 시 기존 `AI_Prompt_Engineering_Guidelines.md`와 함께 본 문서를 반드시 준수해야 합니다.

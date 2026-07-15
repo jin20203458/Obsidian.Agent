@@ -24,3 +24,8 @@ Focus: Single Source of Truth, low redundancy, exact relative paths.
 <post_action>
 - **Log**: Use templates in the troubleshooting directory when logging issues.
 </post_action>
+
+<context_engineering_rules>
+- **Frontmatter**: Always maintain and update YAML frontmatter (type, tags, related links) when creating or modifying documents.
+- **Scope Navigation (Progressive Disclosure)**: When exploring a specific project (e.g., MundusVivens), always prioritize reading its local `README.md` index first. Use the `related` links in the YAML frontmatter to navigate context sequentially, rather than pulling in all global files at once.
+</context_engineering_rules>

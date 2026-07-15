@@ -1,3 +1,14 @@
+---
+type: spec
+title: Game Server Architecture
+tags: [mundus-vivens, c++, game-server, network]
+related:
+  - ../README.md
+  - ./00_project_overview.md
+  - ./02_agent_design.md
+last_updated: 2026-07-15
+status: stable
+---
 # Mundus Vivens: C++ Game Server Architecture Map
 
 본 문서는 C++ 게임 서버의 아키텍처 명세 및 시스템 흐름을 설명합니다.

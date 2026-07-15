@@ -1,3 +1,13 @@
+---
+type: spec
+title: Agent Execution Architecture & Memory Systems
+tags: [mundus-vivens, ai-agent, memory, architecture]
+related:
+  - ../README.md
+  - ./01_game_server_architecture.md
+last_updated: 2026-07-15
+status: stable
+---
 # Mundus Vivens: Agent Execution Architecture & Memory Systems
 
 이 문서는 `Mundus Vivens` 게임 서버(C++) 및 AI 서버(C#) 환경에서 에이전트(NPC)의 물리적 연산, 감정 전염, 대화 트리거, 기억(Belief) 관리, 그리고 일일 스케줄링이 작동하는 **실제 구현 레벨의 상세 아키텍처 명세(Technical Spec)**입니다.
