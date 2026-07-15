@@ -8,7 +8,9 @@ related:
 last_updated: 2026-07-15
 status: stable
 ---
-# AI Project Integration Guidelines: 신규 프로젝트 연동 지침
+# AI Project Integration Guidelines
+
+> **부제**: 신규 프로젝트 연동 지침
 
 본 문서는 새로운 개발 저장소(Repository)를 `Obsidian.Agent` 지식베이스 및 AI 에이전트 협업 환경과 연계하기 위해 수행해야 하는 표준 연동 절차와 행동 강령을 정의합니다.
 
@@ -16,8 +18,8 @@ status: stable
 
 ##  프로젝트 연동 3단계 워크플로우
 
-### 1단계. 개발 저장소 내 에이전트 행동 강령 (`AGENTS.md`) 구성
-연동할 개발 프로젝트 저장소 루트에 `.agents/` 디렉토리를 생성하고 `AGENTS.md` 파일을 작성합니다.
+### 1단계. 개발 저장소 내 에이전트 행동 강령 ([AGENTS.md](AGENTS.md)) 구성
+연동할 개발 프로젝트 저장소 루트에 `.agents/` 디렉토리를 생성하고 [AGENTS.md](AGENTS.md) 파일을 작성합니다.
 * **작성 규칙**: 글로벌 에이전트 프롬프트와의 정체성 충돌을 방지하고 정확한 지시 이행을 위해 **XML 태그 구조**와 **조건부 트리거(JIT)** 방식을 필수로 도입하며, 토큰 낭비를 막기 위해 문맥을 극도로 압축하여 작성합니다.
 * **표준 구조 및 필수 태그**:
   1. **`<assigned_role>`**: 해당 저장소 내에서 에이전트가 위임받을 일시적 전문 역할 (예: Senior C++ Engine Developer 등)
@@ -43,12 +45,12 @@ status: stable
   </critical_rules>
 
   <context_triggers>
-  - **Knowledge Base**: If modifying architecture, read `../MundusVivens/docs/01_architecture.md`.
-  - **Troubleshooting**: If debugging, read `../Obsidian.Agent/troubleshooting/mundus_vivens.md` before coding.
+  - **Knowledge Base**: If modifying architecture, read [01_architecture.md](../MundusVivens/docs/01_architecture.md).
+  - **Troubleshooting**: If debugging, read [mundus_vivens.md](../Obsidian.Agent/troubleshooting/mundus_vivens.md) before coding.
   </context_triggers>
 
   <post_action>
-  - **Log**: Document resolved bugs in `../Obsidian.Agent/troubleshooting/mundus_vivens.md`.
+  - **Log**: Document resolved bugs in [mundus_vivens.md](../Obsidian.Agent/troubleshooting/mundus_vivens.md).
   - **Sync**: Update specs in `../MundusVivens/docs/` if architecture changes.
   </post_action>
   ```
@@ -61,10 +63,10 @@ status: stable
 
 1. **프로젝트 폴더 및 인덱스 생성**:
    * `Obsidian.Agent/<Project_Name>/` 디렉토리를 생성합니다. (예: `LLVM/`, `MundusVivens/`)
-   * 폴더 최상단에 `README.md` (type: `index`)를 작성하여 하위 문서 지도를 제공합니다.
-   * 폴더 내에 시스템의 핵심 설계 사상, 동작 원리, 모듈 간 구조(SSOT)를 정의하는 기술 명세 문서를 최소 1개 이상 생성합니다. (예: `StaticAnalyzer_Architecture.md`)
+   * 폴더 최상단에 [README.md](README.md) (type: `index`)를 작성하여 하위 문서 지도를 제공합니다.
+   * 폴더 내에 시스템의 핵심 설계 사상, 동작 원리, 모듈 간 구조(SSOT)를 정의하는 기술 명세 문서를 최소 1개 이상 생성합니다. (예: [StaticAnalyzer_Architecture.md](StaticAnalyzer_Architecture.md))
 2. **트러블슈팅 로그 생성**:
-   * `Obsidian.Agent/troubleshooting/<project_name>.md` 경로에 전용 로그 문서를 생성합니다.
+   * [Obsidian.Agent/troubleshooting/<project_name>.md](Obsidian.Agent/troubleshooting/<project_name>.md) 경로에 전용 로그 문서를 생성합니다.
    * **필수 템플릿 규격**을 반드시 준수하여 구조화합니다:
      ```markdown
      ## YYYY-MM-DD: 에러 발생명
@@ -75,8 +77,8 @@ status: stable
 
 ---
 
-### 3단계. 지식베이스 `README.md` 통합 동기화
-루트 `README.md` 파일을 업데이트하여 일관성을 유지합니다.
+### 3단계. 지식베이스 [README.md](README.md) 통합 동기화
+루트 [README.md](README.md) 파일을 업데이트하여 일관성을 유지합니다.
 * **디렉토리 구조 (Directory Structure)** 섹션에 새로 추가한 프로젝트 폴더(예: `- **<Project_Name>/**: ...`)와 하위 명세서들을 설명과 함께 링크로 정식 등록합니다.
 * **troubleshooting** 섹션에 신규 생성한 프로젝트 트러블슈팅 로그 문서 링크를 등록합니다.
 
@@ -84,7 +86,7 @@ status: stable
 
 ##  에이전트용 프로젝트 환경 자동 탐색 가이드
 
-신규 프로젝트 연동을 지시받은 에이전트는 해당 프로젝트의 소스 코드를 분석하여 아래 규칙에 따라 `.agents/AGENTS.md` 파일의 `Build` 및 `Execution` 명령어를 도출합니다.
+신규 프로젝트 연동을 지시받은 에이전트는 해당 프로젝트의 소스 코드를 분석하여 아래 규칙에 따라 [.agents/AGENTS.md](.agents/AGENTS.md) 파일의 `Build` 및 `Execution` 명령어를 도출합니다.
 
 ### 1. 빌드 도구 식별 및 명령어 도출 (Build Directive)
 * **CMake 기반 프로젝트** (루트에 `CMakeLists.txt` 존재):

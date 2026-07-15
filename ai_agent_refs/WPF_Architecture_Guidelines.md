@@ -7,7 +7,9 @@ related:
 last_updated: 2026-07-15
 status: stable
 ---
-# WPF 현대적인 MVVM 아키텍처 가이드 (AI 프롬프트/CursorRules 템플릿)
+# WPF Architecture Guidelines
+
+> **부제**: WPF 현대적인 MVVM 아키텍처 가이드 (AI 프롬프트/CursorRules 템플릿)
 
 본 문서는 현대적인 WPF(.NET 8.0 이상) 애플리케이션을 빌드할 때 AI 코딩 에이전트(GitHub Copilot, Cursor, Claude 등)가 참조해야 할 완벽한 지침서입니다. AI가 자주 범하는 **잘못된 패턴(Anti-Patterns)을 엄격히 금지**하고, CommunityToolkit.Mvvm의 소스 제너레이터(Source Generators)를 100% 활용하도록 유도하기 위해 작성되었습니다.
 

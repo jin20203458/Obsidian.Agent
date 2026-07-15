@@ -8,7 +8,9 @@ related:
 last_updated: 2026-07-15
 status: stable
 ---
-# Obsidian Knowledge Base Authoring Guidelines (문서 작성 지침)
+# Knowledge Base Authoring Guidelines
+
+> **부제**: Obsidian Knowledge Base Authoring Guidelines (문서 작성 지침)
 
 본 문서는 `Obsidian.Agent` 지식베이스 내에서 문서를 신규 생성하거나 수정할 때, **인간 개발자와 AI 에이전트가 모두 공통으로 준수해야 하는 파일 작성 표준**을 정의합니다. 일관된 구조는 에이전트의 환각(Hallucination)을 줄이고 탐색 효율성을 극대화합니다.
 
@@ -39,7 +41,7 @@ status: [stable | draft | deprecated]
 * **`type`**: 문서의 성격을 규정합니다. 
   * `spec` (공식 명세), `guideline` (행동 지침), `runbook` (장애 조치), `reference` (참고용 메모/백서), `index` (목차) 중 택 1.
 * **`tags`**: Obsidian 태그 문법을 준수합니다. 공백이나 특수기호(`+`, `@` 등)를 사용할 수 없습니다. (예: `c++` 대신 `cpp` 사용)
-* **`related`**: **매우 중요합니다.** 에이전트가 무분별한 전체 탐색을 하지 않도록, 상위 인덱스(`README.md`)나 직접적으로 관련된 문서의 상대 경로를 적어 길잡이(Progressive Disclosure) 역할을 하게 합니다.
+* **`related`**: **매우 중요합니다.** 에이전트가 무분별한 전체 탐색을 하지 않도록, 상위 인덱스([README.md](./README.md))나 직접적으로 관련된 문서의 상대 경로를 적어 길잡이(Progressive Disclosure) 역할을 하게 합니다.
 * **`status`**: 문서의 신뢰도를 나타냅니다. (`stable`: 공식/확정, `draft`: 초안/개인 메모, `deprecated`: 폐기됨)
 
 ## 3. 링크 및 경로 작성 규칙 (Cross-Referencing)
@@ -48,4 +50,4 @@ status: [stable | draft | deprecated]
   * [Good] `[Entity Types](./memo/entity_types.md)`
 
 ## 4. 디렉토리 인덱싱 (Indexing)
-* 새로운 주요 프로젝트나 대형 폴더를 생성할 경우, 해당 폴더 최상단에 반드시 `README.md` (type: `index`)를 작성하여 하위 문서들의 지도를 제공해야 합니다. 에이전트는 특정 프로젝트 진입 시 이 인덱스를 가장 먼저 읽도록 설계되었습니다.
+* 새로운 주요 프로젝트나 대형 폴더를 생성할 경우, 해당 폴더 최상단에 반드시 [README.md](./README.md) (type: `index`)를 작성하여 하위 문서들의 지도를 제공해야 합니다. 에이전트는 특정 프로젝트 진입 시 이 인덱스를 가장 먼저 읽도록 설계되었습니다.

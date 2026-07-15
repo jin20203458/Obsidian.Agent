@@ -7,7 +7,9 @@ related:
 last_updated: 2026-07-15
 status: stable
 ---
-# Mermaid 다이어그램 작성 및 파싱 오류 해결 가이드
+# Mermaid Diagram Guidelines
+
+> **부제**: Mermaid 다이어그램 작성 및 파싱 오류 해결 가이드
 
 Obsidian, GitHub, VS Code 등의 마크다운 환경에서 Mermaid 다이어그램을 작성할 때 발생하는 대표적인 구문 오류(Syntax Error)의 원인과 예방 규칙을 정리한 가이드라인입니다.
 

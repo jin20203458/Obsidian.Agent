@@ -8,9 +8,9 @@ related:
 last_updated: 2026-07-15
 status: stable
 ---
-# AI Prompt Anti-Patterns Guidelines (2024-2026)
+# AI Prompt Anti-Patterns Guidelines
 
-이 문서는 최신 대규모 언어 모델(LLM) 및 추론형 모델(Thinking Models)을 사용할 때 **피해야 할 안티패턴(Prompt Anti-Patterns)**을 정리한 GRC 프로젝트 공식 가이드라인입니다. 모든 프롬프트 엔지니어링 작업 시 기존 `AI_Prompt_Engineering_Guidelines.md`와 함께 본 문서를 반드시 준수해야 합니다.
+이 문서는 최신 대규모 언어 모델(LLM) 및 추론형 모델(Thinking Models)을 사용할 때 **피해야 할 안티패턴(Prompt Anti-Patterns)**을 정리한 공식 가이드라인입니다. 모든 프롬프트 엔지니어링 작업 시 기존 [AI_Prompt_Engineering_Guidelines.md](./AI_Prompt_Engineering_Guidelines.md)와 함께 본 문서를 반드시 준수해야 합니다.
 
 본 문서는 Google Gemini 3.x, OpenAI o1/o3/GPT-4o, Anthropic Claude 3.5 이상 등 **최신 2024~2026년형 고성능 모델**에 특화된 지침입니다.
 
@@ -111,5 +111,5 @@ status: stable
 2026년 최신 연구에 따르면 마크다운 구조는 이러한 프롬프트 인젝션에 약 20%의 취약성을 보였으나, **XML 태그(`<tag>`)는 100%의 인젝션 방어율**을 달성했습니다. 따라서 핵심 시스템 규칙과 데이터 경계는 반드시 XML 태그로 분리해야 합니다.
 
 ---
-**적용 범위:** GRC 프로젝트 내의 모든 프롬프트 (MemoryManager, SessionArchitect, Lorebook, ReplySuggestion 등 전 영역)
+**적용 범위:** 프로젝트 내의 모든 프롬프트 (MemoryManager, SessionArchitect, Lorebook, ReplySuggestion 등 전 영역)
 **문서 버전:** 2026-07-02 (기반 연구: 2024~2026 AI Papers & Developer Forums)
