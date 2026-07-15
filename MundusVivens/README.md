@@ -17,7 +17,8 @@ status: stable
 - [01_game_server_architecture.md](./docs/01_game_server_architecture.md): C++ 기반 게임 서버 및 네트워크 아키텍처
 - [02_agent_design.md](./docs/02_agent_design.md): NPC 인지/행동 구조 및 메모리 시스템 설계 (C# AI 서버 중심)
 - [03_future_roadmap.md](./docs/03_future_roadmap.md): 향후 구현 과제 및 중장기 기획
-- [04_profiling_and_optimization.md](./docs/04_profiling_and_optimization.md): 성능 계측(Tracy Profiler) 및 최적화 전략
+- [04_cpp_server_profiling.md](./docs/04_cpp_server_profiling.md): C++ 물리 서버 성능 실측 보고서 (Tracy)
+- [05_csharp_ai_profiling.md](./docs/05_csharp_ai_profiling.md): C# AI 대뇌 서버 비용 및 아키텍처 비교 보고서 (Smallville 대조)
 
 ## `references/` (외부 참고 자료)
 설계에 영감을 주거나 이론적 기반이 된 논문 및 타 게임 아키텍처 분석 리포트입니다.
