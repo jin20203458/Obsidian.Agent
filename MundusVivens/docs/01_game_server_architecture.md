@@ -1,7 +1,7 @@
 ---
 type: spec
 title: Game Server Architecture
-tags: [mundus-vivens, c++, game-server, network]
+tags: [mundus-vivens, cpp, game-server, network]
 related:
   - ../README.md
   - ./00_project_overview.md

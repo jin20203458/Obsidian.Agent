@@ -1,3 +1,12 @@
+---
+type: index
+title: Obsidian Agent Collaboration Knowledge Base
+tags: [knowledge-base, main-index, ai-agent]
+related:
+  - ./ai_agent_refs/Knowledge_Base_Authoring_Guidelines.md
+last_updated: 2026-07-15
+status: stable
+---
 # Obsidian Agent: AI Collaboration Knowledge Base
 
 본 저장소는 개발자와 AI 에이전트 간의 협업을 위한 공유 지식 베이스(Knowledge Base)입니다.
@@ -12,6 +21,7 @@
   - [Mermaid_Diagram_Guidelines.md](ai_agent_refs/Mermaid_Diagram_Guidelines.md): 에이전트 생성용 락프리 및 시퀀스 다이어그램 작성법
   - [WPF_Architecture_Guidelines.md](ai_agent_refs/WPF_Architecture_Guidelines.md): WPF MVVM 아키텍처 및 컨트롤 바인딩 규칙
   - [AI_Project_Integration_Guidelines.md](ai_agent_refs/AI_Project_Integration_Guidelines.md): 신규 개발 프로젝트를 에이전트 지식베이스 및 협업 환경과 연계하는 표준 절차
+  - [Knowledge_Base_Authoring_Guidelines.md](ai_agent_refs/Knowledge_Base_Authoring_Guidelines.md): 에이전트와 인간 개발자가 공통으로 준수해야 할 문서 작성/메타데이터 표준 지침
 
 
 - **LLVM/**: LLVM/Clang 커스텀 Tidy 체커 및 Static Analyzer 개발 아키텍처와 참고 문서를 다루는 기술 노트 폴더 (세부 문서 목록은 해당 디렉토리 참조)

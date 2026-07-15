@@ -4,6 +4,7 @@ title: AI Project Integration Guidelines
 tags: [ai, project, integration, guidelines]
 related:
   - ../README.md
+  - ./Knowledge_Base_Authoring_Guidelines.md
 last_updated: 2026-07-15
 status: stable
 ---
@@ -56,9 +57,11 @@ status: stable
 
 ### 2단계. 지식베이스 저장소 (`Obsidian.Agent`) 리소스 생성
 새 프로젝트와 관련된 지식을 저장하고 트래킹할 문서를 작성합니다.
+모든 문서의 파일 명명, YAML Frontmatter 형식, 링크 문법 등 **작성 표준은 [Knowledge_Base_Authoring_Guidelines.md](./Knowledge_Base_Authoring_Guidelines.md)를 준수**합니다.
 
-1. **아키텍처/기획 기술 노트 생성**:
+1. **프로젝트 폴더 및 인덱스 생성**:
    * `Obsidian.Agent/<Project_Name>/` 디렉토리를 생성합니다. (예: `LLVM/`, `MundusVivens/`)
+   * 폴더 최상단에 `README.md` (type: `index`)를 작성하여 하위 문서 지도를 제공합니다.
    * 폴더 내에 시스템의 핵심 설계 사상, 동작 원리, 모듈 간 구조(SSOT)를 정의하는 기술 명세 문서를 최소 1개 이상 생성합니다. (예: `StaticAnalyzer_Architecture.md`)
 2. **트러블슈팅 로그 생성**:
    * `Obsidian.Agent/troubleshooting/<project_name>.md` 경로에 전용 로그 문서를 생성합니다.
@@ -73,7 +76,7 @@ status: stable
 ---
 
 ### 3단계. 지식베이스 `README.md` 통합 동기화
-`Obsidian.Agent` 저장소 루트에 있는 [README.md](file:///C:/Users/user/Documents/GitHub/Obsidian.Agent/README.md) 파일을 업데이트하여 일관성을 유지합니다.
+루트 `README.md` 파일을 업데이트하여 일관성을 유지합니다.
 * **디렉토리 구조 (Directory Structure)** 섹션에 새로 추가한 프로젝트 폴더(예: `- **<Project_Name>/**: ...`)와 하위 명세서들을 설명과 함께 링크로 정식 등록합니다.
 * **troubleshooting** 섹션에 신규 생성한 프로젝트 트러블슈팅 로그 문서 링크를 등록합니다.
 
