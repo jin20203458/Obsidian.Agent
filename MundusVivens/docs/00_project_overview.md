@@ -83,4 +83,6 @@ Mundus Vivens 개발에 활용되는 주요 설계 문서들의 배치 지도입
 *   [01_game_server_architecture.md](./01_game_server_architecture.md): C++ 물리 엔진 아키텍처 (스레드 모델, 틱 동기화 및 2단계 Job 수거 흐름, 대화 확률 연산, 길찾기 최적화)
 *   [02_agent_design.md](./02_agent_design.md): C# 인지/기억 엔진 아키텍처 (MemoryBox 구조, Hot/Cold 기억 보관 규칙, 일일 스케줄러 및 본능 인터럽트 규칙)
 *   [03_future_roadmap.md](./03_future_roadmap.md): 프로젝트 미래 백로그 및 C++ vs C# 개발 책임 경계선 명세
-*   [04_profiling_and_optimization.md](./04_profiling_and_optimization.md): Tracy 프로파일러 연동, 락프리/비동기 설계 검증 실측 통계 및 4대 극한 벤치마크 성능 테스트 보고서
+*   [04_cpp_server_profiling.md](./04_cpp_server_profiling.md): Tracy 프로파일러 연동, 락프리/비동기 설계 검증 실측 통계 및 4대 극한 벤치마크 성능 테스트 보고서
+*   [05_csharp_ai_profiling.md](./05_csharp_ai_profiling.md): C# AI 대뇌 서버 아키텍처 효율성 및 비용 정량 비교 보고서 (Smallville 대조군 설계 및 실측 비용 테이블)
+
