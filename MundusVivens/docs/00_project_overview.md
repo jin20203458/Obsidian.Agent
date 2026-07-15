@@ -14,6 +14,16 @@ status: stable
 
 ---
 
+## 저장소 안내 (Repository Overview)
+
+Mundus Vivens 프로젝트는 기능별로 레포지토리가 분리되어 관리됩니다. 코드 및 아키텍처 구현체는 아래 링크에서 확인할 수 있습니다.
+
+- [🧠 C# AI 서버 (MundusVivens)](https://github.com/jin20203458/MundusVivens) - AI 오케스트레이션, LLM 프롬프트 최적화, 메모리 캐시 계층 구현체
+- [⚙️ C++ 게임 서버 (MundusVivens.GameServer.Cpp)](https://github.com/jin20203458/MundusVivens.GameServer.Cpp) - 20Hz 락프리 루프, EnTT ECS, 2D 물리·충돌·위협 판정 구현체
+- [📚 지식베이스 (Obsidian.Agent)](https://github.com/jin20203458/Obsidian.Agent) - 본 문서를 포함한 프로젝트 공식 기술 명세서 및 아키텍처 문서 모음
+
+---
+
 ## 왜 만들었는가 (Why)
 
 기존 게임의 NPC는 플레이어가 다가가야만 반응하고, 똑같은 대사를 반복하며, 서로 간에 아무런 관계도 맺지 않습니다. 플레이어가 보지 않는 곳에서는 아무 일도 일어나지 않는 **무대 뒤의 마네킹**에 가깝습니다.
