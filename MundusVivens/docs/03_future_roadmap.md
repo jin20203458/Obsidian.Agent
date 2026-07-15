@@ -5,8 +5,8 @@ tags: [mundus-vivens, roadmap, planning]
 related:
   - ../README.md
   - ./00_project_overview.md
-last_updated: 2026-07-15
-status: draft
+last_updated: 2026-07-16
+status: stable
 ---
 # Mundus Vivens: 미래 로드맵 및 기획 노트 (Future Roadmap)
 
@@ -15,13 +15,6 @@ status: draft
 ---
 
 ## [1] 우선 구현 대상 과제 (Immediate Implementation Backlog)
-
-### ① 자식 신념(Derived Belief) 및 인과 연쇄 프롬프트 바인딩 (Causal Chain Binding)
-*   **목적**: LLM 성찰 시 발생하는 새로운 결론(자식 신념)과 그 원인(부모 신념) 간의 연결고리를 생성하여 게임 내 인과 전파(Causal Cascade) 알고리즘을 실질적으로 가동.
-*   **상세**: 
-    *   `DailyPlanService.cs`의 성찰 프롬프트 및 JSON 스키마를 수정하여 LLM이 `derived_from_id`를 반환하도록 강제.
-    *   파서(DTO)를 업데이트하여 추출된 ID를 `Belief` 구조체의 `DerivedFrom` 속성에 매핑.
-    *   저장 시 부모 ID가 기록되도록 하여 추후 감쇠(Decay)나 확신도 변화 시 연쇄 적용이 정상적으로 일어나도록 연결.
 
 ### ② 단체 행동 및 군집 전투 파이프라인 (Group Actions & Faction Combat)
 최근 구현 완료된 "1:1 전투 및 위협 억제(Threat & Combat) 파이프라인"을 다자간(N:M) 관계로 확장하여 군중 심리와 동적 진영을 생성합니다.
