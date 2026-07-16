@@ -18,9 +18,9 @@ status: stable
 
 Mundus Vivens 프로젝트는 기능별로 레포지토리가 분리되어 관리됩니다. 코드 및 아키텍처 구현체는 아래 링크에서 확인할 수 있습니다.
 
-- [ C# AI 서버 (MundusVivens)](https://github.com/jin20203458/MundusVivens) - AI 오케스트레이션, LLM 프롬프트 최적화, 메모리 캐시 계층 구현체
-- [ C++ 게임 서버 (MundusVivens.GameServer.Cpp)](https://github.com/jin20203458/MundusVivens.GameServer.Cpp) - 20Hz 메인 루프, 3-스레드 분리(I/O, Main, gRPC), EnTT ECS, 2D 물리·충돌·위협 판정 구현체
-- [ 지식베이스 (Obsidian.Agent)](https://github.com/jin20203458/Obsidian.Agent) - 본 문서를 포함한 프로젝트 공식 기술 명세서 및 아키텍처 문서 모음
+- [C# AI 서버 (MundusVivens)](https://github.com/jin20203458/MundusVivens) - AI 오케스트레이션, LLM 프롬프트 최적화, 메모리 캐시 계층 구현체
+- [C++ 게임 서버 (MundusVivens.GameServer.Cpp)](https://github.com/jin20203458/MundusVivens.GameServer.Cpp) - 20Hz 메인 루프, 3-스레드 분리(I/O, Main, gRPC), EnTT ECS, 2D 물리·충돌·위협 판정 구현체
+- [지식베이스 (Obsidian.Agent)](https://github.com/jin20203458/Obsidian.Agent) - 본 문서를 포함한 프로젝트 공식 기술 명세서 및 아키텍처 문서 모음
 
 ---
 
