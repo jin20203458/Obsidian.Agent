@@ -268,7 +268,7 @@ flowchart LR
 5.  **좌표 변환**: `LocationCoordinateRegistry`를 조회하여 장소 텍스트(예: "도서관", "광장")를 C++ 물리 엔진이 이해할 수 있는 이동 좌표(Waypoint)로 변환해 C++ 서버로 전달합니다.
 
 ### B. API 429 완화 및 예측형 큐잉
-*   **시차 분산 배치**: NPC들의 첫날(Day 1) 일과 종료 시각([world_config.json](../../MundusVivens/MundusVivens.Prototype/Data/World/world_config.json))을 시차 분산 설계하여 자정에 모든 NPC가 동시에 성찰을 트리거해 API Spike가 발생하는 것을 차단합니다.
+*   **시차 분산 배치**: NPC들의 첫날(Day 1) 일과 종료 시각([world_config.json](../../../MundusVivens/MundusVivens.Prototype/Data/World/world_config.json))을 시차 분산 설계하여 자정에 모든 NPC가 동시에 성찰을 트리거해 API Spike가 발생하는 것을 차단합니다.
 *   **예측형 더블 버퍼링**: 스케줄 만료 4시간 전에 디바이스 백그라운드 큐(`PriorityQueue`)에 성찰 요청을 밀어 넣고, 최대 10 TPS 스로틀링 및 지수 백오프를 통해 순차 분산 연산을 처리한 뒤, 다음 날 일과를 `NextSchedule` 버퍼에 넣어두어 물리 틱 끊김 없이 교체(Swap) 처리합니다.
 
 ### C. Bounding Box 기반 계층형 공간 LOD 및 Clamped 이동 연산
