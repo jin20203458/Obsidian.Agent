@@ -38,7 +38,7 @@ powershell -ExecutionPolicy Bypass -File .\build_local.ps1 -Clean
 ```
 
 ### 2) Tracy Profiler 클라이언트 앱 실행 및 연동
-1. 로컬 환경에 마련된 `C:\Users\adg01\Desktop\Tracy Profiler 0.13.1\tracy-profiler.exe`를 실행합니다.
+1. 로컬 환경에 설치된 Tracy Profiler 실행 파일(`tracy-profiler.exe`)을 실행합니다.
 2. C++ 게임 서버 실행 파일(`MundusVivensGameServer.exe`)을 실행합니다. (서버 기동 즉시 대기 중인 Tracy GUI 클라이언트로 TCP handshake 연동이 자동 수행됩니다.)
 
 ---
