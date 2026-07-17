@@ -23,7 +23,7 @@ status: stable
 ### 2) 빌드 인프라 토글 설계 (Conditional Compilation)
 프로파일링에 수반되는 미량의 런타임 오버헤드를 릴리즈 빌드에서 원천 배제할 수 있도록 CMake 및 매크로 수준의 조건부 컴파일 구조를 채택했습니다.
 * **CMake 옵션 (`ENABLE_PROFILING`)**:
-  - `ON` (기본값): 컴파일 타임 매크로 `TRACY_ENABLE`, `TRACY_ON_DEMAND`, `TRACY_NO_BROADCAST`를 전역 컴파일러 정의로 주입하고, `TracyClient.cpp` 소스 코드를 프로젝트 타겟 빌드 소스로 직접 편입하여 함께 빌드합니다.
+  - `ON` (기본값): 타겟 레벨 컴파일 타임 매크로 `TRACY_ENABLE`, `TRACY_ON_DEMAND`, `TRACY_NO_BROADCAST`를 지정하고, 프로젝트 내에 격리 임포트된 `thirdparty/tracy/TracyClient.cpp` 소스 코드를 컴파일하여 함께 빌드합니다.
   - `OFF`: 모든 프로파일링 스코프를 컴파일 타임에 `no-op` 매크로로 완전 소거하고 라이브러리 의존성을 제거하여 무부하 릴리즈 바이너리를 빌드합니다.
 
 ---
