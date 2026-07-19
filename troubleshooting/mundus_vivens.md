@@ -219,14 +219,7 @@ Tracy Profiler는 `TRACY_ENABLE` 매크로가 정의되면 전역 정적 객체 
 
 ### 해결책 (Resolution)
 
-`TracyIntegration.h` 내에서 Tracy `#include` 직전에 `TRACY_ON_DEMAND`를 정의하여, 프로파일러 GUI가 실제로 접속하기 전까지 소켓 인프라 초기화를 지연시킴:
-
-```cpp
-#ifdef TRACY_ENABLE
-#   define TRACY_ON_DEMAND   // GUI 접속 전까지 소켓 초기화 지연
-#   include <tracy/Tracy.hpp>
-#endif
-```
+`CMakeLists.txt`에서 `target_compile_definitions`를 통해 컴파일 타임 매크로 `TRACY_ON_DEMAND`를 빌드 타겟에 직접 주입하여, 프로파일러 GUI가 실제로 접속하기 전까지 소켓 인프라 초기화를 지연시킵니다. (이를 통해 [TracyIntegration.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/TracyIntegration.h) 내부의 중복 정의로 인한 MSVC C4005 재정의 경고도 방지합니다.)
 
 ### 검증 (Verification)
 
@@ -236,24 +229,23 @@ Tracy Profiler는 `TRACY_ENABLE` 매크로가 정의되면 전역 정적 객체 
 
 ---
 
-## 2026-07-14: Tracy 온디맨드 매크로 유실(LNK1168/exit 1) 및 방화벽 UDP 브로드캐스트 바인딩 충돌 해결
+## 2026-07-14: Tracy 온디맨드 매크로 유실(exit 1) 및 방화벽 UDP 바인딩 충돌 해결
 
 ### 현상 (Symptom)
-* `CMakeLists.txt`에서 `target_compile_definitions`를 통해 `TRACY_ON_DEMAND` 매크로를 정의했음에도 불구하고 여전히 기동 즉시 `exit(1)` 크래시가 발생함.
-* `netstat -ano` 확인 결과, `tracy-profiler.exe` GUI가 켜져 있을 때 `UDP 8086` 포트 중복 바인딩 충돌이 발생함. GUI가 꺼져 있을 때도 `exit(1)`이 발생하며 8086 포트가 `SYN_SENT` 상태에서 멈춤.
+* CMake 빌드 시 컴파일 타임 매크로 `TRACY_ON_DEMAND`를 지정했음에도 불구하고, C++ 게임 서버 기동 즉시 아무런 배너 출력 없이 `exit(1)` 크래시가 발생함.
+* Windows 방화벽 및 로컬 네트워크 보안 정책 제한으로 인해, 서버 기동 시 Tracy가 시도하는 UDP 브로드캐스트 패킷 바인딩 작업이 실패하여 프로세스가 강제 차단되는 현상 확인.
 
 ### 원인 (Root Cause)
-1. **vcpkg 사전 빌드 라이브러리의 매크로 차단**: CMake의 개별 타겟 정의(`target_compile_definitions`)는 우리 프로젝트 소스에만 매크로를 정의할 뿐, vcpkg가 사전 컴파일해 둔 `TracyClient.lib` 내부에는 `TRACY_ON_DEMAND`가 정의되지 않은 채 컴파일되어 링크되었음. 따라서 실질적으로 온디맨드 모드가 런타임에 유실된 채 동작함.
-2. **UDP 브로드캐스트 보안 정책 크래시**: Windows 방화벽 및 로컬 네트워크 환경에서 Tracy가 타임라인 알림을 위해 매 초 날리는 UDP 브로드캐스트 패킷 바인딩 시도가 보안 에러를 발생시켜 Tracy 생성자 단에서 즉시 `exit(1)`을 유도함.
+1. **vcpkg 사전 컴파일 라이브러리의 매크로 차단**: vcpkg로 기설치된 `TracyClient.lib`은 내부 컴파일 시점에 `TRACY_ON_DEMAND`가 꺼진 상태로 제공되므로, 우리 프로젝트 빌드 시 헤더 레벨에서 매크로를 주입하더라도 라이브러리 내부 동작에는 온디맨드가 반영되지 않고 유실됨.
+2. **UDP 브로드캐스트 보안 정책 위반**: 온디맨드 모드가 켜지지 않아 기동 즉시 활성화된 소켓 스레드가 UDP 브로드캐스트를 날리다 OS 레벨에서 강제 킬(exit 1)당함.
 
 ### 해결책 (Resolution)
-1. **`TracyClient.cpp` 직접 컴파일**: vcpkg의 사전 컴파일 라이브러리 링크(`Tracy::TracyClient`)를 피하기 위해, `TracyClient.cpp` 원본 소스 파일을 프로젝트 디렉터리로 복사해 와 소스 트리(`SERVER_SOURCES`)에 추가하고 직접 MSVC로 컴파일함.
-2. **전역 컴파일 매크로 지정**: `add_compile_definitions(TRACY_ENABLE TRACY_ON_DEMAND TRACY_NO_BROADCAST)`를 통해 컴파일러 지시자로 직접 컴파일되는 `TracyClient.cpp`와 우리 프로젝트 전체 소스에 일괄로 매크로를 강제 주입함.
-   * `TRACY_NO_BROADCAST` 주입으로 문제가 되는 UDP 브로드캐스트 바인딩 연산을 완전히 차단하고, 순수 TCP 포트 8086 대기 상태로 동작하게 함.
+1. **의존성 소스 코드 프로젝트 격리 내재화**: vcpkg 사전 빌드 라이브러리 링크를 우회하고 매크로를 안전하게 컴파일러에 제어하기 위해, Tracy 클라이언트 구현 소스 전체를 프로젝트 내부 [thirdparty/tracy](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/thirdparty/tracy) 폴더 하위로 완벽하게 복사 및 격리 임포트함.
+2. **타겟 레벨 매크로 및 include 격리**: [CMakeLists.txt](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/CMakeLists.txt)에서 임포트된 `thirdparty/tracy/TracyClient.cpp`를 타겟 소스 파일로 지정하고, `target_compile_definitions`를 통해 `TRACY_ENABLE`, `TRACY_ON_DEMAND`, `TRACY_NO_BROADCAST` 매크로를 격리 주입하여 UDP 연산을 원천 차단하고 순수 TCP 포트(8086)만 오픈하도록 통제함.
 
 ### 검증 (Verification)
-1. C++ 서버가 `exit(1)` 없이 완벽히 구동 중인 상태에서 `netstat -ano` 확인 시 `TCP 0.0.0.0:8086` 리스닝(LISTENING) 상태가 정상 검출됨.
-2. `tracy-profiler.exe`를 실행하고 `127.0.0.1:8086`으로 `Connect` 시 실시간 성능 타임라인 및 Flame Graph가 완벽하게 수신됨을 검증 완료.
+* C++ 서버가 `exit(1)` 없이 완벽히 구동 중인 상태에서 `netstat -ano` 확인 시 `TCP 0.0.0.0:8086` 리스닝(LISTENING) 상태가 정상 검출됨.
+* `tracy-profiler.exe` GUI를 통해 실시간 프레임 타임라인이 완벽히 수집되는 상태임을 최종 검증 완료.
 
 ---
 
