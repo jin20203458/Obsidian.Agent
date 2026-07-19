@@ -219,7 +219,7 @@ Tracy Profiler는 `TRACY_ENABLE` 매크로가 정의되면 전역 정적 객체 
 
 ### 해결책 (Resolution)
 
-`CMakeLists.txt`에서 `target_compile_definitions`를 통해 컴파일 타임 매크로 `TRACY_ON_DEMAND`를 빌드 타겟에 직접 주입하여, 프로파일러 GUI가 실제로 접속하기 전까지 소켓 인프라 초기화를 지연시킵니다. (이를 통해 [TracyIntegration.h](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/TracyIntegration.h) 내부의 중복 정의로 인한 MSVC C4005 재정의 경고도 방지합니다.)
+`CMakeLists.txt`에서 `target_compile_definitions`를 통해 컴파일 타임 매크로 `TRACY_ON_DEMAND`를 빌드 타겟에 직접 주입하여, 프로파일러 GUI가 실제로 접속하기 전까지 소켓 인프라 초기화를 지연시킵니다. (이를 통해 [TracyIntegration.h](../../MundusVivens.GameServer.Cpp/TracyIntegration.h) 내부의 중복 정의로 인한 MSVC C4005 재정의 경고도 방지합니다.)
 
 ### 검증 (Verification)
 
@@ -240,8 +240,8 @@ Tracy Profiler는 `TRACY_ENABLE` 매크로가 정의되면 전역 정적 객체 
 2. **UDP 브로드캐스트 보안 정책 위반**: 온디맨드 모드가 켜지지 않아 기동 즉시 활성화된 소켓 스레드가 UDP 브로드캐스트를 날리다 OS 레벨에서 강제 킬(exit 1)당함.
 
 ### 해결책 (Resolution)
-1. **의존성 소스 코드 프로젝트 격리 내재화**: vcpkg 사전 빌드 라이브러리 링크를 우회하고 매크로를 안전하게 컴파일러에 제어하기 위해, Tracy 클라이언트 구현 소스 전체를 프로젝트 내부 [thirdparty/tracy](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/thirdparty/tracy) 폴더 하위로 완벽하게 복사 및 격리 임포트함.
-2. **타겟 레벨 매크로 및 include 격리**: [CMakeLists.txt](file:///c:/Users/adg01/Documents/GitHub/MundusVivens.GameServer.Cpp/CMakeLists.txt)에서 임포트된 `thirdparty/tracy/TracyClient.cpp`를 타겟 소스 파일로 지정하고, `target_compile_definitions`를 통해 `TRACY_ENABLE`, `TRACY_ON_DEMAND`, `TRACY_NO_BROADCAST` 매크로를 격리 주입하여 UDP 연산을 원천 차단하고 순수 TCP 포트(8086)만 오픈하도록 통제함.
+1. **의존성 소스 코드 프로젝트 격리 내재화**: vcpkg 사전 빌드 라이브러리 링크를 우회하고 매크로를 안전하게 컴파일러에 제어하기 위해, Tracy 클라이언트 구현 소스 전체를 프로젝트 내부 [thirdparty/tracy](../../MundusVivens.GameServer.Cpp/thirdparty/tracy) 폴더 하위로 완벽하게 복사 및 격리 임포트함.
+2. **타겟 레벨 매크로 및 include 격리**: [CMakeLists.txt](../../MundusVivens.GameServer.Cpp/CMakeLists.txt)에서 임포트된 `thirdparty/tracy/TracyClient.cpp`를 타겟 소스 파일로 지정하고, `target_compile_definitions`를 통해 `TRACY_ENABLE`, `TRACY_ON_DEMAND`, `TRACY_NO_BROADCAST` 매크로를 격리 주입하여 UDP 연산을 원천 차단하고 순수 TCP 포트(8086)만 오픈하도록 통제함.
 
 ### 검증 (Verification)
 * C++ 서버가 `exit(1)` 없이 완벽히 구동 중인 상태에서 `netstat -ano` 확인 시 `TCP 0.0.0.0:8086` 리스닝(LISTENING) 상태가 정상 검출됨.
@@ -280,7 +280,6 @@ Tracy Profiler는 `TRACY_ENABLE` 매크로가 정의되면 전역 정적 객체 
 * C++ `SystemSocial.cpp`의 대화 주도자 수집 영역과 이웃 타겟 루프 내에 `SentienceComp` 예외 처리를 추가하여, `is_sentient`가 `false`인 비지성체 야수/몬스터는 대화 후보군에서 원천 배제시킴.
 
 ---
-
 ## 2026-07-19: 인과 캐스케이드(Causal Cascade) 지수 폭발 및 순환 참조 예방 조치
 
 ### 1. 인과 캐스케이드 벤치마크 시 지수형 노드 폭발로 인한 시스템 OOM 및 크래시
@@ -298,5 +297,20 @@ Tracy Profiler는 `TRACY_ENABLE` 매크로가 정의되면 전역 정적 객체 
   1. **깊이 제한 가드 (Depth Clamping Guard = 5)**: 전파 깊이가 5레벨을 초과하여 6레벨에 다다르면 더 이상 연산을 진행하지 않고 조기 종료시켜 지수 노드 폭발을 원천 차단했습니다.
   2. **순환 참조 방지 가드 (Circular Dependency Guard)**: 신념이 서로 꼬리를 물어 재귀 순환(예: A ➔ B ➔ A) 궤도에 오를 때, `HashSet`을 통해 방문 상태를 검증하고 즉각 탈출하도록 구현하여 StackOverflowException을 예방했습니다.
 * 벤치마크 실행 가이드(런북)에 안전 범위(깊이 3~5)를 명시하여 사용자가 무리한 값으로 시스템 부하를 일으키지 않도록 안내함.
+
+---
+
+### 2. Windows OS 스케줄러 기본 클럭 주기로 인한 C++ 물리 틱레이트 지연 (61.3ms 현상)
+
+#### 현상 (Symptom)
+* 20Hz (50.0ms) 주기로 동작하도록 설계된 C++ 물리 엔진 메인 게임 루프의 실제 틱 발생 주기가 약 61.3ms 수준으로 미세하게 늘어지며, 시뮬레이션 물리 속도가 전체적으로 약 22% 감속되는 현상.
+
+#### 원인 (Root Cause)
+* Windows OS 스케줄러의 기본 타이머 클럭 주기가 15.6ms 수준으로 조율되어 있어, `std::this_thread::sleep_for`를 통한 프레임 제어 슬립 명령이 15.6ms 단위로 양자화(Rounding)되며 오차가 누적되어 발생함.
+
+#### 해결책 (Resolution)
+* C++ 게임 서버 빌드 시 [CMakeLists.txt](../../MundusVivens.GameServer.Cpp/CMakeLists.txt)에 Windows 멀티미디어 정밀 타이머 라이브러리인 `winmm`을 타겟으로 링크함.
+* [main.cpp](../../MundusVivens.GameServer.Cpp/main.cpp) 상단에 컴파일 충돌 방지를 위해 `#define WIN32_LEAN_AND_MEAN` 처리와 함께 `<Windows.h>` 및 `<timeapi.h>`를 조건부 include 함.
+* `main()` 진입 시 RAII 클래스 `WindowsTimerResolutionRaii` 가드를 선언하여 타이머 해상도를 `timeBeginPeriod(1)`을 통해 1ms 단위로 상향 조정하고, 비정상 리턴/종료 시 소멸자 호출을 통해 `timeEndPeriod(1)`로 리소스가 복구되도록 구현함.
 
 
