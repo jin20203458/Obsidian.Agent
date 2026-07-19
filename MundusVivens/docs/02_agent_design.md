@@ -219,6 +219,9 @@ public class Belief
 
 ### C. 신념 인과 도미노 전파 (Causal Cascade)
 *   어떤 신념의 확신도가 떨어지거나 대체될 때, `PropagateCausalCascade` 재귀 메서드가 가동되어 해당 신념으로부터 유도된 하위 자식 신념들의 확신도를 자동으로 비례 감쇠시켜 신념 정합성을 확보합니다.
+*   **안전 가드 시스템 (Safety Guards)**:
+    *   **최대 깊이 제한 (Depth Clamping Guard = 5)**: 인과관계 전파가 5레벨을 초과하여 전파되지 않도록 제한하여, 트리 깊이 심화에 따른 지수적 메모리 및 CPU 연산 폭발을 사전에 예방합니다.
+    *   **순환 참조 방지 (Circular Dependency Guard)**: 신념이 서로 꼬리를 물고 순환 구조(예: A ➔ B ➔ A)를 갖는 경우, `visited` 집합(HashSet)을 통과하며 중복 방문 노드 시점부터 전파를 중단하여 StackOverflowException 발생 및 서버 크래시를 차단합니다.
 
 ### D. 틱 기반 현저성 감쇠 (Salience Decay)
 매 동기화 틱마다 `BeliefEngine.cs`에 의해 타입별로 `Salience`가 차등 감소합니다.
