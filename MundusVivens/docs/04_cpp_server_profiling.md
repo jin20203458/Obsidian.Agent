@@ -1,11 +1,11 @@
 ---
 type: spec
-title: Profiling & Optimization
+title: C++ Game Server Profiling & Optimization
 tags: [mundus-vivens, profiling, optimization, performance]
 related:
   - ../README.md
   - ./01_game_server_architecture.md
-last_updated: 2026-07-15
+last_updated: 2026-07-20
 status: stable
 ---
 # Mundus Vivens: Tracy Profiler 연동 및 성능 최적화 보고서 (Profiling & Optimization)

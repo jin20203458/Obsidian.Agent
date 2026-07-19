@@ -1,10 +1,13 @@
 ---
 type: runbook
 title: Mundus Vivens Troubleshooting
-tags: [troubleshooting, mundus-vivens, runbook]
+tags:
+  - troubleshooting
+  - mundus-vivens
+  - runbook
 related:
   - ../README.md
-last_updated: 2026-07-15
+last_updated: 2026-07-20
 status: stable
 ---
 # Mundus Vivens: 트러블슈팅 및 런북 (Troubleshooting & Runbook)

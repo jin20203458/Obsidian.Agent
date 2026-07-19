@@ -6,7 +6,7 @@ related:
   - ../README.md
   - ./02_agent_design.md
   - ./04_cpp_server_profiling.md
-last_updated: 2026-07-15
+last_updated: 2026-07-20
 status: stable
 ---
 # Mundus Vivens: C# AI 서버 성능 프로파일링 및 Smallville 비교 보고서
@@ -93,7 +93,7 @@ dotnet run --project MundusVivens.Prototype -- --benchmark-mode cascade 3 5
 | **기억 회상(Recall)** | 벡터 임베딩 (잠재적 API) | **0 회** (LiteDB 로컬 인덱스) | **원천 배제 (100% 절감)** |
 | **원정 중 일과 계획** | 매일 정상 소비 | **0 회** (Bypass & Auto-Continue) | **100% 절감 (이동 기간)** |
 | **위협 판정** | N/A (미지원) | **0 회** (Aggression 공식) | **원천 배제 (100% 절감)** |
-| **에이전트당 일일 운영비** | $13.0 ~ $20.0 | **~$0.0002** (Gemini Flash 기준) | **약 99% 이상 비용 절감** |
+| **에이전트당 일일 운영비** | $13.0 ~ $20.0 | **~$0.0001** (Gemini Flash 기준) | **약 99% 이상 비용 절감** |
 
 ---
 
