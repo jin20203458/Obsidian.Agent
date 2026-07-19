@@ -31,6 +31,7 @@ status: stable
   - [Mundus Vivens Index](./MundusVivens/README.md): Mundus Vivens 프로젝트 전용 문서 인덱스
 - **GRC/**: GenAI Roleplay Chat(GRC) 데스크톱 클라이언트의 아키텍처 및 구현 기술 노트를 다루는 폴더
   - [GRC Index](./GRC/README.md): GRC 프로젝트 전용 문서 인덱스
+
 - **troubleshooting/**: 중앙 집중형 트러블슈팅 및 런북 보관 폴더
   - [llvm_clang.md](troubleshooting/llvm_clang.md): LLVM/Clang 커스텀 체커 및 Static Analyzer 장애 조치 로그
   - [mundus_vivens.md](troubleshooting/mundus_vivens.md): C# AI Server & C++ Game Server 장애 조치 로그
