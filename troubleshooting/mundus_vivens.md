@@ -313,4 +313,38 @@ Tracy Profiler는 `TRACY_ENABLE` 매크로가 정의되면 전역 정적 객체 
 * [main.cpp](../../MundusVivens.GameServer.Cpp/main.cpp) 상단에 컴파일 충돌 방지를 위해 `#define WIN32_LEAN_AND_MEAN` 처리와 함께 `<Windows.h>` 및 `<timeapi.h>`를 조건부 include 함.
 * `main()` 진입 시 RAII 클래스 `WindowsTimerResolutionRaii` 가드를 선언하여 타이머 해상도를 `timeBeginPeriod(1)`을 통해 1ms 단위로 상향 조정하고, 비정상 리턴/종료 시 소멸자 호출을 통해 `timeEndPeriod(1)`로 리소스가 복구되도록 구현함.
 
+---
+
+## 2026-07-20: C# LiteDB 동기 Eviction I/O 지연 및 감쇠 기억 유실 문제 해결
+
+### 1. 대량 기억 주입(Eviction Storm) 시 메인 스레드 4.4초 멈춤 현상
+
+#### 현상 (Symptom)
+* 에이전트에게 단시간 내에 많은 기억이 주입되거나 전파되는 상황(Eviction Storm)에서 C# AI 서버 전체가 약 4.4초 동안 멈추는 프레임 드랍 발생.
+
+#### 원인 (Root Cause)
+* MemoryBox 용량 상한선(40개) 초과 시 오래된 기억이 도태(Evict)되어 LiteDB의 `cold_archive` 컬렉션에 보관됩니다. 이 과정에서 `OnBeliefEvicted` 핸들러가 메인 스레드상에서 디스크 파일(`GameData.db`)에 동기식(Synchronous)으로 쓰기를 수행했습니다.
+* 또한, `MemoryBox._lock`을 잡은 상태에서 `PersistenceService._dbLock`까지 순차적으로 획득하여 이중 락 중첩(Double-Lock Nesting) 상태로 디스크 I/O를 대기하여 메인 루프를 블로킹했습니다.
+
+#### 해결책 (Resolution)
+* `PersistenceService.cs`에 `System.Threading.Channels` 기반의 Async Write-Behind Queue(`Channel<ArchiveEntry>`, 크기 2048, `DropOldest` 바인딩)를 구축했습니다.
+* 동기식 `ArchiveBelief` 직접 쓰기 대신 O(1) 시간 복잡도의 `EnqueueArchive` 메모리 큐 삽입으로 전환하여 메인 스레드의 대기 시간을 제거했습니다.
+* 백그라운드 워커 스레드(`RunArchiveWorkerAsync`)를 구동하여 큐의 내용을 LiteDB에 비동기 일괄 기록하도록 아키텍처를 분리했습니다.
+* `Dispose` 시 채널을 닫고(`Complete`) 최대 10초간 대기하며 큐에 쌓인 잔여 기억을 데이터베이스에 완전히 플러시(Flush) 처리하도록 구현하여 Graceful Shutdown 정합성을 보장했습니다.
+
+---
+
+### 2. 감쇠(Decay) 삭제된 기억의 콜드 아카이브 누락 및 영구 유실
+
+#### 현상 (Symptom)
+* 시간이 경과하여 기억 선명도(Salience)가 0.1 미만으로 감쇠되어 도태된 기억들이 콜드 아카이브 DB에 보관되지 않고 영구 삭제되는 데이터 유실 현상 발생.
+
+#### 원인 (Root Cause)
+* `BeliefEngine.cs`의 `DecayBeliefs()` 내에서 감쇠된 기억을 지울 때, `OnBeliefEvicted` 이벤트를 호출하지 않고 메모리 상의 `ConcurrentDictionary`에서 직접 `TryRemove` 처리하여 DB 이관 과정을 우회했습니다.
+
+#### 해결책 (Resolution)
+* `BeliefEngine.cs`에서 `TryRemove` 성공 시 `agent.MemoryBox.OnBeliefEvicted?.Invoke(removed)` 훅을 호출하도록 수정했습니다.
+* 훅 호출 처리가 비동기 지연 쓰기 큐를 경유하므로 감쇠 감지 시에도 서버 프레임 지연 유발 없이 cold_archive 데이터베이스에 정합성 있게 보관됩니다.
+
+
 
