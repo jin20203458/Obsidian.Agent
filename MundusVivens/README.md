@@ -4,7 +4,6 @@ title: Mundus Vivens Knowledge Base Index
 tags: [mundus-vivens, index]
 related:
   - ../README.md
-last_updated: 2026-07-15
 status: stable
 ---
 # Mundus Vivens Knowledge Base Index

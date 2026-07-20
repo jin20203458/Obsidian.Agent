@@ -4,9 +4,10 @@ title: Entity Types Memo
 tags: [mundus-vivens, entity, memo]
 related:
   - ../README.md
-last_updated: 2026-07-15
 status: draft
 ---
+# Entity Types Memo
+> **부제**: C++ 게임 서버 EnTT ECS 엔티티 분류 노트
 
 C++ 게임 서버에서 EnTT ECS를 통해 개념적으로 분류되는 **엔티티(Entity)는 크게 4가지 종류**가 존재합니다. 
 

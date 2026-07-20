@@ -5,7 +5,6 @@ tags: [mundus-vivens, ai-agent, memory, architecture]
 related:
   - ../README.md
   - ./01_game_server_architecture.md
-last_updated: 2026-07-15
 status: stable
 ---
 # Mundus Vivens: Agent Execution Architecture & Memory Systems

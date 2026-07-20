@@ -4,7 +4,6 @@ title: GRC Knowledge Base Index
 tags: [grc, index]
 related:
   - ../README.md
-last_updated: 2026-07-20
 status: stable
 ---
 # GRC Knowledge Base Index

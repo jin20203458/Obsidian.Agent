@@ -4,10 +4,10 @@ title: Git & OS Troubleshooting
 tags: [troubleshooting, git, os, runbook]
 related:
   - ../README.md
-last_updated: 2026-07-15
 status: stable
 ---
-# Git & OS: 공통 환경 트러블슈팅 (Common Environment Troubleshooting)
+# Git & OS Troubleshooting
+> **부제**: 공통 OS 파일 시스템 권한 및 Git 버전 관리 오류 해결책
 
 본 문서는 프로젝트 전반에서 공통으로 발생하는 Git 버전 관리, OS 파일 시스템 권한, 인코딩 변환 및 환경 변수 문제와 해결 방법을 누적 기록하는 문서입니다.
 

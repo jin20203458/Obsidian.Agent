@@ -7,12 +7,12 @@ tags:
   - runbook
 related:
   - ../README.md
-last_updated: 2026-07-20
 status: stable
 ---
-# Mundus Vivens: 트러블슈팅 및 런북 (Troubleshooting & Runbook)
+# Mundus Vivens Troubleshooting
+> **부제**: C# AI 서버 & C++ 물리 서버 트러블슈팅 및 런북
 
-본 문서는 Mundus Vivens 프로젝트(C# AI Server & C++ Game Server) 개발 과정에서 발생한 시스템 환경 오류, 빌드 에러, gRPC 프로토콜 및 아키텍처 정합성 관련 주요 문제와 그 해결 과정을 누적 기록하는 문서입니다.
+본 문서는 Mundus Vivens 프로젝트 개발 및 통합 테스트 중 발생하는 시스템별 예외 현상과 해결 시나리오를 상세히 기록합니다. 주로 시스템 환경 오류, 빌드 에러, gRPC 프로토콜 및 아키텍처 정합성 관련 문제를 누적하여 다룹니다.
 
 ---
 

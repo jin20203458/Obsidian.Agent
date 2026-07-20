@@ -4,7 +4,6 @@ title: AI Prompt Engineering Guidelines
 tags: [ai, prompt, engineering, guidelines]
 related:
   - ../README.md
-last_updated: 2026-07-15
 status: stable
 ---
 # AI Prompt Engineering Guidelines

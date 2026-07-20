@@ -4,7 +4,6 @@ title: WPF Architecture Guidelines
 tags: [wpf, mvvm, architecture, guidelines, csharp]
 related:
   - ../README.md
-last_updated: 2026-07-15
 status: stable
 ---
 # WPF Architecture Guidelines

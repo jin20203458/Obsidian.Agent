@@ -4,10 +4,10 @@ title: Unity Client Troubleshooting
 tags: [troubleshooting, unity, client, runbook]
 related:
   - ../README.md
-last_updated: 2026-07-15
 status: stable
 ---
-# Unity Client: 클라이언트 트러블슈팅 (Unity Client Troubleshooting)
+# Unity Client Troubleshooting
+> **부제**: 유니티 클라이언트 렌더링 및 gRPC 연동 장애 조치 로그
 
 본 문서는 유니티(Unity) 게임 클라이언트의 렌더링, 씬 로딩, gRPC 통신 연동 및 기타 클라이언트 전용 에러와 해결 방법을 누적 기록하는 문서입니다.
 

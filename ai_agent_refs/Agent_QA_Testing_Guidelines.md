@@ -6,7 +6,6 @@ related:
   - ../README.md
   - ./AI_Project_Integration_Guidelines.md
   - ./Agent_Troubleshooting_Guidelines.md
-last_updated: 2026-07-15
 status: stable
 ---
 # Agent QA Testing Guidelines

@@ -5,10 +5,10 @@ tags: [mundus-vivens, profiling, optimization, performance]
 related:
   - ../README.md
   - ./01_game_server_architecture.md
-last_updated: 2026-07-20
 status: stable
 ---
-# Mundus Vivens: Tracy Profiler 연동 및 성능 최적화 보고서 (Profiling & Optimization)
+# Profiling & Optimization
+> **부제**: Mundus Vivens Tracy Profiler 연동 및 성능 최적화 보고서
 
 본 문서는 Mundus Vivens C++ 게임 서버에 **Tracy Profiler**를 연동하여 성능 병목 지점을 계측한 결과를 기록하고, 멀티스레딩 환경 하에서 설계된 임계 구역(Critical Section) 최소화 기법을 수치적으로 검증하며, 향후 성능 병목에 대한 아키텍처적 개선 로드맵을 제공합니다.
 

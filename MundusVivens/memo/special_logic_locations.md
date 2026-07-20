@@ -4,9 +4,11 @@ title: Special Logic Locations Memo
 tags: [mundus-vivens, logic, memo]
 related:
   - ../README.md
-last_updated: 2026-07-15
 status: draft
 ---
+# Special Logic Locations Memo
+> **부제**: 물리/소셜 시뮬레이션 예외 특수 로직 작동 장소
+
 ### 1. 실질적으로 특수한 로직이 작동하는 장소 (Active)
 
 아래 4가지 타입은 C++ 서버의 물리/소셜 시뮬레이션 공식에서 **완벽하게 독립된 특수 로직**으로 작동하고 있습니다.

@@ -4,7 +4,6 @@ title: Mermaid Diagram Guidelines
 tags: [mermaid, diagram, guidelines, markdown]
 related:
   - ../README.md
-last_updated: 2026-07-15
 status: stable
 ---
 # Mermaid Diagram Guidelines

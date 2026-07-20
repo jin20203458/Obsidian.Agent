@@ -5,7 +5,6 @@ tags: [ai, prompt, anti-patterns, guidelines]
 related:
   - ../README.md
   - ./AI_Prompt_Engineering_Guidelines.md
-last_updated: 2026-07-15
 status: stable
 ---
 # AI Prompt Anti-Patterns Guidelines

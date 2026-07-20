@@ -5,7 +5,6 @@ tags: [ai, project, integration, guidelines]
 related:
   - ../README.md
   - ./Knowledge_Base_Authoring_Guidelines.md
-last_updated: 2026-07-15
 status: stable
 ---
 # AI Project Integration Guidelines
