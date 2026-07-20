@@ -1,10 +1,8 @@
 ---
-type: index
-title: GRC Knowledge Base Index
-tags: [grc, index]
+description: >-
+  GRC(GenAI Roleplay Chat) C# WPF 클라이언트 프로젝트의 지식베이스 인덱스. GRC 시스템 관련 작업 시 가장 먼저 참조.
 related:
   - ../README.md
-status: stable
 ---
 # GRC Knowledge Base Index
 

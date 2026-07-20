@@ -1,13 +1,8 @@
 ---
-type: runbook
-title: Mundus Vivens Troubleshooting
-tags:
-  - troubleshooting
-  - mundus-vivens
-  - runbook
+description: >-
+  Mundus Vivens C# AI 서버 & C++ 물리 서버 트러블슈팅 런북. Mundus Vivens 프로젝트 버그/에러 발생 시 참조.
 related:
   - ../README.md
-status: stable
 ---
 # Mundus Vivens Troubleshooting
 > **부제**: C# AI 서버 & C++ 물리 서버 트러블슈팅 및 런북

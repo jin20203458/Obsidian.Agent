@@ -1,10 +1,8 @@
 ---
-type: spec
-title: GRC Architecture & Deep Dive
-tags: [grc, architecture, memory, concurrency, ai]
+description: >-
+  GRC C#/.NET WPF 클라이언트 상세 아키텍처 명세 및 UI/비동기 패턴 구성도. GRC 클라이언트 개발/수정 시 참조.
 related:
-  - ./00_project_overview.md
-status: stable
+  - ../README.md
 ---
 # GRC Architecture & Deep Dive
 > **부제**: GRC 기술 아키텍처 및 C#/.NET 동시성/메모리 관리 딥다이브

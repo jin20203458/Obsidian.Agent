@@ -1,11 +1,9 @@
 ---
-type: spec
-title: Project Overview
-tags: [grc, overview, architecture, ai-client, wpf]
+description: >-
+  GRC 프로젝트 개요 및 C#/.NET 네이티브 데스크톱 클라이언트 시스템 전반 설계서. GRC 전체 구조 파악 시 참조.
 related:
-  - ../../MundusVivens/docs/00_project_overview.md
+  - ../README.md
   - ./01_grc_architecture.md
-status: stable
 ---
 # Project Overview
 > **부제**: GRC (GenAI Roleplay Chat) 프로젝트 개요 및 비전

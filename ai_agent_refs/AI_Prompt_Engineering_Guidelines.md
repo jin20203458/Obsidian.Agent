@@ -1,10 +1,8 @@
 ---
-type: guideline
-title: AI Prompt Engineering Guidelines
-tags: [ai, prompt, engineering, guidelines]
+description: >-
+  2024-2026 논문 및 빅테크 공식 가이드 기반 AI 프롬프트 엔지니어링 표준 지침서. 신규 프롬프트 설계 시 참조.
 related:
   - ../README.md
-status: stable
 ---
 # AI Prompt Engineering Guidelines
 

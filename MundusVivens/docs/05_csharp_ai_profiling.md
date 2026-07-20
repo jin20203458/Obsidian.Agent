@@ -1,12 +1,10 @@
 ---
-type: spec
-title: C# AI Server Profiling & Optimization
-tags: [mundus-vivens, profiling, optimization, csharp, ai-server, smallville]
+description: >-
+  Mundus Vivens C# AI 서버 프로파일링 및 Smallville 논문 정량 비교 보고서. AI 서버 비용/속도 최적화 시 참조.
 related:
   - ../README.md
   - ./02_agent_design.md
   - ./04_cpp_server_profiling.md
-status: stable
 ---
 # C# AI Server Profiling & Optimization
 > **부제**: C# AI 서버 성능 프로파일링 및 Smallville 비교 보고서

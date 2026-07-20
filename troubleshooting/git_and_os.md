@@ -1,10 +1,8 @@
 ---
-type: runbook
-title: Git & OS Troubleshooting
-tags: [troubleshooting, git, os, runbook]
+description: >-
+  공통 OS 파일 시스템 권한, Git 버전 관리 및 인코딩 오류 트러블슈팅 런북. Git/OS 환경 문제 발생 시 참조.
 related:
   - ../README.md
-status: stable
 ---
 # Git & OS Troubleshooting
 > **부제**: 공통 OS 파일 시스템 권한 및 Git 버전 관리 오류 해결책

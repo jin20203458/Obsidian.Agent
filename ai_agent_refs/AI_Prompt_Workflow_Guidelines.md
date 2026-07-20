@@ -1,11 +1,9 @@
 ---
-type: guideline
-title: AI Prompt Workflow Guidelines
-tags: [ai, prompt, workflow, guidelines]
+description: AI 프롬프트 유지보수 및 수명 주기 워크플로우 표준 지침. 프롬프트 버전 관리 및 수명 주기 관리 시 참조.
 related:
   - ../README.md
   - ./AI_Prompt_Engineering_Guidelines.md
-status: stable
+  - ./AI_Prompt_AntiPatterns_Guidelines.md
 ---
 # AI Prompt Workflow Guidelines
 > **부제**: AI 프롬프트 유지보수 및 수명 주기 워크플로우 지침

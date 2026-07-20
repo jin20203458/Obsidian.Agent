@@ -1,10 +1,9 @@
 ---
-type: reference
-title: C++ Server Architecture Study Notes
-tags: [mundus-vivens, cpp, server, memo]
+description: >-
+  Mundus Vivens C++ 게임 서버 코드 리뷰 및 학습 로드맵 노트. C++ 코드베이스 분석 시 참조.
 related:
   - ../README.md
-status: draft
+  - ../docs/01_game_server_architecture.md
 ---
 # C++ Server Architecture Study Notes
 > **부제**: Mundus Vivens C++ 게임 서버 코드 리뷰 로드맵

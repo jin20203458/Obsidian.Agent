@@ -1,10 +1,8 @@
 ---
-type: guideline
-title: WPF Architecture Guidelines
-tags: [wpf, mvvm, architecture, guidelines, csharp]
+description: >-
+  WPF 현대적 MVVM 아키텍처 및 Async UI 가이드라인. WPF/C# 데스크톱 애플리케이션 개발 시 참조.
 related:
   - ../README.md
-status: stable
 ---
 # WPF Architecture Guidelines
 

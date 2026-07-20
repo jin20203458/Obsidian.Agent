@@ -1,10 +1,8 @@
 ---
-type: reference
-title: Sims & RimWorld AI Architecture Report
-tags: [mundus-vivens, ai, sims, rimworld, reference]
+description: >-
+  심즈(The Sims) 및 림월드(RimWorld) AI 아키텍처 코드 레벨 상세 분석 보고서. 시뮬레이션 AI 루틴 기획 시 참조.
 related:
   - ../README.md
-status: stable
 ---
 # Sims & RimWorld AI Architecture Report
 > **부제**: 심즈 & 림월드 AI 아키텍처 및 작동 방식 코드 레벨 분석

@@ -1,12 +1,9 @@
 ---
-type: spec
-title: Game Server Architecture
-tags: [mundus-vivens, cpp, game-server, network]
+description: >-
+  Mundus Vivens C++ 게임 서버 물리/이동 시뮬레이션 및 20Hz 메인 루프 아키텍처 명세. C++ 서버 수정 시 참조.
 related:
   - ../README.md
-  - ./00_project_overview.md
   - ./02_agent_design.md
-status: stable
 ---
 # Game Server Architecture
 > **부제**: Mundus Vivens C++ 게임 서버 아키텍처 명세 및 시스템 흐름

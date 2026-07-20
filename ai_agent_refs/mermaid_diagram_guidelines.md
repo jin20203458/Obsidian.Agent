@@ -1,10 +1,8 @@
 ---
-type: guideline
-title: Mermaid Diagram Guidelines
-tags: [mermaid, diagram, guidelines, markdown]
+description: >-
+  지식베이스 내 Mermaid 다이어그램 작성 표준 및 문법 가이드라인. 다이어그램 작성 시 참조.
 related:
   - ../README.md
-status: stable
 ---
 # Mermaid Diagram Guidelines
 

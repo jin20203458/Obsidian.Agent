@@ -1,11 +1,9 @@
 ---
-type: guideline
-title: AI Prompt Anti-Patterns Guidelines
-tags: [ai, prompt, anti-patterns, guidelines]
+description: >-
+  AI 프롬프트 작성 시 피해야 할 안티패턴 및 실패 사례 지침서. 프롬프트 디버깅 및 품질 개선 시 참조.
 related:
   - ../README.md
   - ./AI_Prompt_Engineering_Guidelines.md
-status: stable
 ---
 # AI Prompt Anti-Patterns Guidelines
 

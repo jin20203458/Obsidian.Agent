@@ -1,10 +1,8 @@
 ---
-type: runbook
-title: LLVM/Clang Troubleshooting
-tags: [troubleshooting, llvm, clang, compiler, runbook]
+description: >-
+  LLVM/Clang 커스텀 Tidy 체커 및 Static Analyzer 개발 트러블슈팅 런북. LLVM 정적 분석기 빌드/실행 에러 시 참조.
 related:
   - ../README.md
-status: stable
 ---
 # LLVM/Clang Troubleshooting
 > **부제**: LLVM/Clang 커스텀 Tidy 체커 및 Static Analyzer 장애 조치 로그

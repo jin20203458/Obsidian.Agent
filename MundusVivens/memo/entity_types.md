@@ -1,10 +1,8 @@
 ---
-type: reference
-title: Entity Types Memo
-tags: [mundus-vivens, entity, memo]
+description: >-
+  C++ 게임 서버 EnTT ECS 엔티티 4종 분류 및 메모리 메모. EnTT ECS 엔티티 설계 시 참조.
 related:
   - ../README.md
-status: draft
 ---
 # Entity Types Memo
 > **부제**: C++ 게임 서버 EnTT ECS 엔티티 분류 노트

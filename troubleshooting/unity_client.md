@@ -1,10 +1,8 @@
 ---
-type: runbook
-title: Unity Client Troubleshooting
-tags: [troubleshooting, unity, client, runbook]
+description: >-
+  유니티(Unity) 클라이언트 렌더링 및 gRPC 연동 트러블슈팅 런북. 유니티 클라이언트 버그/통신 에러 발생 시 참조.
 related:
   - ../README.md
-status: stable
 ---
 # Unity Client Troubleshooting
 > **부제**: 유니티 클라이언트 렌더링 및 gRPC 연동 장애 조치 로그

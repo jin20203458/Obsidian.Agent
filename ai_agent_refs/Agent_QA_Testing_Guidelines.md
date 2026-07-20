@@ -1,12 +1,10 @@
 ---
-type: guideline
-title: Agent QA Testing Guidelines
-tags: [ai, agent, qa, testing, evaluator, optimizer]
+description: >-
+  AI 에이전트 필수 QA 및 검증(Ground Truth) 가이드라인. 코드 수정 후 빌드/테스트 검증 시 참조.
 related:
   - ../README.md
   - ./AI_Project_Integration_Guidelines.md
   - ./Agent_Troubleshooting_Guidelines.md
-status: stable
 ---
 # Agent QA Testing Guidelines
 

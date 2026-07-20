@@ -1,10 +1,8 @@
 ---
-type: reference
-title: Smallville Generative Agents Behavior Report
-tags: [mundus-vivens, ai, generative-agents, smallville, reference]
+description: >-
+  스몰빌(Generative Agents) 인지 아키텍처, 기억 그래프 및 자아 변형 심층 백서. AI 에이전트 기억/소문 모델 설계 시 참조.
 related:
   - ../README.md
-status: stable
 ---
 # Smallville Generative Agents Behavior Report
 > **부제**: 스몰빌(Generative Agents) 인지 아키텍처 및 기억 그래프 심층 백서

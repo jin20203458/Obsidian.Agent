@@ -1,10 +1,8 @@
 ---
-type: index
-title: Mundus Vivens Knowledge Base Index
-tags: [mundus-vivens, index]
+description: >-
+  Mundus Vivens (C++ Game Server & C# AI Server) 지식베이스 메인 인덱스. Mundus Vivens 개발 작업 시작 시 참조.
 related:
   - ../README.md
-status: stable
 ---
 # Mundus Vivens Knowledge Base Index
 

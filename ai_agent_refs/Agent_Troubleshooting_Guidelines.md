@@ -1,12 +1,10 @@
 ---
-type: guideline
-title: Agent Troubleshooting Guidelines
-tags: [ai, agent, troubleshooting, circuit-breaker, handover]
+description: >-
+  AI 에이전트 Circuit Breaker 및 3회 연속 실패 시 롤백/보고 가이드라인. 디버깅 반복 에러 발생 시 참조.
 related:
   - ../README.md
   - ./AI_Project_Integration_Guidelines.md
   - ./Agent_QA_Testing_Guidelines.md
-status: stable
 ---
 # Agent Troubleshooting Guidelines
 

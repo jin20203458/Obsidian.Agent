@@ -1,16 +1,17 @@
 ---
-type: spec
-title: C++ Game Server Profiling & Optimization
-tags: [mundus-vivens, profiling, optimization, performance]
+description: >-
+  Mundus Vivens C++ 게임 서버 Tracy Profiler 성능 분석 및 동시성 최적화 검증 보고서. C++ 서버 성능 개선 시 참조.
 related:
   - ../README.md
   - ./01_game_server_architecture.md
-status: stable
+  - ./05_csharp_ai_profiling.md
 ---
 # Profiling & Optimization
 > **부제**: Mundus Vivens Tracy Profiler 연동 및 성능 최적화 보고서
 
 본 문서는 Mundus Vivens C++ 게임 서버에 **Tracy Profiler**를 연동하여 성능 병목 지점을 계측한 결과를 기록하고, 멀티스레딩 환경 하에서 설계된 임계 구역(Critical Section) 최소화 기법을 수치적으로 검증하며, 향후 성능 병목에 대한 아키텍처적 개선 로드맵을 제공합니다.
+
+> **자매 문서**: C# AI 서버의 성능 프로파일링 및 Smallville 대조 결과는 [05_csharp_ai_profiling.md](./05_csharp_ai_profiling.md)를 참조하십시오.
 
 ---
 

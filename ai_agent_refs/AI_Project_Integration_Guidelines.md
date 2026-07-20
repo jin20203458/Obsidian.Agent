@@ -1,11 +1,9 @@
 ---
-type: guideline
-title: AI Project Integration Guidelines
-tags: [ai, project, integration, guidelines]
+description: >-
+  신규 개발 저장소와 Obsidian.Agent 지식베이스 간의 연동 및 AGENTS.md 행동 강령 구축 지침. 프로젝트 연동 시 참조.
 related:
   - ../README.md
   - ./Knowledge_Base_Authoring_Guidelines.md
-status: stable
 ---
 # AI Project Integration Guidelines
 
@@ -62,7 +60,7 @@ status: stable
 
 1. **프로젝트 폴더 및 인덱스 생성**:
    * `Obsidian.Agent/<Project_Name>/` 디렉토리를 생성합니다. (예: `LLVM/`, `MundusVivens/`)
-   * 폴더 최상단에 [README.md](README.md) (type: `index`)를 작성하여 하위 문서 지도를 제공합니다.
+   * 폴더 최상단에 [README.md](README.md)를 작성하여 하위 문서 지도를 제공합니다.
    * 폴더 내에 시스템의 핵심 설계 사상, 동작 원리, 모듈 간 구조(SSOT)를 정의하는 기술 명세 문서를 최소 1개 이상 생성합니다. (예: [StaticAnalyzer_Architecture.md](StaticAnalyzer_Architecture.md))
 2. **트러블슈팅 로그 생성**:
    * [Obsidian.Agent/troubleshooting/<project_name>.md](Obsidian.Agent/troubleshooting/<project_name>.md) 경로에 전용 로그 문서를 생성합니다.

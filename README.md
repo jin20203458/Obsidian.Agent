@@ -1,10 +1,8 @@
 ---
-type: index
-title: Obsidian Agent Collaboration Knowledge Base
-tags: [knowledge-base, main-index, ai-agent]
+description: >-
+  Obsidian.Agent 지식베이스의 메인 인덱스 및 아키텍처/가이드라인 전체 지점. 시스템 전반의 아키텍처 탐색 시 참조.
 related:
   - ./ai_agent_refs/Knowledge_Base_Authoring_Guidelines.md
-status: stable
 ---
 # Obsidian Agent Collaboration Knowledge Base
 > **부제**: 에이전트 협업을 위한 지식베이스 최상위 인덱스
@@ -27,11 +25,12 @@ status: stable
 
 - **LLVM/**: LLVM/Clang 커스텀 Tidy 체커 및 Static Analyzer 개발 아키텍처와 참고 문서를 다루는 기술 노트 폴더 (세부 문서 목록은 해당 디렉토리 참조)
 
-
 - **MundusVivens/**: Mundus Vivens 프로젝트의 아키텍처, 기획 의도, 고도화 과제를 다루는 기술 노트 폴더
   - [Mundus Vivens Index](./MundusVivens/README.md): Mundus Vivens 프로젝트 전용 문서 인덱스
+
 - **GRC/**: GenAI Roleplay Chat(GRC) 데스크톱 클라이언트의 아키텍처 및 구현 기술 노트를 다루는 폴더
   - [GRC Index](./GRC/README.md): GRC 프로젝트 전용 문서 인덱스
+
 
 - **troubleshooting/**: 중앙 집중형 트러블슈팅 및 런북 보관 폴더
   - [llvm_clang.md](troubleshooting/llvm_clang.md): LLVM/Clang 커스텀 체커 및 Static Analyzer 장애 조치 로그

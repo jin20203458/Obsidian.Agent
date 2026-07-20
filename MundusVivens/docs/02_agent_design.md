@@ -1,11 +1,9 @@
 ---
-type: spec
-title: Agent Execution Architecture & Memory Systems
-tags: [mundus-vivens, ai-agent, memory, architecture]
+description: >-
+  Mundus Vivens C# AI 대뇌 서버 인지/기억 아키텍처 및 LLVM/LiteDB/Gemini API 오케스트레이션 명세. C# AI 서버 수정 시 참조.
 related:
   - ../README.md
   - ./01_game_server_architecture.md
-status: stable
 ---
 # Mundus Vivens: Agent Execution Architecture & Memory Systems
 

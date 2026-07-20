@@ -1,10 +1,8 @@
 ---
-type: reference
-title: Special Logic Locations Memo
-tags: [mundus-vivens, logic, memo]
+description: >-
+  물리/소셜 시뮬레이션 예외 특수 로직 위치 및 작동 장소 정리 노트. 특수 상태/이벤트 로직 구현 시 참조.
 related:
   - ../README.md
-status: draft
 ---
 # Special Logic Locations Memo
 > **부제**: 물리/소셜 시뮬레이션 예외 특수 로직 작동 장소
