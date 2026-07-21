@@ -1,6 +1,5 @@
 ---
-description: >-
-  Obsidian.Agent 지식베이스의 메인 인덱스 및 아키텍처/가이드라인 전체 지점. 시스템 전반의 아키텍처 탐색 시 참조.
+description: Obsidian.Agent 지식베이스의 메인 인덱스 및 아키텍처/가이드라인 전체 지점. 시스템 전반의 아키텍처 탐색 시 참조.
 related:
   - ./ai_agent_refs/Knowledge_Base_Authoring_Guidelines.md
 ---
@@ -37,14 +36,6 @@ related:
   - [mundus_vivens.md](troubleshooting/mundus_vivens.md): C# AI Server & C++ Game Server 장애 조치 로그
   - [git_and_os.md](troubleshooting/git_and_os.md): 공통 OS 및 Git 환경 오류 장애 조치 로그
   - [unity_client.md](troubleshooting/unity_client.md): 유니티 엔진 및 클라이언트 장애 조치 로그
-
-
-
-
-
-
-
-
 
 
 
