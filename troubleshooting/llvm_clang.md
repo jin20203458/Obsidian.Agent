@@ -92,3 +92,39 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 ### 3. 해결책 (Resolution)
 * **참조형 오탐**: `isAcceptableImplicitChain`의 최종 비교 단계인 `EnforceExactParamType` 블록에서 두 타입의 레퍼런스(`getNonReferenceType()`) 및 CVR 한정자(`getUnqualifiedType()`)를 안전하게 벗긴 후 비교하도록 구현을 수정하여 참조 방식에 상관없이 핵심 값이 같은지만 대조하게 개선했습니다.
 * **종속 타입 오탐**: `check`의 루프 내에 `ParamTy->isDependentType() || Arg->getType()->isDependentType()` 검출 방어 로직을 추가하여 미확정 타입인 경우 타입 체크를 건너뛰어 통과시켰습니다.
+
+---
+
+## 2026-07-22: Clang RecoveryExpr 기반 AST 매칭 및 C/C++ 컴파일 플래그 다운그레이드
+
+### 1. 현상 (Symptom)
+* C/C++ 미선언 함수 호출, 리턴값 누락, 인자 개수 불일치 등 컴파일러가 AST 생성을 차단하거나 노드를 복구 표현식으로 다루는 하드 에러 발생 시, `clang-tidy` AST 체커들이 수집하지 못하고 미탐(0%)이 발생하는 문제.
+
+### 2. 원인 (Root Cause)
+* Clang 파서가 하드 에러를 만나면 기본적 `callExpr` 노드를 생성하지 않고 `RecoveryExpr` 노드로 포장하거나 에러를 내뿜어 AST 분석 라운드를 차단함.
+* 기존 체커는 `callExpr` 노드만 등록되어 있어 `RecoveryExpr`로 포장된 노드를 지나침.
+
+### 3. 해결책 (Resolution)
+1. **컴파일 플래그 다운그레이드 적용**:
+   * Rule 05 (`-Wno-error=return-type`), Rule 06 (`-Wno-error=implicit-function-declaration`)처럼 컴파일 플래그 조정이 가능한 하드 에러는 플래그로 경고 다운그레이드를 수행하여 Clang이 AST를 정상 생성하게 유도하고 정식 AST 체커로 100% 탐지.
+2. **`RecoveryExpr` AST 매처 보강 (인자 개수 오류 등)**:
+   * Clang 15+ 복구 메커니즘으로 인해 AST에 `RecoveryExpr` 노드로 보존되는 시나리오(Rule 50 인자 개수 초과 등)의 경우, 텍스트 가로채기 없이 `isa<RecoveryExpr>` 및 첫 자식 노드가 `FunctionDecl` 참조인지 검증하는 커스텀 AST 매처를 체커(`FunctionCallArgumentConsistencyCheck.cpp`)에 추가하여 순수 AST 기반으로 100% 정식 탐지.
+   * 기존 체커 루프 내에 `Arg->containsErrors()` 가드를 보강하여 손상된 표현식 인자가 유입될 때 발생하던 타입 대조 오탐을 완벽 차단.
+
+---
+
+## 2026-07-22: AST Drop 구문에 대한 로케일 독립적 Clang Diagnostic ID 가로채기 (i18n 지원)
+
+### 1. 현상 (Symptom)
+* catch-all 위치 오류, virtual 키워드 누락 순수가상함수, virtual base 캐스팅 등 Clang 파서 레벨에서 AST 노드가 100% Drop되는 구문의 경우 AST 매칭이 불가능함.
+* 이를 해결하기 위해 CLI 텍스트 파싱 기반으로 컴파일 에러를 가로채는 방식은 다국어 환경(한국어, 영어, 일본어 등)이나 컴파일러 메시지 변경 시 국제화(i18n) 실패 및 파싱 오탐지 위험 존재.
+
+### 2. 원인 (Root Cause)
+* Clang 파서가 문법 규격 위반을 만나면 해당 표현식/문장 노드 전체를 AST 트리에 포함하지 않고 삭제함.
+* CLI 텍스트 정규식 가로채기는 OS/컴파일러의 시스템 로케일(System Locale) 설정에 종속됨.
+
+### 3. 해결책 (Resolution)
+* AST 노드가 100% Drop되어 AST 매칭이 불가능한 C++ 문법 위반(Rule 56, 62, 63, 64)의 경우, 텍스트 매칭 대신 `ClangTidyDiagnosticConsumer::HandleDiagnostic` 내에서 Clang 정수 진단 ID(`Info.getID()`)인 `diag::err_early_catch_all`, `diag::err_member_function_initialization`, `diag::err_non_virtual_pure`, `diag::err_static_downcast_via_virtual`를 직접 매핑함.
+* 텍스트 파싱이 아닌 정수 ID 매핑이므로 **언어/로케일에 100% 독립적인 정밀 가로채기** 체계를 구현함.
+
+
