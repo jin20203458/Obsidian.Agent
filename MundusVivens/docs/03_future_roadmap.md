@@ -58,32 +58,7 @@ related:
 
 ---
 
-## [3] 프로파일 병목 지점 및 해결 계획 (Profiling Bottlenecks & Planned Solutions)
-
-실측 벤치마크 및 Tracy 프로파일링 과정에서 식별된 4대 핵심 성능 병목 지점들과 그 해결 결과입니다. (※ 나열된 4가지 과제 모두 소스 코드에 구현 및 실측 검증이 완결된 상태입니다.)
-
-### ① [C++] A* 대량 길찾기 스케일링 병목
-*   **병목**: 에이전트 수 증가에 따라 동기식 A* 길찾기 연산 시간이 선형으로 폭증하여 프레임 타임 예산(50ms)을 초과함 (500명 테스트 시 틱당 평균 1.27초 소요).
-*   **해결 계획 (구현 완료)**:
-    *   **Phase 1 (Iteration Cap Guard & Best-so-far Fallback)**: A* 루프에 10,000회 상한선을 적용하고, 초과 시 목표에 가장 가까운 노드까지의 부분 경로(Partial Path)를 반환하도록 안전장치를 적용했습니다.
-    *   **Phase 1 안전 보완책**: 도착 검증 수식(`dist_to_final < 1.0f`)을 적용하여 부분 경로 도달 시 순간이동 및 조기 Working 전환 현상을 방지했으며, 동일 위치 2회 연속 Cap 시 `ToilState::Idle`로 이탈하는 **Unreachable Retry Guard**를 도입하여 20Hz 무한 스파이크를 물리적으로 차단했습니다.
-    *   **Phase 2 (Tick Budget Staggering)**: `SystemPathfinding` 내 틱당 최대 A* 실행 제한(`MAX_PATHFINDS_PER_TICK = 8`)을 적용해 초과 요청을 다음 틱으로 분산 처리했습니다.
-    *   **Phase 3 (Destination Cluster Cache)**: 8×8 타일 버킷 양자화 해시맵 기반 거점 단위 경로 공유 캐시를 적용하여 500명 벤치마크 소요 시간을 1,278ms에서 **504ms로 2.53배 대폭 단축(60.5% 연산 감소)**했습니다.
-
-### ② [C++] OS 타이머 해상도 차이에 따른 틱 오차
-*   **병목**: 비동기 RTT 격리에도 불구하고 Windows OS 스케줄러의 기본 클럭 해상도(15.6ms) 영향으로 인해 틱 주기가 50.0ms(20Hz)가 아닌 약 61.3ms로 미세하게 늘어지는 현상.
-*   **해결 계획 (구현 완료)**:
-    *   C++ 게임 서버 메인 진입점(`main.cpp`)에 RAII 구조 기반의 **`WindowsTimerResolutionRaii`** 가드를 적용하고 `winmm` 라이브러리를 링킹하여 Windows 타이머 해상도를 1ms 단위로 조율 완료했습니다. 이를 통해 실측 틱 주기가 타겟 주기에 완벽히 수렴함을 확인했습니다. (Linux 배포 시에는 OS 커널의 HRT 설정을 따르므로 조건부 빌드로 설계)
-
-### ③ [C#] LiteDB 동기식 Eviction I/O 지연
-*   **병목**: 대량 기억 주입(Eviction Storm) 시 RAM 상한선(40개) 사수를 위해 초과 기억들을 디스크 DB로 밀어내는 과정이 동기 호출로 처리되어 약 4.4초의 프레임 스파이크가 발생함.
-*   **해결 계획 (구현 완료)**:
-    *   `System.Threading.Channels` 기반의 **Async Write-Behind Queue**를 구현하여 메모리 큐에 대기열을 적재하고 백그라운드 태스크 워커 스레드에서 파일 I/O를 비동기식으로 처리 완료했습니다. 이를 통해 주입 속도를 4.4초에서 30ms 수준으로 단축시켰으며, 기억 쇠퇴(Decay) 시에도 누수 없이 연동하여 데이터 유실 결함도 동시에 해결했습니다.
-
-### ④ [C#] 인과 캐스케이드의 지수형 연산/메모리 폭발
-*   **병목**: 파생 신념 연쇄 감쇄 알고리즘(`PropagateCausalCascade`) 실행 시, 트리 깊이가 6레벨 이상 깊어지면 연산 노드 수가 지수적으로 폭증(\(O(C^D)\))하거나 순환 참조 발생 시 StackOverflowException으로 서버가 크래시되는 현상.
-*   **해결 계획 (구현 완료)**:
-    *   `BeliefEngine` 전파 모듈 단에 **깊이 제한 가드 (Depth Clamping Guard = 5)** 및 **순환 참조 방지 가드 (HashSet 기반 visited 체크)**를 구현 완료했습니다. 6레벨 진입 시 전파를 차단하여 지수 연산 폭발을 막으며, 순환 노드 탐색 시 로그 출력 후 즉각 탈출하여 크래시를 방지합니다.
+> **프로파일링 최적화 이력**: 식별된 4대 성능 병목(A* 스케일링, OS 타이머, LiteDB Eviction, 인과 캐스케이드)은 모두 해결 완료되었습니다. 상세 실측 데이터 및 구현 기록은 [04_cpp_server_profiling.md](04_cpp_server_profiling.md) / [05_csharp_ai_profiling.md](05_csharp_ai_profiling.md) 참조.
 
 ---
 
