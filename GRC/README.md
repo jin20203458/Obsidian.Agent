@@ -12,3 +12,5 @@ related:
 프로젝트의 뼈대를 이루는 공식 기획 및 시스템 설계 문서입니다.
 - [00_project_overview.md](./docs/00_project_overview.md): GRC 프로젝트 개요 및 구조 소개
 - [01_grc_architecture.md](./docs/01_grc_architecture.md): GRC 클라이언트의 동시성 제어 및 메모리 관리 기술 아키텍처
+- [02_user_quickstart_guide.md](./docs/02_user_quickstart_guide.md): 초보자/비개발자 포터블 실행, SmartScreen 우회 및 API 키 가이드
+- [03_grc_user_guide.md](./docs/03_grc_user_guide.md): GRC 7대 핵심 기능 사용자 사용설명서 및 활용 가이드
