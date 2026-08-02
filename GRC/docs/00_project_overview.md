@@ -99,3 +99,4 @@ graph TB
 | **[현재 문서]** 00_project_overview | 프로젝트 기획 철학, 비전, 고수준 구조 |
 | [01_grc_architecture](./01_grc_architecture.md) | 3-Tier 메모리, O(1) 로거, 비차단 스트리밍에 대한 구현 딥다이브 |
 | [02_user_quickstart_guide](./02_user_quickstart_guide.md) | 비개발자 무설치 포터블 실행, SmartScreen 우회, API 키 가이드 |
+| [03_grc_user_guide](./03_grc_user_guide.md) | GRC 7대 핵심 기능 사용자 사용설명서 및 활용 가이드 |
