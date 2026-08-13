@@ -98,18 +98,18 @@ GitHub 웹 마크다운 영역의 최대 너비는 **약 780px**로 제한됩니
 
 ```mermaid
 flowchart TD
-    UserDrag["사용자 (UI 조작 / 드래그 앤 드롭)"] -->|"파일 및 폴더 추가"| View["MainWindow (뷰)"]
-    View <-->|"데이터 바인딩 (MVVM)"| VM["MainViewModel (뷰모델)"]
+    UserDrag["사용자 (UI / 드래그 앤 드롭)"] -->|"파일/폴더 추가"| View["MainWindow (뷰)"]
+    View <-->|"데이터 바인딩"| VM["MainViewModel (뷰모델)"]
     
-    VM -->|"프리셋 저장 및 로드"| PresetService["PresetService (프리셋 서비스)"]
-    VM -->|"토큰 및 글자수 계산, 필터링"| FileInspector["FileInspector (파일 검사)"]
+    VM -->|"프리셋 저장/로드"| PresetService["PresetService (프리셋)"]
+    VM -->|"토큰/글자수 필터링"| FileInspector["FileInspector (검사기)"]
     
-    PresetService <-->|"JSON 파일 입출력"| presetsJSON[("presets.json (설정 파일)")]
+    PresetService <-->|"JSON 입출력"| presetsJSON[("presets.json (설정)")]
     
-    VM <-->|"컨텍스트 전달 및 서버 제어"| Server["LocalContextServer (MCP 서버)"]
-    Server -.->|"포트 바인딩"| LocalHTTP["HttpListener (로컬 HTTP 서버)"]
+    VM <-->|"컨텍스트/서버 제어"| Server["LocalContextServer (MCP)"]
+    Server -.->|"포트 바인딩"| LocalHTTP["HttpListener (로컬 HTTP)"]
     
-    Agent["AI 에이전트 (Claude, Cursor 등)"] -->|"GET /sse (SSE 연결 요청)"| LocalHTTP
-    LocalHTTP -->|"SSE Event Stream (메시지 스트림)"| Agent
-    Agent -->|"POST /api/message (JSON-RPC 호출)"| LocalHTTP
+    Agent["AI 에이전트 (Claude/Cursor)"] -->|"GET /sse (SSE 연결)"| LocalHTTP
+    LocalHTTP -->|"SSE Event Stream"| Agent
+    Agent -->|"POST /api/message"| LocalHTTP
 ```
