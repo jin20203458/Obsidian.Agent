@@ -32,7 +32,7 @@ flowchart TD
 
     subgraph main_thread ["메인 스레드 (Main Tick Loop)"]
         M["20Hz GameLoop"] -->|"[1] Drain"| D["grpc_queue 처리 (더블 버퍼)"]
-        M -->|"[2] Clear/Update"| E["SystemCleanupDisconnectedPlayerDialogues"]
+        M -->|"[2] Clear/Update"| E["SystemCleanupDisconnected<br/>PlayerDialogues"]
         M -->|"[3] Read/Parse"| F["SystemPlayerCommands"]
         M -->|"[4] Logic Tick"| G["SystemSocialInteraction / SystemJobDriver"]
         M -->|"[5] Sync & Broadcast"| H["SystemBroadcastWorldSnapshot"]
@@ -45,7 +45,7 @@ flowchart TD
     %% 데이터 흐름 (스레드 간 통신)
     C -->|"Thread-safe 락/스왑"| F
     G -->|"비동기 gRPC 호출"| G_Context
-    G_Context -->|"응답 콜백 & grpc_queue.Push"| D
+    G_Context -->|"응답 콜백 &<br/>grpc_queue.Push"| D
     H -->|"session->Send()"| W_Chan
 ```
 
@@ -163,7 +163,7 @@ sequenceDiagram
 
 #### 대화 확률 공식
 #### **[1] 주도자(Initiator) 대화 주도 확률**
-    `initiation_prob = 15% * (0.3 + extroversion_i) * location_modifier`
+    `initiation_prob = 60% * (0.3 + extroversion_i) * location_modifier`
     *   최소/최대 제한: `[2%, 60%]`
     *   장소 계수 (`location_modifier`): Tavern(1.8), Market(1.5), Square(1.2), Church(0.3), 기타(1.0)
     
@@ -183,7 +183,7 @@ sequenceDiagram
 ```mermaid
 flowchart TD
     Start(["[1] 공간 해시 그리드 내 구역별 후보 스캔"]) --> FilterCandidates["[2] 대화 불가능 후보 제외"]
-    FilterCandidates -->|"제외: BusyTag / 사회적 에너지 20 미만 / 쿨다운 중"| CheckActivity{"[3] 특정 행동 중?"}
+    FilterCandidates -->|"제외: BusyTag /<br/>사회적 에너지 20 미만 / 쿨다운 중"| CheckActivity{"[3] 특정 행동 중?"}
     
     CheckActivity -- "취침/휴식" --> Reject([대화 불가])
     CheckActivity -- "기도/명상" --> RollMeditate{"80% 확률 대화 거부"}
@@ -199,7 +199,7 @@ flowchart TD
     DiceInit -- "실패" --> NextInitiator
     DiceInit -- "성공" --> TargetSelect["[8] 타깃 B 탐색 및 가중 랜덤 선택"]
     
-    TargetSelect -->|"필터: B와 쿨다운 / 거리 20m 초과 / 호감도 -70 미만"| CalcWeight["[9] 타깃 가중치 연산 (weight)"]
+    TargetSelect -->|"필터: B와 쿨다운 /<br/>거리 8m 초과 / 호감도 -70 미만"| CalcWeight["[9] 타깃 가중치 연산 (weight)"]
     CalcWeight --> DiceTargetAccept{"[10] 타깃 B 수락 판정 (accept_prob)"}
     
     DiceTargetAccept -- "거절" --> NextInitiator
