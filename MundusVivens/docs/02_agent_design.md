@@ -17,33 +17,33 @@ related:
 
 ```mermaid
 flowchart TD
-    subgraph CPP ["C++ Game Server (20Hz Physical Engine)"]
-        Physics["20Hz Main Game Loop"] --> ZoneScan["Spatial & Zone Scan<br/>(LocationComp, zone_id)"]
-        ZoneScan --> Contagion["SystemEmotionDecay<br/>(감정 전염 & 쇠퇴 연산)"]
-        Contagion --> InteractionCheck{"SystemSocialInteraction<br/>대화 트리거 조건 판정"}
-        InteractionCheck -- "트리거 조건 충족" --> AttachBusy["BusyTag 부착<br/>(20Hz 연산 필터링 제외)"]
-        AttachBusy --> AsyncGrpc["AsyncGrpcClient<br/>(gRPC TriggerDialogue)"]
+    subgraph CPP ["C++ Game Server (20Hz)"]
+        Physics["20Hz Game Loop"] --> ZoneScan["Spatial & Zone Scan"]
+        ZoneScan --> Contagion["SystemEmotionDecay"]
+        Contagion --> InteractionCheck{"SocialInteraction 판정"}
+        InteractionCheck -- "트리거 충족" --> AttachBusy["BusyTag 부착"]
+        AttachBusy --> AsyncGrpc["AsyncGrpcClient"]
         
-        Needs["NeedsComp (허기/피로 실시간 감쇠)"] --> Survival["SystemSurvivalOverride (생체 위기 오버라이드)"]
+        Needs["NeedsComp (허기/피로)"] --> Survival["SurvivalOverride"]
     end
 
-    subgraph CS ["C# AI Server (Cognitive Engine)"]
-        AsyncGrpc --> GrpcEndpoint["MundusVivensGrpcService"]
-        GrpcEndpoint --> Queue["DailyPlan / Reflection PriorityQueue<br/>(10 TPS Limit & Backoff)"]
+    subgraph CS ["C# AI Server (Cognitive)"]
+        AsyncGrpc --> GrpcEndpoint["GrpcService"]
+        GrpcEndpoint --> Queue["PriorityQueue (10 TPS)"]
         Queue --> Orchestrator["DialogueOrchestrator"]
         
-        Orchestrator --> MemRetrieve["MemoryBox (Top-10 Beliefs 인출)"]
-        MemRetrieve --> Recall["LiteDB cold_archive Recall (Heuristic Recall)"]
-        Recall --> LLMCall["GeminiApiService (LLM Prompt Execution)"]
-        LLMCall --> ResponseParse["JSON Response Parsing<br/>(Utterance, Emotion, Belief, Relationship)"]
-        ResponseParse --> BeliefUpdate["MemoryBox & BeliefEngine (Causal Domino Cascade)"]
-        BeliefUpdate --> ReturnGrpc["gRPC Response Return"]
+        Orchestrator --> MemRetrieve["MemoryBox 인출"]
+        MemRetrieve --> Recall["LiteDB cold_archive"]
+        Recall --> LLMCall["GeminiApiService"]
+        LLMCall --> ResponseParse["JSON 파싱 & 반영"]
+        ResponseParse --> BeliefUpdate["BeliefEngine (Cascade)"]
+        BeliefUpdate --> ReturnGrpc["gRPC Return"]
         
-        Survival -->|"gRPC ReportJobStatus (survival)"| GrpcEndpoint
-        GrpcEndpoint -->|"성찰 우회 / 대뇌 락 설정"| GrpcEndpoint
+        Survival -->|"gRPC ReportJobStatus"| GrpcEndpoint
+        GrpcEndpoint -->|"성찰 우회 / 락"| GrpcEndpoint
     end
 
-    ReturnGrpc --> DetachBusy["BusyTag 제거 및 C++ 상태 갱신"]
+    ReturnGrpc --> DetachBusy["BusyTag 제거 & 상태 갱신"]
 ```
 
 ### A. 3단 계층형 행동 제어 (3-Tier Behavior Control)
@@ -237,10 +237,10 @@ public class Belief
 
 ```mermaid
 flowchart LR
-    A["1. MemoryBox & cold_archive<br/>최적 기억 추출"] --> B["2. 상대방 관계 인상 주입<br/>(ImpressionSummary)"]
-    B --> C["3. 감정 왜곡 수준 산출<br/>(Emotion Distortion)"]
-    C --> D["4. Gemini API 호출<br/>(JSON Mode 1회로 통합)"]
-    D --> E["5. JSON 파싱 및 데이터 반영<br/>(Relationship, Emotion, Belief)"]
+    A["(1) 기억 인출"] --> B["(2) 인상 주입"]
+    B --> C["(3) 감정 왜곡"]
+    C --> D["(4) Gemini API"]
+    D --> E["(5) JSON 반영"]
 ```
 
 1.  **기억 인출 & Recall**: `MemoryBox` 활성 기억과 LiteDB 연상 기억 회상 결과를 병합해 대화의 배경 컨텍스트로 활용합니다.
