@@ -19,16 +19,16 @@ related:
 flowchart TD
     subgraph CPP ["C++ Game Server (20Hz)"]
         Physics["20Hz Game Loop"] --> ZoneScan["Spatial & Zone Scan"]
-        ZoneScan --> Contagion["SystemEmotionDecay"]
-        Contagion --> InteractionCheck{"SocialInteraction 판정"}
+        ZoneScan --> Contagion["SystemEmotionDecay (쇠퇴/전염)"]
+        Contagion --> InteractionCheck{"SystemSocialInteraction 판정"}
         InteractionCheck -- "트리거 충족" --> AttachBusy["BusyTag 부착"]
         AttachBusy --> AsyncGrpc["AsyncGrpcClient"]
         
-        Needs["NeedsComp (허기/피로)"] --> Survival["SurvivalOverride"]
+        Needs["NeedsComp (허기/피로)"] --> Survival["SystemSurvivalOverride"]
     end
 
     subgraph CS ["C# AI Server (Cognitive)"]
-        AsyncGrpc --> GrpcEndpoint["GrpcService"]
+        AsyncGrpc --> GrpcEndpoint["MundusVivensGrpcService"]
         GrpcEndpoint --> Queue["PriorityQueue (10 TPS)"]
         Queue --> Orchestrator["DialogueOrchestrator"]
         
@@ -53,7 +53,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     CS["(1) C# 대뇌: Job 스케줄링"] -->|"gRPC"| JobComp["JobComp 할당"]
-    JobComp --> Driver{"(2) C++ JobDriver: Toil FSM"}
+    JobComp --> Driver{"(2) C++ SystemJobDriver: Toil FSM"}
     
     subgraph TOIL_FSM ["Toil FSM"]
         Driver -->|"위치 다름"| Move["Moving: A* 조향"]
@@ -237,10 +237,10 @@ public class Belief
 
 ```mermaid
 flowchart LR
-    A["(1) 기억 인출"] --> B["(2) 인상 주입"]
-    B --> C["(3) 감정 왜곡"]
-    C --> D["(4) Gemini API"]
-    D --> E["(5) JSON 반영"]
+    A["(1) 기억 인출 & LiteDB Recall"] --> B["(2) 관계 인상 (ImpressionSummary)"]
+    B --> C["(3) 감정 왜곡 (Distortion)"]
+    C --> D["(4) Gemini API (JSON Mode)"]
+    D --> E["(5) JSON 파싱 & Belief 반영"]
 ```
 
 1.  **기억 인출 & Recall**: `MemoryBox` 활성 기억과 LiteDB 연상 기억 회상 결과를 병합해 대화의 배경 컨텍스트로 활용합니다.
