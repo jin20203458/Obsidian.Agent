@@ -52,16 +52,16 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    CS["(1) C# 대뇌 서버<br/>고수준 Job 스케줄링"] -->|"gRPC 전송"| JobComp["JobComp 할당"]
-    JobComp --> Driver{"(2) C++ SystemJobDriver<br/>Toil FSM"}
+    CS["(1) C# 대뇌: Job 스케줄링"] -->|"gRPC"| JobComp["JobComp 할당"]
+    JobComp --> Driver{"(2) C++ JobDriver: Toil FSM"}
     
-    subgraph TOIL_FSM ["Toil FSM 영역"]
-        Driver -->|"위치 다름"| Move["Moving: A* & 조향"]
-        Driver -->|"위치 같음"| Work["Working: 틱 소모 작업"]
+    subgraph TOIL_FSM ["Toil FSM"]
+        Driver -->|"위치 다름"| Move["Moving: A* 조향"]
+        Driver -->|"위치 같음"| Work["Working: 틱 소모"]
         Driver -->|"대화 선점"| Interrupted["Interrupted: 대기"]
     end
 
-    Move -->|"생존 위기 / 피격"| BT["(3) 로컬 행동 트리<br/>BT 주도권 획득"]
+    Move -->|"생존 위기 / 피격"| BT["(3) 로컬 BT: 주도권 획득"]
     Work -->|"생존 위기 / 피격"| BT
     BT -->|"해결 완료"| Driver
 ```
