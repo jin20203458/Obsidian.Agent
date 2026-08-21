@@ -21,6 +21,7 @@ related:
   - [AI_Project_Integration_Guidelines.md](ai_agent_refs/AI_Project_Integration_Guidelines.md): 신규 개발 프로젝트를 에이전트 지식베이스 및 협업 환경과 연계하는 표준 절차
   - [Knowledge_Base_Authoring_Guidelines.md](ai_agent_refs/Knowledge_Base_Authoring_Guidelines.md): 에이전트와 인간 개발자가 공통으로 준수해야 할 문서 작성/메타데이터 표준 지침
   - [Independent_Audit_Protocol_Guidelines.md](ai_agent_refs/Independent_Audit_Protocol_Guidelines.md): 고신뢰성 기술 문서 및 분석 사양서의 무결성을 보증하는 순차적 4단계 계쇄 독립감사 표준 지침
+  - [AI_Agent_Architecture_Paradigms_Guidelines.md](ai_agent_refs/AI_Agent_Architecture_Paradigms_Guidelines.md): 글로벌 빅테크 및 최신 연구에 기반한 AI 에이전트 아키텍처 및 멀티 에이전트 협동(Teaming) 패러다임 종합 가이드
 
 
 - **LLVM/**: LLVM/Clang 커스텀 Tidy 체커 및 Static Analyzer 개발 아키텍처와 참고 문서를 다루는 기술 노트 폴더 (세부 문서 목록은 해당 디렉토리 참조)
