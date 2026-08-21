@@ -1,18 +1,23 @@
 ---
 description: >-
-  고신뢰성 기술 문서, 정적 분석 사양서 및 아키텍처 명세서의 사실 무결성(Ground Truth)을 검증하기 위한 순차적 4단계 심층 계쇄(Sequential Deep Gated) 독립감사 표준 지침 v2.0.
-  인증기관 제출용 문서, 분석 보고서, 아키텍처 명세서 검증 시 활성화.
+  고신뢰성 기술 문서, 정적 분석 사양서 및 아키텍처 명세서의 사실 무결성(Ground Truth)을 검증하기 위한 순차적 4단계 심층 계쇄(Sequential Deep Gated) 독립감사 표준 지침.
+  표준 1회 4단계 계쇄 감사 및 초고신뢰성 요구 시 2회 연속 수렴(Dual-Round Convergence) 확장 옵션 제공.
 related:
   - ../README.md
   - ../.agents/AGENTS.md
   - ./Agent_QA_Testing_Guidelines.md
   - ./Knowledge_Base_Authoring_Guidelines.md
 ---
-# Independent Audit Protocol Guidelines (v2.0)
+# Independent Audit Protocol Guidelines
 
 > **부제**: 순차적 4단계 심층 계쇄 독립감사 표준 지침 (Sequential Deep Gated Independent Audit Protocol)
 
-본 문서는 소프트웨어 정적/동적 분석 사양서, 아키텍처 명세서, 공인 시험평가 보고서 등 **국방/공공/인증기관에 제출되는 고신뢰성 기술 문서의 사실 무결성(Ground Truth)을 보증하기 위한 4단계 심층 계쇄 독립감사 표준 절차 v2.0**을 정의합니다.
+본 문서는 소프트웨어 정적/동적 분석 사양서, 아키텍처 명세서, 공인 시험평가 보고서 등 **국방/공공/인증기관에 제출되는 기술 문서의 사실 무결성(Ground Truth)을 보증하기 위한 4단계 심층 계쇄 독립감사 표준 절차**를 정의합니다.
+
+> [!NOTE]
+> **운영 모드 안내 (Operational Levels)**
+> * **기본 표준 모드 (Standard Mode - 1회 4단계 계쇄)**: 일반적인 정적 분석 사양서 및 기술 문서 검증 시 기본 적용되는 균형 잡힌 고신뢰성 파이프라인.
+> * **초고신뢰성 수렴 모드 (Ultra-High Assurance Mode - 2회 연속 수렴)**: 무기체계 인증, 법적 분쟁 방지, LLM 비결정론(Non-determinism)의 100% 원천 배제가 요구되는 **극도의 신뢰성이 필요한 환경에서 선택적으로 활성화하는 확장 프로토콜**.
 
 ---
 
@@ -23,11 +28,11 @@ related:
 2. **사고 기반 검증(Blind Coding) 및 표면적 라벨 매칭 절대 금지**:
    * "머릿속 추론"이나 "엔진 진단 메시지 라벨"만으로 정탐/오탐을 기계적으로 분류하는 행위를 엄격히 금지합니다. 실제 원본 로그, 물리적 소스코드의 값 도메인(Value Domain), 제약조건 불변식, 컴파일러 엔진 AST/심볼릭 상태에 대한 직접적 실사를 기반으로 증명되어야 합니다.
 3. **서킷 브레이커 (Circuit Breaker)**:
-   * 동일한 Gate에서 3회 연속 `[FAIL]` 발생 시, 즉시 작업을 롤백하고 인간 개발자에게 에스컬레이션합니다.
+   * 동일 Gate 3회 연속 실패 또는 다회차 감사 4회 초과 시, 작업을 즉시 자동 정지하고 인간 개발자에게 에스컬레이션합니다.
 
 ---
 
-## 2. 순차적 4단계 심층 계쇄 감사 파이프라인 (Sequential Deep Gated Pipeline)
+## 2. 순차적 4단계 심층 계쇄 감사 파이프라인 (표준 1회 모드)
 
 ```mermaid
 flowchart TD
@@ -39,13 +44,13 @@ flowchart TD
     Stage2["[2단계] 소스코드 원문 감사관 (Agent 2)<br>• 대표 스니펫 원본 소스 바이트 100% 일치, AI 환각 0건"]
     Gate2{"Gate 2 PASS?"}
 
-    Stage3["[3단계] 100% 전수 값 도메인 & 분류 순도 감사관 (Agent 3)<br>• 단순 엔진 라벨 맹신 금지<br>• 실제 C 코드의 값의 물리적 범위(0~255 등) 전수 역추적<br>• 정탐/오탐 군집 100% 전수 분류 순도 및 이종 혼입 0건 입증"]
+    Stage3["[3단계] 100% 전수 값 도메인 & 분류 순도 감사관 (Agent 3)<br>• 단순 엔진 라벨 맹신 금지<br>• 실제 C 코드의 값의 물리적 범위(Value Domain) 전수 역추적<br>• 정탐/오탐 군집 100% 전수 분류 순도 및 이종 혼입 0건 입증"]
     Gate3{"Gate 3 PASS?"}
 
     Stage4["[4단계] 엔진 심볼릭 제약조건 & 규격 법리 감사관 (Agent 4)<br>• C++ 엔진(State->assume)의 제약조건 소실 메커니즘 수학적 증명<br>• DAPA/MISRA 규격 관점 vs 엔진 정밀도 관점 이원화 최종 공인"]
     Gate4{"Gate 4 PASS?"}
 
-    FinalPass["최고 무결성 공인 사양서 발급 (Certified v2.0)"]
+    FinalPass["최종 공인 확정 (Certified)"]
     FailRollback["결함 수정 후 해당 단계 재검사 (최대 3회)"]
     Escalate["인간 개발자 에스컬레이션 (Circuit Breaker)"]
 
@@ -97,11 +102,8 @@ flowchart TD
 * **목표**: 런타임 값 범위 역추적을 통한 정탐/오탐의 수학적 분리 및 이종 결함 혼입 0건 보증.
 * **전담 임무**:
   1. **100% 전수 값 도메인 역추적**: 도표에 등재된 **모든 항목(전수)**에 대해 C 소스코드 본문, 연산자, 제어 흐름 가드 조건을 분석하여 실제 런타임 값의 범위를 계산.
-     * 예: `unsigned char` 간의 비트 연산(`0..255 ^ 0..255`)은 `int`로 승격되더라도 무조건 `0..255` 양수이므로 **'엔진 오탐 군집'**으로 분류.
-     * 예: `uint64 >> 32` 연산 후 `uint32` 캐스트는 이미 상위 비트가 제거되었으므로 **'엔진 오탐 군집'**으로 분류.
-     * 예: 선행 가드가 없거나 포인터 차이가 음수가 될 수 있는 경우는 **'진성 정탐 군집'**으로 분류.
   2. **이종 결함 혼입(Heterogeneous Merge) 0건 입증**: 정탐 군집과 오탐 군집, 그리고 각 세부 패턴 간에 부당한 혼입이 없음을 100% 전수 입증.
-* **Gate 3 통과 기준**: 523건 전수 항목의 물리적 값 도메인 일치 + 정탐/오탐 군집 순도 100% + 이종 혼입 0건.
+* **Gate 3 통과 기준**: 전수 항목의 물리적 값 도메인 일치 + 정탐/오탐 군집 순도 100% + 이종 혼입 0건.
 
 ---
 
@@ -117,7 +119,46 @@ flowchart TD
 
 ---
 
-## 4. 도메인별 범용 확장 가이드
+## 4. [확장 옵션] 초고신뢰성 2회 연속 수렴 프로토콜 (Ultra-High Assurance Option)
+
+국방 무기체계 인증 제출용 사양서, 법적 증빙 자료, 또는 LLM의 비결정론적 편향을 100% 원천 배제해야 하는 환경에서는 **「2회 연속 동일 수렴(Dual-Round Convergence) 파이프라인」**을 선택적으로 가동합니다.
+
+```mermaid
+flowchart TD
+    Doc["검증 대상 문서"]
+
+    Round1["[Round 1] 1차 4단계 계쇄 실사 (Agent 1~4)"]
+    R1_Pass{"Round 1 전원 PASS?"}
+    
+    Round2["[Round 2] 2차 4단계 계쇄 실사 (Agent 1'~4' 신규 소환)"]
+    R2_Pass{"Round 2 전원 PASS?"}
+
+    CheckMatch{"Round 1 결과 == Round 2 결과?<br>(수치/판정 100% 동일?)"}
+    UltraCertified["✅ 초고신뢰성 공인 완료 (Ultra-High Certified)"]
+    SelfHealing["사양서 수정 및 Round N+1 재실사"]
+    CheckLimit{"감사 횟수 > 4회 초과?"}
+    CircuitBreaker["🛑 서킷 브레이커 발동<br>(작업 정지 및 인간 개발자 에스컬레이션)"]
+
+    Doc --> Round1 --> R1_Pass
+    R1_Pass -- Pass --> Round2 --> R2_Pass
+    R1_Pass -- Fail --> SelfHealing
+    R2_Pass -- Pass --> CheckMatch
+    R2_Pass -- Fail --> SelfHealing
+
+    CheckMatch -- Yes (일치) --> UltraCertified
+    CheckMatch -- No (변동 발생) --> CheckLimit
+    CheckLimit -- No (<= 4회) --> SelfHealing --> Round2
+    CheckLimit -- Yes (> 4회) --> CircuitBreaker
+```
+
+### 초고신뢰성 옵션 운영 규칙
+1. **2회 연속 동일 수렴**: 1차 4단계 통과 후, 완전히 새로운 4대 독립 에이전트를 투입하여 2차 감사를 재실행. 1차와 2차의 결과(TP/FP 수치, 패턴 분류)가 100% 동일할 때만 최종 공인.
+2. **변동 시 자가 치유(Self-Healing)**: 2차에서 변동 발생 시 사양서를 올바른 Ground Truth로 수정한 후 3차 감사를 진행하여 직전 회차와 2연속 일치할 때까지 검증.
+3. **4회 한도 서킷 브레이커**: 총 4회를 초과할 때까지 수렴하지 못하면 AI 판단을 중단하고 인간 개발자에게 에스컬레이션.
+
+---
+
+## 5. 도메인별 범용 확장 가이드
 
 | 도메인 | Stage 1 (데이터/수치) | Stage 2 (원문/스니펫) | Stage 3 (값 도메인/순도) | Stage 4 (엔진 제약/규격 법리) |
 |---|---|---|---|---|
