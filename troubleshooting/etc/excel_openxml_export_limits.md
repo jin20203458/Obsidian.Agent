@@ -1,4 +1,4 @@
-﻿---
+---
 description: >-
   OpenXML 및 EPPlus 기반 엑셀 파일 내보내기 시 sharedStrings.xml 파싱 손상 및 단일 셀 32k 글자 수 초과 오류 해결 지침. 엑셀 내보내기 복구 경고 발생 시 참조.
 related:
