@@ -3,9 +3,11 @@ description: >-
   글로벌 빅테크(Anthropic, Google DeepMind, Microsoft, OpenAI) 및 최신 학술 연구에 기반한 AI 에이전트 아키텍처 및 멀티 에이전트 협동(Teaming) 패러다임 완벽 가이드.
   고신뢰성 시스템 설계, 역할 분담(Orchestrator-Workers, Evaluator-Optimizer), 품질 계쇄(Quality Gate) 파이프라인 구축 시 공식 레퍼런스로 참조.
 related:
+  - ../README.md
   - ./Knowledge_Base_Authoring_Guidelines.md
   - ./Independent_Audit_Protocol_Guidelines.md
-  - ./AI_Prompt_Workflow_Guidelines.md
+  - ./Agent_Collaboration_Workflow_Guidelines.md
+  - ./AI_Prompt_Engineering_Guidelines.md
 ---
 
 # AI Agent Architecture Paradigms Guidelines (에이전트 협동 및 아키텍처 패러다임 종합 가이드)

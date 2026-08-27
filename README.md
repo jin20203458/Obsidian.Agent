@@ -13,9 +13,7 @@ related:
 - **ai_agent_refs/**: AI 에이전트 작동 및 프롬프트 최적화를 위한 공통 설계 지침
   - [Agent_QA_Testing_Guidelines.md](ai_agent_refs/Agent_QA_Testing_Guidelines.md): 에이전트 자동 테스트 및 QA 수행 지침
   - [Agent_Troubleshooting_Guidelines.md](ai_agent_refs/Agent_Troubleshooting_Guidelines.md): 에이전트 내부 결함 디버깅 및 트러블슈팅 지침
-  - [AI_Prompt_AntiPatterns_Guidelines.md](ai_agent_refs/AI_Prompt_AntiPatterns_Guidelines.md): 프롬프트 작성 시 피해야 할 반면교사 체크리스트
-  - [AI_Prompt_Engineering_Guidelines.md](ai_agent_refs/AI_Prompt_Engineering_Guidelines.md): C# 문자열 보간 버그 방지 등 공식 프롬프트 엔지니어링 규칙
-  - [AI_Prompt_Workflow_Guidelines.md](ai_agent_refs/AI_Prompt_Workflow_Guidelines.md): 프롬프트 조립, 감사 및 테스트 수명 주기
+  - [AI_Prompt_Engineering_Guidelines.md](ai_agent_refs/AI_Prompt_Engineering_Guidelines.md): 프롬프트 3단계 수명주기(Build-Audit-Test), 13대 핵심 원칙 및 5대 안티패턴을 집대성한 통합 표준 지침서 (SSOT)
   - [mermaid_diagram_guidelines.md](ai_agent_refs/mermaid_diagram_guidelines.md): 에이전트 생성용 락프리 및 시퀀스 다이어그램 작성법
   - [WPF_Architecture_Guidelines.md](ai_agent_refs/WPF_Architecture_Guidelines.md): WPF MVVM 아키텍처 및 컨트롤 바인딩 규칙
   - [AI_Project_Integration_Guidelines.md](ai_agent_refs/AI_Project_Integration_Guidelines.md): 신규 개발 프로젝트를 에이전트 지식베이스 및 협업 환경과 연계하는 표준 절차
