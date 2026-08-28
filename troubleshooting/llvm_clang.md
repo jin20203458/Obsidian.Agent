@@ -145,4 +145,26 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
    * 컴파일러 텍스트 파싱 0%, 로케일 독립 100%의 한글 경고 방출 아키텍처 완성.
    * DAPA 66개 전체 규칙 100% 정답률 검출 성공.
 
+---
+
+## 2026-08-28: 크로스 컴파일 임베디드(VxWorks/FreeRTOS/AVR) 타겟 분석 시 호스트 Windows SDK 헤더 간섭 및 타입 충돌 해결
+
+### 1. 현상 (Symptom)
+* VxWorks, FreeRTOS, Linux, AVR 등 임베디드 타겟 C/C++ 소스를 Windows 호스트 상의 `clang-tidy`로 분석할 때, 컴파일 에러가 수십~수백 건(예: 466건) 발생.
+* `redefinition of typedef 'int32_t'` (`int` vs `long`), `sal.h` / `vadefs.h` / `specstrings.h` 등 호스트 Windows SDK 헤더가 강제 주입되어 분석이 중단되는 현상.
+
+### 2. 원인 (Root Cause)
+* Windows 빌드 Clang은 기본적으로 `x86_64-pc-windows-msvc` 타겟 트리플을 기본값으로 사용하므로 레지스트리 및 환경변수 상의 Windows SDK / MSVC UCRT 헤더를 자동 검색 및 주입함.
+* Clang 내장 `lib/clang/19/include/stdint.h`의 `int32_t` 정의(`int`)와 RTOS의 `stdint.h` 정의(`long`)가 타입 시스템 상 충돌.
+
+### 3. 해결책 (Resolution)
+1. **타겟 트리플 및 타입 가드 매크로 분리 (Silver Bullet Flags)**:
+   * `--target=i386-pc-none-elf`: Clang 드라이버의 Windows SDK / MSVC 자동 탐색 및 내장 MSVC intrinsic 주입 원천 차단.
+   * `-D__CLANG_STDINT_H`: Clang 내장 `stdint.h`의 중복 로드를 차단하여 RTOS의 32비트 정수 타입과 충돌 방지.
+2. **Strategy C: 타겟 플랫폼 자동 감지 및 UI 선택기 (Zero-Config + Manual Override)**:
+   * `TargetPlatformDetector`: 사용자가 등록한 Include 경로의 시그니처 파일(`vxWorks.h`, `FreeRTOS.h`, `avr/io.h`, `linux/kernel.h` 등)을 O(1)로 스캔하여 타겟 플랫폼을 자동 식별.
+   * `ClangTidyRunnerService`: 타겟 플랫폼 옵션에 맞춰 `--target=<triple>` 및 플랫폼 전용 가드 매크로를 무음 자동 주입하고, 크로스 컴파일 시 호스트 시스템 헤더 자동 탐색을 억제.
+   * `IncludePathWindow.xaml`: 드롭다운 및 실시간 감지 상태 칩을 제공하여 사용자에게 완전한 제어권과 시각적 피드백 제공.
+
+
 
