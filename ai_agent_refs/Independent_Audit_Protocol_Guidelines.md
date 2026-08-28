@@ -5,7 +5,7 @@ description: >-
 related:
   - ../README.md
   - ../.agents/AGENTS.md
-  - ./Agent_QA_Testing_Guidelines.md
+  - ./Agent_Runtime_Operations_Protocol.md
   - ./Knowledge_Base_Authoring_Guidelines.md
 ---
 # Independent Audit Protocol Guidelines

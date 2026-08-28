@@ -6,8 +6,7 @@ description: >-
 related:
   - ../README.md
   - ./Knowledge_Base_Authoring_Guidelines.md
-  - ./Agent_QA_Testing_Guidelines.md
-  - ./Agent_Troubleshooting_Guidelines.md
+  - ./Agent_Runtime_Operations_Protocol.md
   - ./AI_Agent_Architecture_Paradigms_Guidelines.md
   - ./Independent_Audit_Protocol_Guidelines.md
 ---
@@ -164,7 +163,7 @@ flowchart TD
 * **원칙**: 동일한 Gate(Gate 1 또는 Gate 2)에서 **3회 연속 실패가 발생하면 작업을 즉시 강제 중단**합니다.
 * **행동 강령**:
   1. 에이전트는 코드를 원상 복구(Rollback)합니다.
-  2. [Agent_Troubleshooting_Guidelines.md](./Agent_Troubleshooting_Guidelines.md)에 따라 `troubleshooting/<project>.md`에 `[Unresolved]` 로그를 남깁니다.
+  2. [Agent_Runtime_Operations_Protocol.md](./Agent_Runtime_Operations_Protocol.md)에 따라 `troubleshooting/<project>.md`에 `[Unresolved]` 로그를 남깁니다.
   3. 인간 개발자에게 즉각 상황을 보고하고 개입(Human-in-the-loop)을 요청합니다.
 
 ---

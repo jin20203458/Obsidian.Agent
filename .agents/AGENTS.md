@@ -24,5 +24,5 @@ Focus: Single Source of Truth, low redundancy, exact relative paths.
 </context_triggers>
 
 <post_action>
-- **Log**: When logging issues, append to the relevant file in `troubleshooting/` using the template format defined in `ai_agent_refs/Agent_Troubleshooting_Guidelines.md`.
+- **Log**: When logging issues, append to the relevant file in `troubleshooting/` using the template format defined in `ai_agent_refs/Agent_Runtime_Operations_Protocol.md`.
 </post_action>

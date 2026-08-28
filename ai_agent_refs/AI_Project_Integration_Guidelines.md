@@ -4,6 +4,7 @@ description: >-
 related:
   - ../README.md
   - ./Knowledge_Base_Authoring_Guidelines.md
+  - ./Agent_Runtime_Operations_Protocol.md
 ---
 # AI Project Integration Guidelines
 

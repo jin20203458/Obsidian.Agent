@@ -11,8 +11,7 @@ related:
 ## 저장소 구조 (Directory Structure)
 
 - **ai_agent_refs/**: AI 에이전트 작동 및 프롬프트 최적화를 위한 공통 설계 지침
-  - [Agent_QA_Testing_Guidelines.md](ai_agent_refs/Agent_QA_Testing_Guidelines.md): 에이전트 자동 테스트 및 QA 수행 지침
-  - [Agent_Troubleshooting_Guidelines.md](ai_agent_refs/Agent_Troubleshooting_Guidelines.md): 에이전트 내부 결함 디버깅 및 트러블슈팅 지침
+  - [Agent_Runtime_Operations_Protocol.md](ai_agent_refs/Agent_Runtime_Operations_Protocol.md): 의무 QA 검증(Exit Code 0 Ground Truth), 3-Strike 서킷 브레이커, 롤백 및 트러블슈팅 통합 런타임 프로토콜 (SSOT)
   - [AI_Prompt_Engineering_Guidelines.md](ai_agent_refs/AI_Prompt_Engineering_Guidelines.md): 프롬프트 3단계 수명주기(Build-Audit-Test), 13대 핵심 원칙 및 5대 안티패턴을 집대성한 통합 표준 지침서 (SSOT)
   - [mermaid_diagram_guidelines.md](ai_agent_refs/mermaid_diagram_guidelines.md): 에이전트 생성용 락프리 및 시퀀스 다이어그램 작성법
   - [WPF_Architecture_Guidelines.md](ai_agent_refs/WPF_Architecture_Guidelines.md): WPF MVVM 아키텍처 및 컨트롤 바인딩 규칙
