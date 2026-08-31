@@ -51,7 +51,7 @@ flowchart TD
 
     subgraph Step0 ["Step 0. 사전 탐색 (Localization & Pre-Research)"]
         S0_Worker["Researcher Subagent (Read-Only) 소환<br>• 코드베이스 탐색, 관련 파일 및 기존 함수 시그니처 파악"]
-        S0_Report["3줄 포인터 요약 보고 (메인 세션 컨텍스트 오염 0%)"]
+        S0_Report["포인터 목록 요약 보고 (메인 세션 컨텍스트 오염 0%)"]
         S0_Worker --> S0_Report
     end
 
@@ -95,7 +95,7 @@ flowchart TD
 * **목적**: 계획을 세우기 전, 메인 에이전트의 컨텍스트 윈도우를 깨끗하게 보존하면서 필요한 파일 경로와 의존성을 파악합니다.
 * **실행 수칙**:
   1. 메인 에이전트는 직접 수십 개 파일을 열람하지 않고, `research` 서브에이전트를 소환합니다.
-  2. 서브에이전트는 대상 파일을 조사한 뒤, 전체 덤프 대신 **"핵심 파일 경로 + 주요 함수 시그니처"를 3줄 내외 포인터(Pointer-Passing)**로 반환합니다.
+  2. 서브에이전트는 소스코드 본문 복사 대신, 변경 영향권에 있는 파일 경로와 주요 함수/인터페이스 시그니처 목록(Pointer List)을 정리하여 반환합니다.
 
 ### Step 1: 정형 계획 수립 및 1차 계획 감사 (Plan & Gate 1)
 * **목적**: 코드를 한 줄이라도 치기 전에 설계적 결함, 누락된 엣지 케이스, 아키텍처 위반을 사전 차단합니다.
@@ -140,7 +140,7 @@ flowchart TD
   "Subagents": [{
     "TypeName": "research",
     "Role": "Independent Plan Auditor (Read-Only)",
-    "Prompt": "현재 작성된 implementation_plan.md 문서를 검토하라. 기존 아키텍처 위반 여부, 누락된 엣지 케이스, 의존성 결함 유무를 엄격히 감사하고 [PASS] 또는 [FAIL + 구체적 결함 3줄 요약] 판정을 제출하라. (파일 수정 금지)"
+    "Prompt": "현재 작성된 implementation_plan.md 문서를 검토하라. 기존 아키텍처 위반 여부, 누락된 엣지 케이스, 의존성 결함 유무를 엄격히 감사하고 [PASS] 또는 [FAIL + 구체적 결함 요약] 판정을 제출하라. (파일 수정 금지)"
   }]
 }
 ```
@@ -151,7 +151,7 @@ flowchart TD
   "Subagents": [{
     "TypeName": "research",
     "Role": "Independent QA & Code Auditor (Read-Only)",
-    "Prompt": "방금 수정된 소스코드를 감사하라. 백그라운드 터미널에서 프로젝트 빌드/테스트 명령어를 직접 실행하여 Exit Code 0 및 에러 로그 여부를 확인하고, Git Diff를 검토하여 사이드이펙트 유무를 판정하라. 결과는 [PASS] 또는 [FAIL + 에러 로그 3줄 요약]으로 보고하라."
+    "Prompt": "방금 수정된 소스코드를 감사하라. 백그라운드 터미널에서 프로젝트 빌드/테스트 명령어를 직접 실행하여 Exit Code 0 및 에러 로그 여부를 확인하고, Git Diff를 검토하여 사이드이펙트 유무를 판정하라. 결과는 [PASS] 또는 [FAIL + 에러 로그 요약]으로 보고하라."
   }]
 }
 ```
@@ -172,7 +172,7 @@ flowchart TD
 
 | 단계 | 수행 주체 | 핵심 산출물 / 검증 오라클 | 권한 |
 |---|---|---|:---:|
-| **Step 0: 사전 탐색** | Researcher Subagent | 3줄 포인터 요약 (관련 파일/함수) | Read-Only |
+| **Step 0: 사전 탐색** | Researcher Subagent | 핵심 포인터 목록 (관련 파일/인터페이스) | Read-Only |
 | **Step 1: 정형 계획 & Gate 1** | Main Agent & Plan Auditor | `implementation_plan.md` & Gate 1 [PASS] | Read-Only Audit |
 | **Step 2: 책임 구현** | Main Agent | 실제 소스코드 파일 수정 | Write |
 | **Step 3: QA 검증 & Gate 2** | QA Auditor Subagent | 터미널 `Exit Code 0` & Gate 2 [PASS] | Read-Only Audit |
