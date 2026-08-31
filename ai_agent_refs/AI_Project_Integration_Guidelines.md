@@ -5,6 +5,7 @@ related:
   - ../README.md
   - ./Knowledge_Base_Authoring_Guidelines.md
   - ./Agent_Runtime_Operations_Protocol.md
+  - ./AI_Prompt_Engineering_Guidelines.md
 ---
 # AI Project Integration Guidelines
 
@@ -18,7 +19,7 @@ related:
 
 ### 1단계. 개발 저장소 내 에이전트 행동 강령 (`.agents/AGENTS.md`) 구성
 연동할 개발 프로젝트 저장소 루트에 `.agents/` 디렉토리를 생성하고 `AGENTS.md` 파일을 작성합니다.
-* **작성 규칙**: 글로벌 에이전트 프롬프트와의 정체성 충돌을 방지하고 정확한 지시 이행을 위해 **XML 태그 구조**와 **조건부 트리거(JIT)** 방식을 필수로 도입하며, 토큰 낭비를 막기 위해 문맥을 극도로 압축하여 작성합니다.
+* **작성 규칙**: 시스템 프롬프트의 지시 준수율을 극대화하고 오염을 방지하기 위해 **[AI_Prompt_Engineering_Guidelines.md](./AI_Prompt_Engineering_Guidelines.md)의 핵심 원칙(XML 태그 경계 격리, Junk 토큰 배제, 긍정 프레이밍)**을 준수하며, 조건부 트리거(JIT)를 활용하여 문맥을 고밀도로 압축 작성합니다.
 * **표준 구조 및 필수 태그**:
   1. **`<assigned_role>`**: 해당 저장소 내에서 에이전트가 위임받을 일시적 전문 역할 (예: Senior C++ Engine Developer 등)
   2. **`<project_philosophy>`**: 에이전트가 코딩 중 엄수해야 할 설계 방향 및 핵심 지향점 (예: Lock-free 지향 등)
