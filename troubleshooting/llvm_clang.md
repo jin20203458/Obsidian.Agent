@@ -147,6 +147,29 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
+## 2026-08-31: C/C++ 소스 프래그먼트(#include "*.c") 자동 감지 및 3단계 자동 정제 시스템 (Zero-Config)
+
+### 1. 현상 (Symptom)
+* PCRE, SQLite, Lua, 임베디드 런타임 등 대형 라이브러리가 포함된 프로젝트(예: 708개 파일)를 한 번에 분석할 때, C 소스 조각 파일들(`sjarm32.c`, `sjx8632.c` 등)이 독립 컴파일 단위로 호출되어 320건 이상의 대량 구문 에러 발생.
+* C99 `intmax_t`, `uintmax_t` 타입 누락 에러 발생.
+
+### 2. 원인 (Root Cause)
+* `sjlir.c` 같은 상위 컴파일 단위가 내부에서 `#include "sjarm32.c"`를 직접 인클루드하는 구조인데, 분석기가 폴더 내 모든 `.c` 파일을 단독 실행 단위(`TranslationUnit`)로 인식하여 헤더 없이 컴파일을 시도함.
+* C++ 모드에서 단순 매크로 `-Dintmax_t=...`를 주입할 경우 `std::intmax_t` 문법 오류가 발생하는 딜레마.
+
+### 3. 해결책 (Resolution)
+1. **비동기 소스 프래그먼트 사전 감지 (`SourceFragmentDetector.cs`)**:
+   * `Parallel.ForEachAsync` 기반으로 상단 300라인을 비동기 스캔하여 `#include ".*\.c"` 패턴을 식별하고, 인클루드된 조각 파일들을 독립 컴파일 대상에서 자동 제외.
+   * 상위 파일(`sjlir.c`) 컴파일 시 조각 파일이 함께 완전한 AST로 분석되므로 분석 누락율 0% 보장.
+   * `--header-filter=.*`를 보장하여 조각 파일 내부의 결함 진단이 정상 출력되도록 유지.
+2. **C vs C++ Dialect-Safe 타입 가드**:
+   * C 모드(`*.c`)에서는 `-ffreestanding` 및 `-Dintmax_t=__INTMAX_TYPE__ -Duintmax_t=__UINTMAX_TYPE__`를 주입하여 누락된 C99 타입을 자동 보정.
+   * C++ 모드(`*.cpp`)에서는 타입 치환 매크로를 격리하여 표준 `<cstdint>` / `std::intmax_t` 파괴 방지.
+3. **세션 스냅샷 확장 (`MainViewModel.cs`)**:
+   * 분석 대상 파일 외에 진단이 검출된 모든 파일(`Diagnostics.Select(d => d.FilePath)`)을 스냅샷 목록에 병합하여 조각 파일 내부 결함에 대한 코드 스니펫 및 비교 분석 diff 100% 영구 보존.
+
+---
+
 ## 2026-08-28: 크로스 컴파일 임베디드(VxWorks/FreeRTOS/AVR) 타겟 분석 시 호스트 Windows SDK 헤더 간섭 및 타입 충돌 해결
 
 ### 1. 현상 (Symptom)
