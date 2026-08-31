@@ -16,8 +16,8 @@ related:
 
 ##  프로젝트 연동 3단계 워크플로우
 
-### 1단계. 개발 저장소 내 에이전트 행동 강령 ([AGENTS.md](AGENTS.md)) 구성
-연동할 개발 프로젝트 저장소 루트에 `.agents/` 디렉토리를 생성하고 [AGENTS.md](AGENTS.md) 파일을 작성합니다.
+### 1단계. 개발 저장소 내 에이전트 행동 강령 (`.agents/AGENTS.md`) 구성
+연동할 개발 프로젝트 저장소 루트에 `.agents/` 디렉토리를 생성하고 `AGENTS.md` 파일을 작성합니다.
 * **작성 규칙**: 글로벌 에이전트 프롬프트와의 정체성 충돌을 방지하고 정확한 지시 이행을 위해 **XML 태그 구조**와 **조건부 트리거(JIT)** 방식을 필수로 도입하며, 토큰 낭비를 막기 위해 문맥을 극도로 압축하여 작성합니다.
 * **표준 구조 및 필수 태그**:
   1. **`<assigned_role>`**: 해당 저장소 내에서 에이전트가 위임받을 일시적 전문 역할 (예: Senior C++ Engine Developer 등)
@@ -75,8 +75,8 @@ related:
 
 ---
 
-### 3단계. 지식베이스 [README.md](README.md) 통합 동기화
-루트 [README.md](README.md) 파일을 업데이트하여 일관성을 유지합니다.
+### 3단계. 지식베이스 [README.md](../README.md) 통합 동기화
+루트 [README.md](../README.md) 파일을 업데이트하여 일관성을 유지합니다.
 * **디렉토리 구조 (Directory Structure)** 섹션에 새로 추가한 프로젝트 폴더(예: `- **<Project_Name>/**: ...`)와 하위 명세서들을 설명과 함께 링크로 정식 등록합니다.
 * **troubleshooting** 섹션에 신규 생성한 프로젝트 트러블슈팅 로그 문서 링크를 등록합니다.
 
@@ -84,7 +84,7 @@ related:
 
 ##  에이전트용 프로젝트 환경 자동 탐색 가이드
 
-신규 프로젝트 연동을 지시받은 에이전트는 해당 프로젝트의 소스 코드를 분석하여 아래 규칙에 따라 [.agents/AGENTS.md](.agents/AGENTS.md) 파일의 `Build` 및 `Execution` 명령어를 도출합니다.
+신규 프로젝트 연동을 지시받은 에이전트는 해당 프로젝트의 소스 코드를 분석하여 아래 규칙에 따라 [.agents/AGENTS.md](../.agents/AGENTS.md) 파일의 `Build` 및 `Execution` 명령어를 도출합니다.
 
 ### 1. 빌드 도구 식별 및 명령어 도출 (Build Directive)
 * **CMake 기반 프로젝트** (루트에 `CMakeLists.txt` 존재):
