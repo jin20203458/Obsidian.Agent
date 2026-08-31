@@ -61,10 +61,10 @@ related:
 
 1. **프로젝트 폴더 및 인덱스 생성**:
    * `Obsidian.Agent/<Project_Name>/` 디렉토리를 생성합니다. (예: `LLVM/`, `MundusVivens/`)
-   * 폴더 최상단에 [README.md](README.md)를 작성하여 하위 문서 지도를 제공합니다.
-   * 폴더 내에 시스템의 핵심 설계 사상, 동작 원리, 모듈 간 구조(SSOT)를 정의하는 기술 명세 문서를 최소 1개 이상 생성합니다. (예: [StaticAnalyzer_Architecture.md](StaticAnalyzer_Architecture.md))
+   * 폴더 최상단에 `README.md`를 작성하여 하위 문서 지도를 제공합니다.
+   * 폴더 내에 시스템의 핵심 설계 사상, 동작 원리, 모듈 간 구조(SSOT)를 정의하는 기술 명세 문서를 최소 1개 이상 생성합니다. (예: `StaticAnalyzer_Architecture.md`)
 2. **트러블슈팅 로그 생성**:
-   * [Obsidian.Agent/troubleshooting/<project_name>.md](Obsidian.Agent/troubleshooting/<project_name>.md) 경로에 전용 로그 문서를 생성합니다.
+   * `troubleshooting/<project_name>.md` 경로에 전용 로그 문서를 생성합니다.
    * **필수 템플릿 규격**을 반드시 준수하여 구조화합니다:
      ```markdown
      ## YYYY-MM-DD: 에러 발생명
