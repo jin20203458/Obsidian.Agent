@@ -5,8 +5,9 @@ description: >-
 related:
   - ../README.md
   - ./Knowledge_Base_Authoring_Guidelines.md
-  - ./Independent_Audit_Protocol_Guidelines.md
+  - ./Agent_Runtime_Operations_Protocol.md
   - ./Agent_Collaboration_Workflow_Guidelines.md
+  - ./Independent_Audit_Protocol_Guidelines.md
   - ./AI_Prompt_Engineering_Guidelines.md
 ---
 
@@ -125,78 +126,30 @@ Anthropic은 에이전트를 *"필요 이상으로 복잡하게 만들지 말고
 
 ---
 
-## 4. 미션 크리티컬(Mission-Critical) 고신뢰성 시스템을 위한 설계 원칙
+## 4. 실전 워크플로우 아키텍처 매핑 (Architecture-to-Workflow Mapping)
 
-국방 소프트웨어(DAPA), 자동차 안전(ISO 26262), 항공(DO-178C) 등 **단 0.001%의 오류도 허용되지 않는 환경**에서는 다음 **4대 무결성 설계 원칙**을 반드시 적용해야 합니다.
+과업의 복잡도와 신뢰성 요구 수준에 따라 `Obsidian.Agent` 지식베이스 내의 3대 핵심 실행 프로토콜을 선택하여 적용합니다.
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor Developer as Human Engineer
-    participant Orch as "Master Orchestrator (Author)"
-    participant E1 as Stage 1: Data Auditor
-    participant E2 as Stage 2: Source Auditor
-    participant E3 as Stage 3: Typology Auditor
-    participant E4 as Stage 4: Legal/Law Auditor
+flowchart TD
+    Task["[과업 인입] 개발 / 수정 / 감사 요구사항"] --> Classify{"과업 성격 및 신뢰성 요구 수준"}
 
-    Orch->>E1: 사양서 초안 및 로그 전달 (검증 의뢰)
-    alt 수치 불일치 발견
-        E1-->>Orch: [GATE 1 FAIL] + 오차 2건 상세 피드백
-        Orch->>Orch: 물리적 C 코드 재분류 및 수치 정밀 보정
-        Orch->>E1: 재감사 요청
-        E1-->>Orch: [GATE 1 PASS] 승인 발행
-    end
-
-    Orch->>E2: C 소스 원문 Verbatim 실사 의뢰
-    E2-->>Orch: [GATE 2 PASS] 공백/주석 100% 일치 승인
+    Classify -- "모든 코드 수정 (상시 헌법)" --> P1["[상시 기반] Agent_Runtime_Operations_Protocol.md<br/>• Closed-Loop Invariant: 터미널 Exit Code 0 실사<br/>• 3-Strike 서킷 브레이커 & 원자적 롤백"]
     
-    Orch->>E3: 100% 전수 값 도메인 역추적 의뢰
-    E3-->>Orch: [GATE 3 PASS] 정탐/오탐 순도 100% 승인
-
-    Orch->>E4: C++ 컴파일러 AST 매처 및 DAPA 규격 법리 검증
-    E4-->>Orch: [GATE 4 PASS] 최고 신뢰성 등급 공인
-
-    Orch->>Developer: 최종 사양서 및 마스터 계획서 반영 보고
+    Classify -- "신규 기능 구현 / 대규모 리팩토링" --> P2["[일상 개발] Agent_Collaboration_Workflow_Guidelines.md<br/>• Orchestrator-Workers + 경량 Evaluator<br/>• 5단계 이중 계쇄 (Plan Audit ➔ Code QA Audit)"]
+    
+    Classify -- "국방 / 정적분석 사양서 무결성 검증" --> P3["[정밀 감사] Independent_Audit_Protocol_Guidelines.md<br/>• Strict 4-Stage Sequential Gated Evaluator<br/>• 0.000% 오차율 수렴 4단계 심층 계쇄 실사"]
 ```
 
-### 1) 심판과 선수의 절대 분리 (Separation of Author and Auditor)
-* 문서를 작성/수정하는 `Orchestrator`와 채점하는 `Auditor`는 **반드시 별도의 독립 컨텍스트(`invoke_subagent`)로 격리**되어야 합니다.
-* **Auditor는 파일 수정 권한(Write Tools)을 일체 갖지 않는 Read-Only 에이전트**여야 하며, 오직 `[PASS]` 또는 `[FAIL]` 판정과 결함 보고서만 제출합니다 (*Huang et al., ICLR 2024*).
-
-### 2) 순차적 품질 계쇄 (Strict Sequential Gating)
-* 병렬 감사의 함정(Parallel Over-Auditing)을 방지하기 위해, **앞 단계의 게이트가 `[PASS]`를 발행하기 전에는 다음 단계 감사관을 절대 호출하지 않습니다**.
-* 1단계(데이터/수치) ➔ 2단계(원문 Verbatim) ➔ 3단계(값 도메인 순도) ➔ 4단계(컴파일러 법리)의 계쇄 구조를 강제합니다.
-
-### 3) 100% 전수 물리 실사 (Zero Sampling Mandate)
-* 표본 조사(Sampling)는 엣지 케이스와 오탐을 놓칩니다.
-* 에이전트는 자체 파싱 프로그램을 구동하여 **1,000건이면 1,000건 전수를 디스크 상의 실제 물리적 소스코드 파일과 1:1로 대조(Ground-Truth Verification)**해야 합니다.
-
-### 4) 적대적 감사 태도 (Adversarial Red-Teaming)
-* 감사관은 작성자를 칭찬하거나 타협하는 것이 아니라, **"단 하나의 오차라도 찾아내어 불합격을 주겠다"는 레드팀 관점**으로 전수 검증을 수행합니다.
+| 과업 유형 | 적용 아키텍처 패턴 | 공식 실행 프로토콜 문서 | 핵심 행동 강령 |
+|---|---|---|---|
+| **상시 코딩 / 버그 픽스** | Closed-Loop Invariant | **[Agent_Runtime_Operations_Protocol.md](./Agent_Runtime_Operations_Protocol.md)** | 백그라운드 터미널 `Exit Code 0` Ground Truth 실사 + 3회 실패 시 즉각 원자적 롤백 |
+| **일상 개발 / 리팩토링** | Orchestrator-Workers + Lightweight Evaluator | **[Agent_Collaboration_Workflow_Guidelines.md](./Agent_Collaboration_Workflow_Guidelines.md)** | 5단계 이중 계쇄 파이프라인 (사전 탐색 ➔ 계획 감사 ➔ 책임 구현 ➔ QA 감사 ➔ 지식 동기화) |
+| **미션 크리티컬 사양서 감사** | Strict 4-Stage Sequential Gated Evaluator | **[Independent_Audit_Protocol_Guidelines.md](./Independent_Audit_Protocol_Guidelines.md)** | 4단계 순차 심층 계쇄(데이터 ➔ 원문 ➔ 값 도메인 ➔ 법리) 및 2회 연속 수렴 프로토콜 |
 
 ---
 
-## 5. 실전 적용 사례 연구 (Case Study: ArqaStatic 6,155건 전수 실사)
-
-### 5.1 프로젝트 개요
-* **과업**: 글로벌 표준 C 암호화 라이브러리(`mbedtls`) 대상 29개 체커, 총 6,155건의 정적분석 진단 결과 전수 오탐 분석.
-* **적용 아키텍처**: **`Gated Evaluator-Optimizer on Orchestrator-Workers`**
-
-### 5.2 실제 결함 교정 사례 (Checker 10: `ast-pointer-cv-qualifier-drop`)
-1. **초안 작성 (Orchestrator)**:
-   * 95건 분석 초안에서 정탐 25건(26.3%), 오탐 70건(73.7%)으로 분류.
-2. **1단계 실사 적발 (Evaluator-1 / Data Auditor)**:
-   * 95줄 전수 대조 중 `dhm.c:508`과 `x509_crt.c:1144` 2건이 비교문이 아닌 명시적 `(unsigned char *)` 캐스트임을 물리적 파일에서 적발.
-   * **`[GATE 1 FAIL]` 즉시 발행 및 반려**.
-3. **정밀 수정 (Orchestrator)**:
-   * 피드백을 수신하여 2건을 정탐으로 재분류, **정탐 27건(28.4%) / 오탐 68건(71.6%)**으로 사양서 및 도표 전면 수정.
-4. **재감사 및 최종 승인 (Evaluator-1 ➔ 2 ➔ 3 ➔ 4)**:
-   * 1단계 재감사 `[GATE 1 PASS]` ➔ 2단계 원문 실사 `[GATE 2 PASS]` ➔ 3단계 95건 물리 소스 순도 100% 입증 `[GATE 3 PASS]` ➔ 4단계 C++ AST Matcher 결함 증명 `[GATE 4 PASS]` 획득.
-* **결과**: **누적 5,800건 (94.2%)의 진단 결과를 0.000%의 오차 없이 완벽하게 공인 완료**.
-
----
-
-## 6. 멀티 에이전트 구축 시 7대 안티패턴 (Anti-Patterns to Avoid)
+## 5. 멀티 에이전트 구축 시 7대 안티패턴 (Anti-Patterns to Avoid)
 
 | # | 안티패턴 명칭 | 문제점 및 위험성 | 엔지니어링 해결책 |
 |---|---|---|---|
