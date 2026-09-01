@@ -34,6 +34,11 @@ related:
 
 ## 2. 순차적 4단계 심층 계쇄 감사 파이프라인 (표준 1회 모드)
 
+> [!CRITICAL]
+> **순차 계쇄 물리적 호출 규칙 (Strict Sequential Gating Invariant)**
+> * `invoke_subagent` 도구를 호출할 때 `Subagents` 배열에는 **반드시 현재 단계의 감사관 1명만 단독(`Subagents.Length == 1`)으로 전달**해야 합니다.
+> * 메인 대화 세션에 직전 단계의 `[GATE N PASS]` 판정 문자열이 공식 수신 및 확인되기 전에 다음 단계(Stage N+1)를 미리 호출하거나 4개 단계를 한 번에 일괄 소환(Premature Parallelization 안티패턴)하는 행위를 절대 금지합니다.
+
 ```mermaid
 flowchart TD
     Doc["검증 대상 문서 (Specification / Report)"]
