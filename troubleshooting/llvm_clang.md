@@ -206,5 +206,28 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 3. 해결책 (Resolution)
 1. **`NoAutoTypeCheck.h`**: `isLanguageVersionSupported(const LangOptions &LangOpts)`를 추가하여 `LangOpts.CPlusPlus11` 가드 적용 (C++11 이상 한정).
-2. **`NoAutoTypeCheck.cpp`**: `AutoTypeMatcher`를 `qualType(anyOf(hasUnqualifiedDesugaredType(autoType()), pointsTo(...), references(...)))`로 재구성하여 복합 `auto` 타입을 전수 매칭하고, `unless(isImplicit())` 가드를 추가하여 컴파일러 생성 임시 변수 오탐을 100% 차단.
+2. **`NoAutoTypeCheck.cpp`**: `AutoTypeMatcher`를 `qualType(anyOf(autoType(), pointsTo(qualType(autoType())), references(qualType(autoType()))))`로 재구성하여 복합 `auto` 타입을 전수 매칭하고, `unless(isImplicit())` 가드를 추가하여 컴파일러 생성 임시 변수 오탐을 100% 차단.
 3. **`ARQAModule.cpp`**: `#include "NoAutoTypeCheck.h"` 및 `Factories.registerCheck<NoAutoTypeCheck>("ast-no-auto-type")` 주석 해제 및 정규 재등록.
+
+---
+
+## 2026-09-01: 분석 엔진 중간 산출물(임시 JSON) 세션 격리 및 완전 자동 정화 (Data Contamination 방지)
+
+### 1. 현상 (Symptom)
+* `function-call-graph` (`Final_CallGraph.json`) 및 `ast-global-symbol-uniqueness` (`GlobalSymbols.json`) 분석 완료 후, 사용자 프로젝트 루트 폴더(`ProjectPath`)에 임시 JSON 파일이 잔존.
+* 이후 단일 파일 재분석이나 특정 체커만 선택하여 분석할 때, 프로젝트 폴더에 남아있던 과거 분석의 JSON 파일이 C# UI에 무조건 읽혀 들어와 이전 분석의 호출 관계(Fan-In/Out)나 심볼 중복 결함이 신규 분석 화면에 대량으로 오염 주입(Data Contamination)되는 문제 발생.
+
+### 2. 원인 (Root Cause)
+* **고정된 상대 경로 생성**: Clang-Tidy C++ 체커가 기본적으로 작업 디렉토리(프로젝트 루트)에 `Final_CallGraph.json` 및 `GlobalSymbols.json`을 작성함.
+* **파싱 후 디스크 파일 방치**: C# UI(`MainViewModel.FinalizeAnalysisAsync`)에서 JSON을 읽어 메모리 모델(`Diagnostics`, `MetricReportViewModel`)에 적재한 후, 디스크의 원본 JSON 파일을 삭제하지 않고 그대로 방치.
+* **C++ 소멸자의 조건부 스킵**: 체커가 아무것도 수집하지 못한 경우 소멸자에서 `if (empty()) return;`으로 인해 기존 파일을 0바이트로 덮어쓰지 않고 과거 파일이 그대로 살아남음.
+
+### 3. 해결책 (Resolution)
+1. **OS 임시 폴더 세션 격리 (`%TEMP%\ArqaStatic_Session_{GUID}\`)**:
+   * `IClangTidyRunnerService` 및 `ClangTidyRunnerService`에 `sessionTempDir` 매개변수를 추가하고, YAML `CheckOptions`에 `function-call-graph.OutputPath` 및 `ast-global-symbol-uniqueness.OutputPath`를 세션 임시 경로로 동적 주입하여 사용자 프로젝트 폴더 내 파일 생성을 원천 차단.
+2. **메모리 적재 즉시 파기 (Read & Destroy)**:
+   * `MainViewModel.FinalizeAnalysisAsync`에서 `GlobalSymbols.json` 및 `Final_CallGraph.json`을 파싱하여 인메모리 객체로 변환한 직후, `finally` 블록에서 해당 임시 JSON 파일을 즉시 삭제.
+3. **라이프사이클 마스터 청소 (`AnalyzeAsync` master finally)**:
+   * 분석 정상 종료, 사용자 취소(`OperationCanceledException`), 런타임 예외 발생 시 `AnalyzeAsync`의 `finally` 구문에서 `sessionTempDir` 전체를 재귀 삭제(`Directory.Delete`)하여 디스크 누수 100% 방지.
+4. **인메모리 메트릭 보존 방어 (`UpdateMetricReport`)**:
+   * 임시 JSON 파일 삭제 후 UI 탭 전환이나 임계값 변경 시, 이미 메모리에 적재된 `FunctionMetrics`를 보존하면서 통계 상태를 안전하게 갱신하도록 방어.
