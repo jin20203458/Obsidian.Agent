@@ -30,14 +30,15 @@ related:
 3. **서킷 브레이커 (Circuit Breaker)**:
    * 동일 Gate 3회 연속 실패 또는 다회차 감사 4회 초과 시, 작업을 즉시 자동 정지하고 인간 개발자에게 에스컬레이션합니다.
 
+> [!CRITICAL]
+> **전역 물리적 호출 불변식 (Strict Single-Subagent Invariant)**
+> * **[적용 범위]**: 표준 1회 모드 및 초고신뢰성 2회 수렴 모드를 포함한 **모든 감사 모드와 모든 라운드에 예외 없이 100% 강제 적용**됩니다.
+> * `invoke_subagent` 도구를 호출할 때 `Subagents` 배열에는 **반드시 현재 단계의 감사관 1명만 단독(`Subagents.Length == 1`)으로 전달**해야 합니다.
+> * 1차(Round 1)든 2차(Round 2)든, 직전 Gate의 `[GATE N PASS]` 판정 문자열이 메인 대화 세션에 공식 수신 및 확인되기 전에 다음 단계(Stage N+1) 감사관을 미리 호출하거나 일괄 소환(Premature Parallelization 안티패턴)하는 행위를 절대 금지합니다.
+
 ---
 
 ## 2. 순차적 4단계 심층 계쇄 감사 파이프라인 (표준 1회 모드)
-
-> [!CRITICAL]
-> **순차 계쇄 물리적 호출 규칙 (Strict Sequential Gating Invariant)**
-> * `invoke_subagent` 도구를 호출할 때 `Subagents` 배열에는 **반드시 현재 단계의 감사관 1명만 단독(`Subagents.Length == 1`)으로 전달**해야 합니다.
-> * 메인 대화 세션에 직전 단계의 `[GATE N PASS]` 판정 문자열이 공식 수신 및 확인되기 전에 다음 단계(Stage N+1)를 미리 호출하거나 4개 단계를 한 번에 일괄 소환(Premature Parallelization 안티패턴)하는 행위를 절대 금지합니다.
 
 ```mermaid
 flowchart TD
