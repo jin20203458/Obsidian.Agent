@@ -31,10 +31,10 @@ related:
    * 동일 Gate 3회 연속 실패 또는 다회차 감사 4회 초과 시, 작업을 즉시 자동 정지하고 인간 개발자에게 에스컬레이션합니다.
 
 > [!CRITICAL]
-> **전역 물리적 호출 불변식 (Strict Single-Subagent Invariant)**
-> * **[적용 범위]**: 표준 1회 모드 및 초고신뢰성 2회 수렴 모드를 포함한 **모든 감사 모드와 모든 라운드에 예외 없이 100% 강제 적용**됩니다.
-> * `invoke_subagent` 도구를 호출할 때 `Subagents` 배열에는 **반드시 현재 단계의 감사관 1명만 단독(`Subagents.Length == 1`)으로 전달**해야 합니다.
-> * 1차(Round 1)든 2차(Round 2)든, 직전 Gate의 `[GATE N PASS]` 판정 문자열이 메인 대화 세션에 공식 수신 및 확인되기 전에 다음 단계(Stage N+1) 감사관을 미리 호출하거나 일괄 소환(Premature Parallelization 안티패턴)하는 행위를 절대 금지합니다.
+> **단계별 서브에이전트 단독 소환 불변식 (Strict Single-Subagent Invariant)**
+> * **[적용 범위]**: 모든 워크플로우, 모든 감사 모드 및 모든 라운드에 **예외 없이 100% 강제 적용**됩니다.
+> * `invoke_subagent` 도구를 호출할 때 `Subagents` 배열에는 **반드시 현재 단계에서 필요한 서브에이전트 1개만 단독(`Subagents.Length == 1`)으로 전달**해야 합니다.
+> * 직전 Gate의 공식 통과 판정(예: `[GATE N PASS]`, `Exit Code 0`)이 메인 대화 세션에 수신 및 확정되기 전에 후속 단계 에이전트를 미리 호출하거나 일괄 소환하는 **조기 병렬화(Premature Parallelization 안티패턴)를 절대 금지**합니다.
 
 ---
 

@@ -46,10 +46,10 @@ flowchart TD
 일반적인 코드 작업(기능 추가, 리팩토링, 버그 수정) 시 에이전트가 반드시 순차적으로 거쳐야 하는 **표준 실행 루프**입니다.
 
 > [!CRITICAL]
-> **단계별 서브에이전트 단독 소환 규칙 (Step-by-Step Invocation Invariant)**
+> **단계별 서브에이전트 단독 소환 불변식 (Strict Single-Subagent Invariant)**
+> * **[적용 범위]**: 모든 워크플로우, 모든 감사 모드 및 모든 라운드에 **예외 없이 100% 강제 적용**됩니다.
 > * `invoke_subagent` 도구를 호출할 때 `Subagents` 배열에는 **반드시 현재 단계에서 필요한 서브에이전트 1개만 단독(`Subagents.Length == 1`)으로 전달**해야 합니다.
-> * `Step 0 사전 탐색`, `Step 1 계획 감사(Gate 1)`, `Step 3 QA 감사(Gate 2)` 서브에이전트를 한 번에 일괄 소환(Premature Parallelization 안티패턴)하는 행위를 절대 금지합니다.
-> * 각 단계의 선행 조건(Step 0 포인터 수신 ➔ Step 1 계획 수립 및 Gate 1 PASS ➔ Step 2 메인 구현 완료)이 확인된 후에만 다음 단계의 서브에이전트를 순차적으로 호출합니다.
+> * 직전 Gate의 공식 통과 판정(예: `[GATE N PASS]`, `Exit Code 0`)이 메인 대화 세션에 수신 및 확정되기 전에 후속 단계 에이전트를 미리 호출하거나 일괄 소환하는 **조기 병렬화(Premature Parallelization 안티패턴)를 절대 금지**합니다.
 
 ```mermaid
 flowchart TD
