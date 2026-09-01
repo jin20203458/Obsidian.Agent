@@ -189,5 +189,22 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
    * `ClangTidyRunnerService`: 타겟 플랫폼 옵션에 맞춰 `--target=<triple>` 및 플랫폼 전용 가드 매크로를 무음 자동 주입하고, 크로스 컴파일 시 호스트 시스템 헤더 자동 탐색을 억제.
    * `IncludePathWindow.xaml`: 드롭다운 및 실시간 감지 상태 칩을 제공하여 사용자에게 완전한 제어권과 시각적 피드백 제공.
 
+---
 
+## 2026-09-01: NoAutoTypeCheck (`ast-no-auto-type`) 컴파일러 암시적 변수 오탐 및 복합 auto 타입 미탐 해결
 
+### 1. 현상 (Symptom)
+* DAPA 국방 규격 `공통(스타일) c. 함수/변수의 선언 시 type을 명시해야 한다 (auto 사용 제한)` 검증용 체커인 `ast-no-auto-type` 사용 시:
+  1. `for (int x : vec)` 등 개발자가 명시적 타입을 적은 정상적인 C++11 범위 기반 `for` 루프에서 한 줄당 3건의 허위 오탐(False Positive) 발생.
+  2. `auto *p = &x;`, `const auto &ref = x;`, `auto&& r = std::move(x);` 등 복합 포인터/참조 `auto` 변수 선언이 검출되지 않는 미탐(False Negative) 발생.
+  3. C++14 자동 반환형 함수 중 `auto& getRef()`, `auto* getPtr()` 등 참조/포인터 반환형 함수가 미탐.
+
+### 2. 원인 (Root Cause)
+* **범위 기반 for 루프 오탐**: Clang AST에서 `for-range` 루프 처리 시 내부적으로 `auto &&__range`, `auto __begin`, `auto __end`와 같은 컴파일러 암시적 `VarDecl`(`isImplicit() == true`)을 자동 생성함. 기존 매처 `varDecl(hasType(autoType()))`에 `unless(isImplicit())` 가드가 없어 컴파일러 내부 변수를 감지함.
+* **복합 auto 타입 미탐**: `const auto&`는 `LValueReferenceType(AutoType)`, `auto*`는 `PointerType(AutoType)`으로 `AutoType`이 래핑되어 있어 단순 `hasType(autoType())`으로 매칭되지 않음.
+* **언어 버전 필터 부재**: `isLanguageVersionSupported` 오버라이드가 없어 C99/C89 등 C 언어 프로젝트 분석 시에도 불필요하게 활성화됨.
+
+### 3. 해결책 (Resolution)
+1. **`NoAutoTypeCheck.h`**: `isLanguageVersionSupported(const LangOptions &LangOpts)`를 추가하여 `LangOpts.CPlusPlus11` 가드 적용 (C++11 이상 한정).
+2. **`NoAutoTypeCheck.cpp`**: `AutoTypeMatcher`를 `qualType(anyOf(hasUnqualifiedDesugaredType(autoType()), pointsTo(...), references(...)))`로 재구성하여 복합 `auto` 타입을 전수 매칭하고, `unless(isImplicit())` 가드를 추가하여 컴파일러 생성 임시 변수 오탐을 100% 차단.
+3. **`ARQAModule.cpp`**: `#include "NoAutoTypeCheck.h"` 및 `Factories.registerCheck<NoAutoTypeCheck>("ast-no-auto-type")` 주석 해제 및 정규 재등록.
