@@ -133,34 +133,57 @@ flowchart TD
 flowchart TD
     Doc["검증 대상 문서"]
 
-    Round1["[Round 1] 1차 4단계 계쇄 실사 (Agent 1~4)"]
-    R1_Pass{"Round 1 전원 PASS?"}
-    
-    Round2["[Round 2] 2차 4단계 계쇄 실사 (Agent 1'~4' 신규 소환)"]
-    R2_Pass{"Round 2 전원 PASS?"}
+    subgraph Round1 ["Round 1: 1차 4단계 심층 계쇄"]
+        R1S1["[R1S1] 1차 데이터/수치 감사관"] --> R1G1{"R1 Gate 1 PASS?"}
+        R1G1 -- Pass --> R1S2["[R1S2] 1차 소스 원문 감사관"] --> R1G2{"R1 Gate 2 PASS?"}
+        R1G2 -- Pass --> R1S3["[R1S3] 1차 값 도메인/적발력 감사관"] --> R1G3{"R1 Gate 3 PASS?"}
+        R1G3 -- Pass --> R1S4["[R1S4] 1차 엔진 제약/법리 감사관"] --> R1G4{"R1 Gate 4 PASS?"}
+    end
 
-    CheckMatch{"Round 1 결과 == Round 2 결과?<br>(수치/판정 100% 동일?)"}
-    UltraCertified["✅ 초고신뢰성 공인 완료 (Ultra-High Certified)"]
+    subgraph Round2 ["Round 2: 2차 4단계 심층 계쇄 (완전 신규 에이전트 4인)"]
+        R2S1["[R2S1] 2차 데이터/수치 감사관"] --> R2G1{"R2 Gate 1 PASS?"}
+        R2G1 -- Pass --> R2S2["[R2S2] 2차 소스 원문 감사관"] --> R2G2{"R2 Gate 2 PASS?"}
+        R2G2 -- Pass --> R2S3["[R2S3] 2차 값 도메인/적발력 감사관"] --> R2G3{"R2 Gate 3 PASS?"}
+        R2G3 -- Pass --> R2S4["[R2S4] 2차 엔진 제약/법리 감사관"] --> R2G4{"R2 Gate 4 PASS?"}
+    end
+
+    CheckMatch{"Round 1 결과 == Round 2 결과?<br>(수치/판정/체커 100% 동일 수렴?)"}
+    UltraCertified["초고신뢰성 공인 완료 (Ultra-High Certified)"]
     SelfHealing["사양서 수정 및 Round N+1 재실사"]
     CheckLimit{"감사 횟수 > 4회 초과?"}
-    CircuitBreaker["🛑 서킷 브레이커 발동<br>(작업 정지 및 인간 개발자 에스컬레이션)"]
+    CircuitBreaker["서킷 브레이커 발동<br>(작업 정지 및 인간 개발자 에스컬레이션)"]
 
-    Doc --> Round1 --> R1_Pass
-    R1_Pass -- Pass --> Round2 --> R2_Pass
-    R1_Pass -- Fail --> SelfHealing
-    R2_Pass -- Pass --> CheckMatch
-    R2_Pass -- Fail --> SelfHealing
+    Doc --> Round1
+    R1G1 -- Fail --> SelfHealing
+    R1G2 -- Fail --> SelfHealing
+    R1G3 -- Fail --> SelfHealing
+    R1G4 -- Fail --> SelfHealing
 
-    CheckMatch -- Yes (일치) --> UltraCertified
+    R1G4 -- Pass --> Round2
+    R2G1 -- Fail --> SelfHealing
+    R2G2 -- Fail --> SelfHealing
+    R2G3 -- Fail --> SelfHealing
+    R2G4 -- Fail --> SelfHealing
+
+    R2G4 -- Pass --> CheckMatch
+    CheckMatch -- Yes (100% 일치) --> UltraCertified
     CheckMatch -- No (변동 발생) --> CheckLimit
     CheckLimit -- No (<= 4회) --> SelfHealing --> Round2
     CheckLimit -- Yes (> 4회) --> CircuitBreaker
 ```
 
 ### 초고신뢰성 옵션 운영 규칙
-1. **2회 연속 동일 수렴**: 1차 4단계 통과 후, 완전히 새로운 4대 독립 에이전트를 투입하여 2차 감사를 재실행. 1차와 2차의 결과(TP/FP 수치, 패턴 분류)가 100% 동일할 때만 최종 공인.
-2. **변동 시 자가 치유(Self-Healing)**: 2차에서 변동 발생 시 사양서를 올바른 Ground Truth로 수정한 후 3차 감사를 진행하여 직전 회차와 2연속 일치할 때까지 검증.
-3. **4회 한도 서킷 브레이커**: 총 4회를 초과할 때까지 수렴하지 못하면 AI 판단을 중단하고 인간 개발자에게 에스컬레이션.
+
+1. **전 라운드 4단계 순차 심층 계쇄 불변식 (Strict 4-Stage Invariant per Round)**:
+   * **[라운드 일괄 통합(Round Collapse) 절대 금지]**: Round 2(및 후속 Round N)를 단일 '종합 수렴 감사관' 1인에게 위임하여 4개 단계를 단일 태스크로 통합하거나 축약하는 행위는 엄격히 금지됩니다.
+   * Round 1과 동일하게 Round 2 역시 `R2S1 (데이터/수치)` $\rightarrow$ `R2S2 (소스 원문)` $\rightarrow$ `R2S3 (값 도메인/실제 적발력)` $\rightarrow$ `R2S4 (엔진 제약/규격 법리)`의 **4인 독립 에이전트를 1인씩 순차 단독 소환(`Subagents.Length == 1`)하여 4개 게이트를 개별적으로 완수**해야 합니다. (총 $4 \text{ 단계} \times 2 \text{ 라운드} = 8\text{회}$ 순차 계쇄 필수).
+2. **2회 연속 동일 수렴 (Dual-Round Convergence)**:
+   * 1차 4단계(R1S1~R1S4) 전원 통과 후, 완전히 새로운 4인의 독립 에이전트(R2S1~R2S4)가 2차 4단계를 순차적으로 통과해야 합니다.
+   * 1차와 2차의 모든 정량적 수치(TP/FP/Unmapped 카운트), 매핑 체커 심볼, 값 도메인 분석 결과가 100.0% 오차 없이 동일하게 수렴할 때만 최종 공인(`[ULTRA-HIGH CONVERGENCE CERTIFIED]`)이 발급됩니다.
+3. **변동 시 자가 치유(Self-Healing)**:
+   * 2차 라운드 도중 불일치 또는 결함 발생 시, 사양서를 올바른 Ground Truth로 수정한 후 3차 라운드(R3S1~R3S4)를 4단계 순차 구조로 진행하여 직전 회차와 2연속 완전 일치할 때까지 검증합니다.
+4. **4회 한도 서킷 브레이커 (Circuit Breaker)**:
+   * 총 4회 라운드를 초과할 때까지 2회 연속 수렴에 도달하지 못하면 AI 자율 처리를 즉시 중단하고 인간 개발자에게 에스컬레이션합니다.
 
 ---
 
