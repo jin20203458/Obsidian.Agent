@@ -231,3 +231,24 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
    * 분석 정상 종료, 사용자 취소(`OperationCanceledException`), 런타임 예외 발생 시 `AnalyzeAsync`의 `finally` 구문에서 `sessionTempDir` 전체를 재귀 삭제(`Directory.Delete`)하여 디스크 누수 100% 방지.
 4. **인메모리 메트릭 보존 방어 (`UpdateMetricReport`)**:
    * 임시 JSON 파일 삭제 후 UI 탭 전환이나 임계값 변경 시, 이미 메모리에 적재된 `FunctionMetrics`를 보존하면서 통계 상태를 안전하게 갱신하도록 방어.
+
+---
+
+## 2026-09-04: PartialCopyAssignmentCheck (`ast-partial-copy-assignment`) C++ 클래스/구조체 멤버 대입 오탐지 해결
+
+### 1. 현상 (Symptom)
+* DAPA C++ 전용 i (Rule 60: `copy operator를 통해서, 복사되지 않는 멤버 변수가 존재하지 말아야 한다`) 검증용 체커인 `ast-partial-copy-assignment` 분석 시:
+  * 클래스/구조체 멤버 변수(예: `Coordinate pos;`)를 `operator=`에서 정상적으로 전수 복사(`pos = rhs.pos;` 혹은 `pos.lat = rhs.pos.lat;`)하였음에도 불구하고, 준수 코드에서 `"멤버 변수 'pos'이(가) 복사 대입 연산자에서 대입되지 않았습니다"`라는 허위 오탐(False Positive) 발생.
+
+### 2. 원인 (Root Cause)
+* Clang AST에서 기본형(int/float), 포인터, 열거형, 비트필드의 대입은 `BinaryOperator(BO_Assign)` 노드로 생성되지만, 사용자 정의 클래스나 구조체 타입 객체의 `=` 대입은 오버로딩된 멤버 함수 호출인 `CXXOperatorCallExpr` 노드로 생성됨.
+* `PartialCopyAssignmentCheck.cpp`의 `AssignmentVisitor`가 `VisitBinaryOperator`만을 순회하도록 작성되어 있어, 구조체/클래스 멤버 객체의 `CXXOperatorCallExpr` 대입을 전혀 인지하지 못하고 미대입으로 오판함.
+
+### 3. 해결책 (Resolution)
+1. **`extractRootFieldDecl` 헬퍼 함수 구현**:
+   * `LHS` 표현식이 중첩 멤버 접근(`this->pos.lat`)이더라도 `MemberExpr::getBase()` 체인을 역추적하여 최상위 필드(`FieldDecl`)인 `pos`를 정확히 추출.
+2. **`VisitCXXOperatorCallExpr` 핸들러 추가**:
+   * `OCE->getOperator() == OO_Equal`인 경우, 첫 번째 인자(`OCE->getArg(0)`)에서 루트 `FieldDecl`을 추출하여 `AssignedFields`에 등록하도록 조치.
+3. **빌드 검증 완료**:
+   * `cmake --build .\build --config Release --target clang-tidy` 성공 (Exit Code 0). 구조체/클래스 멤버 정상 대입 시 오탐 0건(100% Clean) 달성.
+
