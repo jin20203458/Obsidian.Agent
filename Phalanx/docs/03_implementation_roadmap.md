@@ -16,7 +16,7 @@ related:
 ## 1. 단계별 구현 마일스톤 흐름
 
 ```
-[ Phase 1: Sensor & IPC ] ──▶ [ Phase 2: Core & Reflex ] ──▶ [ Phase 3: AI Agent & Tools ] ──▶ [ Phase 4: Cockpit & Assets ]
+[ Phase 1: Sensor & IPC ] ──▶ [ Phase 2: Core & Reflex ] ──▶ [ Phase 3: AI Agent & Tools ] ──▶ [ Phase 4: Cockpit & Presentation ]
   • ETW 커널 수집 루프       • gRPC 양방향 수신 파이프라인 • ReAct 추론 루프              • WPF 노드 그래프 UI
   • 락-스왑 무손실 버퍼      • LiteDB 프로세스 트리        • 5대 OS 도구 호출 체계        • QuestPDF 침해사고 리포트
   • Suspend/Kill 액추에이터  • 로컬 결정론적 룰 엔진       • Fallback 모드 전환 검증      • E2E 차단 시나리오 데모화
@@ -46,7 +46,7 @@ related:
   * .NET 8/9 C# `Phalanx.Core` 프로젝트 생성 및 gRPC 수신 서비스 구축.
   * `LiteDB 5.0` 기반의 임베디드 Threat Graph 메모리 구축 (프로세스 부모-자식 트리 및 인과 관계망 매핑).
   * gRPC `StreamTelemetry` 양방향 스트림의 역방향 응답 채널을 통한 `MitigationCommand` 하달 연동.
-  * **결정론적 1차 룰 엔진 (Deterministic Engine)** 구축:
+  * **결정론적 1차 룰 엔진 (Deterministic Rule Engine)** 구축:
     * *규칙 1: `winword.exe`, `excel.exe` ➔ 자식 `powershell.exe`, `cmd.exe` 스폰 감지.*
     * *규칙 2: 명령줄 인자에 `-enc`, `-EncodedCommand`, `DownloadString` 포함 여부 판별.*
   * 규칙 충족 시 C++ 센서로 `ACTION_KILL` 명령을 자동 하달.

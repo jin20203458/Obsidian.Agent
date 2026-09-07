@@ -196,7 +196,7 @@ service PhalanxService {
 * 부모-자식 트리 역추적을 통해 루트 진입점(Initial Access, 예: 메일 클라이언트 또는 웹 브라우저)을 O(h) 복잡도로 신속하게 규명합니다.
 
 ### B. 이중화 디시전 라우터 (Decision Router)
-* **결정론적 룰 엔진 (Deterministic Engine)**:
+* **결정론적 룰 엔진 (Deterministic Rule Engine)**:
   * 명확한 시그니처 및 Sigma 룰 조건 매칭 시 외부 API 호출 없이 즉시 `ACTION_KILL` 명령을 생성.
 * **자율 AI 에이전트 (Autonomous Agent)**:
   * 모호한 회색지대(Unknown / Heuristic Score 경계치) 이벤트 감지 시 활성화되어 ReAct 루프를 가동 (세부 사양은 [02_ai_agent_investigation_design.md](./02_ai_agent_investigation_design.md) 참조).
