@@ -185,3 +185,38 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 3. **빌드 검증 완료**:
    * `cmake --build .\build --config Release --target clang-tidy` 성공 (Exit Code 0). 구조체/클래스 멤버 정상 대입 시 오탐 0건(100% Clean) 달성.
 
+---
+
+## 2026-09-07: ThreadLockChecker (`path-sensitive-arqa.ThreadLock`) 함수 조기 반환 락 누수 미탐 및 NewDeleteLeaks 연동 해결
+
+### 1. 현상 (Symptom)
+* CWE-404(부적절한 자원 해제) 정적 검증 시, `pthread_mutex_lock` 또는 `EnterCriticalSection` 획득 후 조건부 에러 분기나 조기 반환(`return -1;`) 시 `unlock`을 호출하지 않는 심각한 교착 상태(데드락) 결함에 대해 `ThreadLockChecker`가 0건 미탐(Silent Failure)을 발생시킴.
+* 또한 C++ `new`/`new[]`로 할당된 힙 메모리 누수 검출을 위한 `path-sensitive-cplusplus.NewDeleteLeaks` 체커가 UI/프로필에 등록되지 않아 C++ 힙 누수가 연동되지 못함.
+
+### 2. 원인 (Root Cause)
+1. **`checkDeadSymbols` 콜백의 구조적 한계**:
+   * 전역 변수나 포인터로 전달된 동기화 객체(`pthread_mutex_t`)는 함수가 종료되거나 반환된 이후에도 메모리 상에 살아있어 `SymReaper.isLiveRegion(LockR)`이 항상 `true`를 반환함.
+   * 따라서 심볼 소멸 기반 검사기(`checkDeadSymbols`)로는 함수 조기 탈출 시점의 락 누수를 결코 인지할 수 없음.
+2. **함수 종료 검열 콜백(`check::EndFunction`) 부재**:
+   * 함수 실행 흐름이 완료되는 시점(`ReturnStmt` 또는 함수 바디 끝)에서 잔여 잠금 상태를 평가하는 훅이 누락되어 있었음.
+3. **인라인 래퍼 함수 오탐 방지 가드 부재**:
+   * 락 획득 전용 래퍼 함수(예: `void acquire(pthread_mutex_t *m) { pthread_mutex_lock(m); }`)의 경우 상위 호출자에게 잠긴 상태로 반환하는 것이 정상이므로, 하위 인라인 프레임 종료 시점에 조기 진단하면 허위 오탐이 발생함.
+4. **에러 노드 체이닝 오류**:
+   * `reportBug()` 내부에서 `C.generateErrorNode()`를 무조건 재호출하여 선행 노드와의 연결이 끊기거나 싱크 노드 중복 생성으로 인해 분석이 중단되거나 리포트가 소실됨.
+
+### 3. 해결책 (Resolution)
+1. **`ThreadLockChecker.cpp` 아키텍처 개편**:
+   * `LockEntry` 구조체 정의 (`LockState State; const StackFrameContext *AcquiredFrame;`) 및 `REGISTER_MAP_WITH_PROGRAMSTATE(LockMap, const MemRegion *, LockEntry)` 도입.
+   * `check::EndFunction` 인터페이스 구현:
+     - `if (!C.inTopFrame()) return;` 가드레일을 적용하여 인라인 락 래퍼의 조기 오탐 원천 차단.
+     - 현재 최상위 스택 프레임(또는 그 인라인된 자식 프레임)에서 획득된 후 함수 종료 시점까지 `Locked` 상태인 락 객체를 전수 색출.
+     - `generateNonFatalErrorNode`를 적용하여 에러 노드 체이닝 보장.
+2. **체커 레지스트리 및 한글화 완비**:
+   * `Checkers.json`, `ComplianceRuleProvider.cs`, `CheckerProfiles.json`에 `path-sensitive-cplusplus.NewDeleteLeaks` 및 `path-sensitive-arqa.ThreadLock` 정규 등록 및 한글 프로필 연동.
+   * C# 솔루션 컴파일(`dotnet build`): 경고 0개, 오류 0개 (Exit Code 0).
+3. **36종 초고강도 리그레션 테스트 검증**:
+   * `test_cwe404_regression_36.cpp`: `NewDeleteLeaks`(12종), `ThreadLock`(12종), `Stream`(6종), `Malloc`(6종).
+   * 취약 18건 전수 정탐 (100.0%), 준수 18건 오탐 0건 (100% Clean / 0.0% FP).
+4. **공식 1:1 실측 완료**:
+   * Cppcheck 3/4 (75.0%) vs ARQA 4/4 (100.0%) [ARQA 우세].
+
