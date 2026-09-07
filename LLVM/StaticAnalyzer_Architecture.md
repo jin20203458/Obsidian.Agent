@@ -12,13 +12,13 @@ related:
 
 ---
 
-##  주요 아키텍처 개요
+## 주요 아키텍처 개요
 
 ### 1. Clang-Tidy (AST 기반 구문 분석)
-* **목적**: C++ 소스코드의 AST(Abstract Syntax Tree)를 파싱하여 무기체계 SW 코딩 규칙(CWE/CERT 등) 위배 여부를 패턴 매칭 형태로 정밀 검사합니다.
+* **목적**: C/C++ 소스코드의 AST(Abstract Syntax Tree)를 파싱하여 안전 크리티컬(Safety-Critical) 코딩 표준(CWE, CERT, MISRA 등) 위배 여부를 패턴 매칭 형태로 정밀 검사합니다.
 * **주요 특징**:
   * AST Matcher를 활용하여 빠른 패턴 검출 및 자동 치유(Quick Fix) 대응.
-  * `clang-tools-extra/clang-tidy/ARQA/` 내에 개별 Tidy 룰 정의.
+  * `clang-tools-extra/clang-tidy/<CustomModule>/` 내에 개별 Tidy 룰 정의 및 모듈 등록.
 
 ### 2. Clang Static Analyzer (경로 민감 분석)
 * **목적**: 프로그램의 실행 흐름을 심볼릭 실행(Symbolic Execution)하며 메모리 누수, Use-After-Free, 상수 조건식 결함 등 논리적인 결함을 수학적으로 증명 및 탐지합니다.
@@ -28,6 +28,6 @@ related:
 
 ---
 
-##  개발 및 참조 템플릿
-* **체커 상태 모델링 규칙**: 분기(Assume) 조건문 평가 시 상태 갈라짐(Post-Split) 문제를 방지하기 위해 반드시 `checkBranchCondition` 내에서 `C.getPredecessor()`를 통한 선행 상태 역추적 기법을 유지하십시오. (상세 내용은 [troubleshooting/llvm_clang.md](../troubleshooting/llvm_clang.md) 참조)
-* **빌드 스크립트 규격**: 증분 컴파일러 빌드를 위해 `Release` 사양으로 `clang` 단일 타겟 빌드를 기본으로 수행합니다.
+## 빌드 및 검증 규격
+* **빌드 스크립트 규격**: 증분 컴파일러 빌드를 위해 `Release` 사양으로 `clang` 및 `clang-tidy` 단일 타겟 빌드를 기본으로 수행합니다.
+* **트러블슈팅 런북**: 체커 개발 및 컴파일러 엔진 예외 조치에 관한 실전 디버깅 기록은 [troubleshooting/llvm_clang.md](../troubleshooting/llvm_clang.md)를 참조하십시오.
