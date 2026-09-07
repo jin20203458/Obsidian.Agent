@@ -30,8 +30,12 @@ related:
 - **GRC/**: GenAI Roleplay Chat(GRC) 데스크톱 클라이언트의 아키텍처 및 구현 기술 노트를 다루는 폴더
   - [GRC Index](./GRC/README.md): GRC 프로젝트 전용 문서 인덱스
 
+- **Phalanx/**: AI 증강형 엔드포인트 탐지 및 대응(EDR) 솔루션의 아키텍처 및 구현 기술 노트를 다루는 폴더
+  - [Phalanx Index](./Phalanx/README.md): Phalanx 프로젝트 전용 문서 인덱스
+
 
 - **troubleshooting/**: 중앙 집중형 트러블슈팅 및 런북 보관 폴더
+  - [phalanx.md](troubleshooting/phalanx.md): Phalanx C++ 센서 & C# 코어 장애 조치 로그
   - [llvm_clang.md](troubleshooting/llvm_clang.md): LLVM/Clang 커스텀 체커 및 Static Analyzer 장애 조치 로그
   - [mundus_vivens.md](troubleshooting/mundus_vivens.md): C# AI Server & C++ Game Server 장애 조치 로그
   - [git_and_os.md](troubleshooting/git_and_os.md): 공통 OS 및 Git 환경 오류 장애 조치 로그
