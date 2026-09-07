@@ -5,7 +5,21 @@ related:
   - ../README.md
   - ./01_system_architecture.md
 ---
-# Phalanx: AI-Augmented Endpoint Detection & Response (EDR)
+# Project Overview
+> **부제**: Phalanx 프로젝트 개요
+
+> **한 줄 요약**: 초저지연 Windows ETW 커널 텔레메트리와 자율 AI 위협 헌팅 에이전트(Autonomous Hunter Agent)가 융합된 차세대 엔드포인트 탐지 및 대응(EDR) 시스템.
+
+---
+
+## 저장소 안내 (Repository Overview)
+
+Phalanx 프로젝트의 코드 및 아키텍처 구현체는 아래 링크에서 확인할 수 있습니다.
+
+- [C++ 센서 및 C# EDR 솔루션 (Phalanx)](https://github.com/jin20203458/phalanx) - C++20 ETW 센서, gRPC 양방향 스트리밍, C# Core 및 WPF 관제 콘솔 통합 저장소
+- [지식베이스 (Obsidian.Agent)](https://github.com/jin20203458/Obsidian.Agent) - 본 문서를 포함한 프로젝트 공식 기술 명세서 및 아키텍처 문서 모음
+
+---
 
 ## 1. 프로젝트 비전 (Vision)
 
