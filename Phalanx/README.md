@@ -3,6 +3,7 @@ description: >-
   Phalanx (AI-Augmented C++ ETW & C# WPF EDR Solution) 지식베이스 메인 인덱스. Phalanx 시스템 설계 및 개발 작업 시작 시 참조.
 related:
   - ../README.md
+  - ../../Phalanx/README.md
 ---
 # Phalanx Knowledge Base Index
 
@@ -14,3 +15,7 @@ related:
 - [01_system_architecture.md](./docs/01_system_architecture.md): C++ 고성능 센서, gRPC 양방향 스트리밍 파이프라인 및 WPF 관제 콘솔 토폴로지
 - [02_ai_agent_investigation_design.md](./docs/02_ai_agent_investigation_design.md): ReAct 자율 위협 헌터 에이전트, Tool Calling 생태계 및 Threat Graph Memory 계층 설계
 - [03_implementation_roadmap.md](./docs/03_implementation_roadmap.md): 단계별(Phase) 기능 구현 마일스톤 및 완료 정의(DoD)
+
+## 프로젝트 코드 저장소 (Code Repositories)
+- 로컬 저장소: [Phalanx Root](../../Phalanx/README.md)
+- 원격 저장소: [GitHub - jin20203458/phalanx](https://github.com/jin20203458/phalanx)
