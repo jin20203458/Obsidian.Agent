@@ -147,50 +147,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-08-31: C/C++ 소스 프래그먼트(#include "*.c") 자동 감지 및 3단계 자동 정제 시스템 (Zero-Config)
-
-### 1. 현상 (Symptom)
-* PCRE, SQLite, Lua, 임베디드 런타임 등 대형 라이브러리가 포함된 프로젝트(예: 708개 파일)를 한 번에 분석할 때, C 소스 조각 파일들(`sjarm32.c`, `sjx8632.c` 등)이 독립 컴파일 단위로 호출되어 320건 이상의 대량 구문 에러 발생.
-* C99 `intmax_t`, `uintmax_t` 타입 누락 에러 발생.
-
-### 2. 원인 (Root Cause)
-* `sjlir.c` 같은 상위 컴파일 단위가 내부에서 `#include "sjarm32.c"`를 직접 인클루드하는 구조인데, 분석기가 폴더 내 모든 `.c` 파일을 단독 실행 단위(`TranslationUnit`)로 인식하여 헤더 없이 컴파일을 시도함.
-* C++ 모드에서 단순 매크로 `-Dintmax_t=...`를 주입할 경우 `std::intmax_t` 문법 오류가 발생하는 딜레마.
-
-### 3. 해결책 (Resolution)
-1. **비동기 소스 프래그먼트 사전 감지 (`SourceFragmentDetector.cs`)**:
-   * `Parallel.ForEachAsync` 기반으로 상단 300라인을 비동기 스캔하여 `#include ".*\.c"` 패턴을 식별하고, 인클루드된 조각 파일들을 독립 컴파일 대상에서 자동 제외.
-   * 상위 파일(`sjlir.c`) 컴파일 시 조각 파일이 함께 완전한 AST로 분석되므로 분석 누락율 0% 보장.
-   * `--header-filter=.*`를 보장하여 조각 파일 내부의 결함 진단이 정상 출력되도록 유지.
-2. **C vs C++ Dialect-Safe 타입 가드**:
-   * C 모드(`*.c`)에서는 `-ffreestanding` 및 `-Dintmax_t=__INTMAX_TYPE__ -Duintmax_t=__UINTMAX_TYPE__`를 주입하여 누락된 C99 타입을 자동 보정.
-   * C++ 모드(`*.cpp`)에서는 타입 치환 매크로를 격리하여 표준 `<cstdint>` / `std::intmax_t` 파괴 방지.
-3. **세션 스냅샷 확장 (`MainViewModel.cs`)**:
-   * 분석 대상 파일 외에 진단이 검출된 모든 파일(`Diagnostics.Select(d => d.FilePath)`)을 스냅샷 목록에 병합하여 조각 파일 내부 결함에 대한 코드 스니펫 및 비교 분석 diff 100% 영구 보존.
-
----
-
-## 2026-08-28: 크로스 컴파일 임베디드(VxWorks/FreeRTOS/AVR) 타겟 분석 시 호스트 Windows SDK 헤더 간섭 및 타입 충돌 해결
-
-### 1. 현상 (Symptom)
-* VxWorks, FreeRTOS, Linux, AVR 등 임베디드 타겟 C/C++ 소스를 Windows 호스트 상의 `clang-tidy`로 분석할 때, 컴파일 에러가 수십~수백 건(예: 466건) 발생.
-* `redefinition of typedef 'int32_t'` (`int` vs `long`), `sal.h` / `vadefs.h` / `specstrings.h` 등 호스트 Windows SDK 헤더가 강제 주입되어 분석이 중단되는 현상.
-
-### 2. 원인 (Root Cause)
-* Windows 빌드 Clang은 기본적으로 `x86_64-pc-windows-msvc` 타겟 트리플을 기본값으로 사용하므로 레지스트리 및 환경변수 상의 Windows SDK / MSVC UCRT 헤더를 자동 검색 및 주입함.
-* Clang 내장 `lib/clang/19/include/stdint.h`의 `int32_t` 정의(`int`)와 RTOS의 `stdint.h` 정의(`long`)가 타입 시스템 상 충돌.
-
-### 3. 해결책 (Resolution)
-1. **타겟 트리플 및 타입 가드 매크로 분리 (Silver Bullet Flags)**:
-   * `--target=i386-pc-none-elf`: Clang 드라이버의 Windows SDK / MSVC 자동 탐색 및 내장 MSVC intrinsic 주입 원천 차단.
-   * `-D__CLANG_STDINT_H`: Clang 내장 `stdint.h`의 중복 로드를 차단하여 RTOS의 32비트 정수 타입과 충돌 방지.
-2. **Strategy C: 타겟 플랫폼 자동 감지 및 UI 선택기 (Zero-Config + Manual Override)**:
-   * `TargetPlatformDetector`: 사용자가 등록한 Include 경로의 시그니처 파일(`vxWorks.h`, `FreeRTOS.h`, `avr/io.h`, `linux/kernel.h` 등)을 O(1)로 스캔하여 타겟 플랫폼을 자동 식별.
-   * `ClangTidyRunnerService`: 타겟 플랫폼 옵션에 맞춰 `--target=<triple>` 및 플랫폼 전용 가드 매크로를 무음 자동 주입하고, 크로스 컴파일 시 호스트 시스템 헤더 자동 탐색을 억제.
-   * `IncludePathWindow.xaml`: 드롭다운 및 실시간 감지 상태 칩을 제공하여 사용자에게 완전한 제어권과 시각적 피드백 제공.
-
----
-
 ## 2026-09-01: NoAutoTypeCheck (`ast-no-auto-type`) 컴파일러 암시적 변수 오탐 및 복합 auto 타입 미탐 해결
 
 ### 1. 현상 (Symptom)
@@ -208,29 +164,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 1. **`NoAutoTypeCheck.h`**: `isLanguageVersionSupported(const LangOptions &LangOpts)`를 추가하여 `LangOpts.CPlusPlus11` 가드 적용 (C++11 이상 한정).
 2. **`NoAutoTypeCheck.cpp`**: `AutoTypeMatcher`를 `qualType(anyOf(autoType(), pointsTo(qualType(autoType())), references(qualType(autoType()))))`로 재구성하여 복합 `auto` 타입을 전수 매칭하고, `unless(isImplicit())` 가드를 추가하여 컴파일러 생성 임시 변수 오탐을 100% 차단.
 3. **`ARQAModule.cpp`**: `#include "NoAutoTypeCheck.h"` 및 `Factories.registerCheck<NoAutoTypeCheck>("ast-no-auto-type")` 주석 해제 및 정규 재등록.
-
----
-
-## 2026-09-01: 분석 엔진 중간 산출물(임시 JSON) 세션 격리 및 완전 자동 정화 (Data Contamination 방지)
-
-### 1. 현상 (Symptom)
-* `function-call-graph` (`Final_CallGraph.json`) 및 `ast-global-symbol-uniqueness` (`GlobalSymbols.json`) 분석 완료 후, 사용자 프로젝트 루트 폴더(`ProjectPath`)에 임시 JSON 파일이 잔존.
-* 이후 단일 파일 재분석이나 특정 체커만 선택하여 분석할 때, 프로젝트 폴더에 남아있던 과거 분석의 JSON 파일이 C# UI에 무조건 읽혀 들어와 이전 분석의 호출 관계(Fan-In/Out)나 심볼 중복 결함이 신규 분석 화면에 대량으로 오염 주입(Data Contamination)되는 문제 발생.
-
-### 2. 원인 (Root Cause)
-* **고정된 상대 경로 생성**: Clang-Tidy C++ 체커가 기본적으로 작업 디렉토리(프로젝트 루트)에 `Final_CallGraph.json` 및 `GlobalSymbols.json`을 작성함.
-* **파싱 후 디스크 파일 방치**: C# UI(`MainViewModel.FinalizeAnalysisAsync`)에서 JSON을 읽어 메모리 모델(`Diagnostics`, `MetricReportViewModel`)에 적재한 후, 디스크의 원본 JSON 파일을 삭제하지 않고 그대로 방치.
-* **C++ 소멸자의 조건부 스킵**: 체커가 아무것도 수집하지 못한 경우 소멸자에서 `if (empty()) return;`으로 인해 기존 파일을 0바이트로 덮어쓰지 않고 과거 파일이 그대로 살아남음.
-
-### 3. 해결책 (Resolution)
-1. **OS 임시 폴더 세션 격리 (`%TEMP%\ArqaStatic_Session_{GUID}\`)**:
-   * `IClangTidyRunnerService` 및 `ClangTidyRunnerService`에 `sessionTempDir` 매개변수를 추가하고, YAML `CheckOptions`에 `function-call-graph.OutputPath` 및 `ast-global-symbol-uniqueness.OutputPath`를 세션 임시 경로로 동적 주입하여 사용자 프로젝트 폴더 내 파일 생성을 원천 차단.
-2. **메모리 적재 즉시 파기 (Read & Destroy)**:
-   * `MainViewModel.FinalizeAnalysisAsync`에서 `GlobalSymbols.json` 및 `Final_CallGraph.json`을 파싱하여 인메모리 객체로 변환한 직후, `finally` 블록에서 해당 임시 JSON 파일을 즉시 삭제.
-3. **라이프사이클 마스터 청소 (`AnalyzeAsync` master finally)**:
-   * 분석 정상 종료, 사용자 취소(`OperationCanceledException`), 런타임 예외 발생 시 `AnalyzeAsync`의 `finally` 구문에서 `sessionTempDir` 전체를 재귀 삭제(`Directory.Delete`)하여 디스크 누수 100% 방지.
-4. **인메모리 메트릭 보존 방어 (`UpdateMetricReport`)**:
-   * 임시 JSON 파일 삭제 후 UI 탭 전환이나 임계값 변경 시, 이미 메모리에 적재된 `FunctionMetrics`를 보존하면서 통계 상태를 안전하게 갱신하도록 방어.
 
 ---
 
