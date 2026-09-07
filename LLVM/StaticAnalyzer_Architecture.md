@@ -17,14 +17,14 @@ related:
 ### 1. Clang-Tidy (AST 기반 구문 분석)
 * **목적**: C/C++ 소스코드의 AST(Abstract Syntax Tree)를 파싱하여 안전 크리티컬(Safety-Critical) 코딩 표준(CWE, CERT, MISRA 등) 위배 여부를 패턴 매칭 형태로 정밀 검사합니다.
 * **주요 특징**:
-  * AST Matcher를 활용하여 빠른 패턴 검출 및 자동 치유(Quick Fix) 대응.
-  * `clang-tools-extra/clang-tidy/<CustomModule>/` 내에 개별 Tidy 룰 정의 및 모듈 등록.
+  * AST Matcher를 활용하여 빠른 구문 패턴 검출 및 자동 치유(Quick Fix) 대응.
+  * Tidy 모듈 내에 룰 클래스를 정의하고 모듈 팩토리를 통해 체커 등록.
 
 ### 2. Clang Static Analyzer (경로 민감 분석)
 * **목적**: 프로그램의 실행 흐름을 심볼릭 실행(Symbolic Execution)하며 메모리 누수, Use-After-Free, 상수 조건식 결함 등 논리적인 결함을 수학적으로 증명 및 탐지합니다.
 * **주요 특징**:
   * Control Flow Graph(CFG)를 따라 가상 실행 상태(ProgramState)를 점진적으로 갱신.
-  * `clang/lib/StaticAnalyzer/Checkers/` 내에 핵심 분석 체커 등록.
+  * Static Analyzer 체커 레지스트리(TableGen 등)를 통해 핵심 분석 체커 등록.
 
 ---
 
