@@ -36,9 +36,9 @@ flowchart TD
         ReflexEngine --> GrpcClient["Async gRPC Streaming Client (agrpc)"]
     end
 
-    subgraph CS_CORE ["Layer 2: C# .NET AI Brain & Ingest (Phalanx.Core)"]
+    subgraph CS_CORE ["Layer 2: CSharp .NET AI Brain 및 Ingest (Phalanx.Core)"]
         GrpcClient -->|"gRPC Bidirectional (HTTP/2)"| GrpcServer["Telemetry Ingest Endpoint"]
-        GrpcServer --> ThreatGraph["Threat Graph Memory (LiteDB Hot/Cold)"]
+        GrpcServer --> ThreatGraph["Threat Graph Memory (RAM Hot / LiteDB Cold)"]
         
         ThreatGraph --> DecisionRouter{"Decision Router"}
         
@@ -52,7 +52,7 @@ flowchart TD
         GrpcServer --> Win32Act
     end
 
-    subgraph CS_COCKPIT ["Layer 3: C# WPF SOC Cockpit (Phalanx.Cockpit)"]
+    subgraph CS_COCKPIT ["Layer 3: CSharp WPF SOC Cockpit (Phalanx.Cockpit)"]
         ThreatGraph -.-> GraphView["Interactive Process Tree View"]
         AgentOrchestrator -.-> LiveFeed["Live Agent Thought/Action Feed"]
         ActionCoordinator -.-> ToastNotification["Windows Toast Notification"]
@@ -123,27 +123,40 @@ message ProcessEvent {
     string command_line = 4;
     uint64 timestamp_ns = 5;
     bool is_suspended = 6;
+    uint32 session_id = 7;
+    uint32 token_elevation_type = 8;
 }
 
 message NetworkEvent {
     uint32 process_id = 1;
-    string destination_address = 2;
-    uint32 destination_port = 3;
-    string protocol = 4;
+    string source_address = 2;
+    uint32 source_port = 3;
+    string destination_address = 4;
+    uint32 destination_port = 5;
+    string protocol = 6;
+    uint64 timestamp_ns = 7;
+}
+
+message ImageEvent {
+    uint32 process_id = 1;
+    uint64 image_base = 2;
+    uint64 image_size = 3;
+    string file_name = 4;
     uint64 timestamp_ns = 5;
 }
 
 message TelemetryBatch {
     repeated ProcessEvent process_events = 1;
     repeated NetworkEvent network_events = 2;
+    repeated ImageEvent image_events = 3;
 }
 
 // C# 대뇌에서 하달하는 방어 명령
 message MitigationCommand {
     enum ActionType {
         ACTION_KILL = 0;
-        ACTION_RESUME = 1;
-        ACTION_BLOCK_IP = 2;
+        ACTION_RESUME = 1;      // 스레드 동결 해제 (Unfreeze)
+        ACTION_BLOCK_IP = 2;    // 센서 레벨 패킷 차단 또는 코어 방화벽 연동
     }
     ActionType action = 1;
     uint32 target_pid = 2;
@@ -151,17 +164,9 @@ message MitigationCommand {
     string reason = 4;
 }
 
-message CommandResponse {
-    bool success = 1;
-    string error_message = 2;
-}
-
 service PhalanxService {
-    // 센서 -> 코어: 실시간 텔레메트리 스트리밍
-    rpc StreamTelemetry(stream TelemetryBatch) returns (CommandResponse);
-    
-    // 코어 -> 센서: 물리 방어 명령 하달
-    rpc DispatchMitigation(MitigationCommand) returns (CommandResponse);
+    // 센서 <-> 코어: 실시간 양방향 텔레메트리 스트리밍 및 방어 명령 실시간 하달
+    rpc StreamTelemetry(stream TelemetryBatch) returns (stream MitigationCommand);
 }
 ```
 
@@ -179,7 +184,7 @@ service PhalanxService {
 * **결정론적 룰 엔진 (Deterministic Engine)**:
   * 명확한 시그니처 및 Sigma 룰 조건 매칭 시 외부 API 호출 없이 즉시 `ACTION_KILL` 명령을 생성.
 * **자율 AI 에이전트 (Autonomous Agent)**:
-  * 모호한 회색지대(Unknown / Heuristic Score 경계치) 이벤트 감지 시 활성화되어 ReAct 루프를 가동 (세부 사양은 `02_ai_agent_investigation_design.md` 참조).
+  * 모호한 회색지대(Unknown / Heuristic Score 경계치) 이벤트 감지 시 활성화되어 ReAct 루프를 가동 (세부 사양은 [02_ai_agent_investigation_design.md](./02_ai_agent_investigation_design.md) 참조).
 
 ---
 

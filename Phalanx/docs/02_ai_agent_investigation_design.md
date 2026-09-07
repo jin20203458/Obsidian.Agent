@@ -21,14 +21,14 @@ flowchart TD
     Trigger["이상 징후 인입 (Suspicious Event Chain)"] --> Ingest["Working Memory 활성화 (Hot Context)"]
     
     subgraph REACT_LOOP ["ReAct 자율 조사 루프 (최대 5회 반복)"]
-        Ingest --> Thought["1. 추론 (Thought): 가설 수립 및 다음 액션 결정"]
-        Thought --> ToolAction["2. 행동 (Action): OS 조사 도구 자율 호출"]
-        ToolAction --> Observation["3. 관찰 (Observation): 도구 실행 결과 분석"]
-        Observation --> Decision{"위협 확신도 >= 90% or 조사 한계?"}
-        Decision -- "미충족 (추가 조사 필요)" --> Thought
+        Ingest --> Thought["(1) 추론 (Thought): 가설 수립 및 액션 결정"]
+        Thought --> ToolAction["(2) 행동 (Action): OS 조사 도구 자율 호출"]
+        ToolAction --> Observation["(3) 관찰 (Observation): 도구 실행 결과 분석"]
+        Observation --> Decision{"위협 확신도 90% 이상 또는 조사 한계"}
+        Decision -->|"미충족 (추가 조사 필요)"| Thought
     end
 
-    Decision -- "확정 (Verdict Reach)" --> Mitigation["물리 방어 명령 하달 (Kill / Quarantine)"]
+    Decision -->|"확정 (Verdict Reach)"| Mitigation["물리 방어 명령 하달 (Kill / Block IP)"]
     Mitigation --> Narrative["침해사고 서사 리포트 자동 작성"]
     Narrative --> ColdArchive["LiteDB cold_archive 이관"]
 ```
@@ -68,21 +68,21 @@ flowchart TD
 
 ## 4. Threat Graph Memory 계층화 구조
 
-Mundus Vivens의 `MemoryBox` 아키텍처를 계승하여 토큰 소모를 최소화하고 조사 속도를 극대화합니다.
+계층화된 핫/콜드 작업 메모리(Tiered Working Memory) 아키텍처를 적용하여 토큰 소모를 최소화하고 조사 속도를 극대화합니다.
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph RAM ["RAM (Hot Working Memory)"]
-        Active["Active Incidents (최근 15분)\n최대 20개 노드 유지"]
-        Active --> QuickQuery["O(1) 빠른 인과 역추적"]
+        Active["Active Incidents (최근 15분)"]
+        Active --> QuickQuery["O(1) 인과 역추적"]
     end
 
     subgraph DISK ["LiteDB (Cold Archive)"]
-        Resolved["Resolved Incidents (사고 종결)\n영구 보관 및 히스토리 쿼리"]
-        Normal["WhiteList Profile (정상 소프트웨어 프로파일)"]
+        Resolved["Resolved Incidents (영구 보관)"]
+        Normal["Whitelist Profile (정상 프로파일)"]
     end
 
-    Active -- "조사 종결 / 15분 경과" --> Resolved
+    Active -->|"조사 종결 및 15분 경과"| Resolved
 ```
 
 1. **Hot Working Memory (RAM)**:
@@ -90,7 +90,7 @@ flowchart LR
    * 부모-자식 탐색 및 엣지 추가가 인메모리에서 지연 없이 수행됩니다.
 2. **Cold Archive (LiteDB)**:
    * 조사가 완료된 침해사고 객체와 정상으로 판정된 일상 프로세스 프로파일은 디스크 상의 LiteDB로 즉시 이관(Eviction)됩니다.
-   * 램 상주 메모리를 30MB 이하로 유지하는 핵심 메커니즘입니다.
+   * Threat Graph 인메모리 작업 캐시를 30MB 이하로 유지하는 핵심 메커니즘입니다.
 
 ---
 
