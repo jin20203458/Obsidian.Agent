@@ -34,6 +34,8 @@ related:
 * **현상**: 관리자 권한이 없는 일반 사용자 권한으로 센서 실행 시 `krabs-etw` 세션 생성 단계에서 `ACCESS_DENIED (0x5)` 예외 발생.
 * **대응책**: `Phalanx.Sensor.exe`의 매니페스트 파일(`app.manifest`)에 `requireAdministrator` 실행 수준을 필수 명시할 것.
 
-### 2. SyspendThread 데드락 예외 방지
-* **현상**: 타깃 프로세스가 크리티컬 섹션이나 로더 락(LdrpLoaderLock)을 쥐고 있는 상태에서 강제 동결(Freeze) 시 시스템 전체 리소스 경합 발생 가능성.
-* **대응책**: 프로세스 생성 직후 초기 진입점(Entry Point) 단계에서 빠르게 스레드를 인터럽트하거나, 타임아웃(최대 500ms) 가드를 둘 것.
+### 2. SuspendThread 데드락 예외 및 안전 복구 (Safety Watchdog)
+* **현상**: 타깃 프로세스가 크리티컬 섹션이나 ntdll 로더 락(`LdrpLoaderLock`)을 쥐고 있는 상태에서 비동기 `SuspendThread` 호출 시 시스템 전역 리소스 경합 또는 데드락 발생 가능성.
+* **대응책**:
+  * `SuspendThread`는 자체 타임아웃 파라미터가 없으므로, 센서 내부에 **비동기 안전 타이머(Safety Watchdog, 기본 3000ms)**를 운영하여 AI 대뇌로부터 응답이 지연되거나 비정상 상태 감지 시 자동으로 `ResumeThread`를 호출하여 시스템 프리징을 해제하는 안전 폴백 메커니즘을 구비할 것.
+  * 또한 타깃 프로세스가 완전히 안전하거나 정상으로 판정된 경우 즉시 `MitigationCommand(ACTION_RESUME)`를 하달하여 스레드를 정상 복구할 것.

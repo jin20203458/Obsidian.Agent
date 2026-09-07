@@ -72,38 +72,53 @@ flowchart TD
   3. `Kernel-Image`: ProcessID, ImageBase, ImageSize, FileName.
 
 ### B. 더블 버퍼드 락-스왑 큐 (Double-Buffered Lock-Swap Ingestion)
-초당 수만 개에 달하는 커널 이벤트 폭주 시 수집 스레드가 락(Lock)에 의해 블로킹되어 이벤트가 드롭되는 문제를 원천 차단합니다.
+초당 수만 개에 달하는 커널 이벤트 폭주 시 수집 스레드가 락(Lock)에 의해 블로킹되어 이벤트가 드롭되는 문제를 원천 차단하며, 힙 메모리 파편화(Heap Fragmentation)를 방지하기 위해 **사전 할당된 2개의 고정 용량 버퍼 간 포인터 스왑(Pointer Swap)** 방식으로 구동합니다.
 
 ```cpp
-template <typename T>
+template <typename T, size_t InitialCapacity = 8192>
 class DoubleBufferedSwapQueue {
 public:
-    void Push(T&& item) {
-        std::lock_guard<std::mutex> lock(write_lock_);
-        write_buffer_.push_back(std::move(item));
+    DoubleBufferedSwapQueue() {
+        buffer_a_.reserve(InitialCapacity);
+        buffer_b_.reserve(InitialCapacity);
+        write_buffer_ = &buffer_a_;
+        read_buffer_ = &buffer_b_;
     }
 
-    std::vector<T> SwapAndFlush() {
-        std::vector<T> ready_batch;
-        {
-            std::lock_guard<std::mutex> lock(write_lock_);
-            ready_batch.swap(write_buffer_);
+    void Push(T&& item) {
+        std::lock_guard<std::mutex> lock(write_lock_);
+        // 메모리 상한선(Safety Cap) 초과 시 오래된 이벤트 드롭 또는 링버퍼 오버라이트 방어
+        if (write_buffer_->size() < InitialCapacity * 4) {
+            write_buffer_->push_back(std::move(item));
         }
-        return ready_batch; // 워커 스레드는 락 없이 독립 메모리 일괄 소비
+    }
+
+    // 힙 재할당 없이 포인터만 맞교환 (Zero Dynamic Heap Allocation)
+    std::vector<T>* SwapAndFlush() {
+        std::lock_guard<std::mutex> lock(write_lock_);
+        std::swap(write_buffer_, read_buffer_);
+        read_buffer_->clear(); // 이전 소비 완료된 버퍼 초기화 (Capacity 유지)
+        return write_buffer_;  // 워커 스레드가 락 없이 일괄 소비할 버퍼 반환
     }
 
 private:
     std::mutex write_lock_;
-    std::vector<T> write_buffer_;
+    std::vector<T> buffer_a_;
+    std::vector<T> buffer_b_;
+    std::vector<T>* write_buffer_{nullptr};
+    std::vector<T>* read_buffer_{nullptr};
 };
 ```
-* **동작 주기**: ETW 콜백 스레드는 오직 `Push`만 수행(지연 시간 1μs 미만)하며, 센서 메인 루프 워커가 10ms(100Hz) 주기로 버퍼를 교체(Swap)하여 일괄 직렬화 및 필터링을 수행합니다.
+* **동작 주기**: ETW 콜백 스레드는 오직 `Push`만 수행(지연 시간 1μs 미만)하며, 센서 메인 루프 워커가 10ms(100Hz) 주기로 버퍼 포인터만 교체(Swap)하여 일괄 직렬화 및 필터링을 수행합니다.
 
-### C. 1차 반사신경 엔진 및 스레드 동결 (Freeze Mechanism)
-* 프로세스 생성 이벤트 수신 즉시 O(1) 해시 테이블 기반의 위험 체인 패턴을 검사합니다.
-  * *예: 오피스/브라우저/스크립트 프로세스(`winword.exe`, `excel.exe`, `mshta.exe`)가 쉘 엔진(`powershell.exe`, `cmd.exe`)을 자식으로 스폰한 경우.*
-* 조건 충족 시 타깃 프로세스의 메인 스레드에 대해 `OpenThread(THREAD_SUSPEND_RESUME, ...)` ➔ `SuspendThread`를 호출하여 실행을 즉시 정지(Freeze)시킵니다.
-* 동결 완료 플래그를 포함한 텔레메트리를 gRPC를 통해 상위 계층으로 발송합니다.
+### C. 1차 반사신경 엔진 및 스레드 동결 (Freeze Mechanism & Execution Window)
+* **ETW 비동기 특성과 방어 윈도우 (Early Execution Window)**:
+  * 커널 드라이버(`PsSetCreateProcessNotifyRoutineEx`)와 달리 ETW는 비동기 유저모드 통지 메커니즘입니다. 따라서 프로세스 생성 전 완벽한 사전 차단(Pre-execution Block)이 아니라, 스크립트 엔진(`powershell.exe`, `wscript.exe`)이 런타임/CLR을 초기화하는 **수십~수백 ms의 초기 기동 구간(Warm-up Window) 내에 스레드를 동결(Early Execution Interruption)**하는 방식을 취합니다.
+* **스레드 ID 식별 및 동결 절차**:
+  1. `Kernel-Process` ETW 이벤트는 프로세스 생성 시점에 `ProcessID`를 전달하지만 메인 스레드 ID는 누락되어 있습니다.
+  2. 위험 체인 패턴(`winword.exe` ➔ `powershell.exe`) 감지 즉시, `CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0)` 및 `Thread32First`/`Thread32Next`를 호출하여 해당 `th32OwnerProcessID == target_pid`인 메인 스레드 ID를 고속 열거합니다.
+  3. 타깃 스레드 핸들을 `OpenThread(THREAD_SUSPEND_RESUME, FALSE, tid)`로 획득한 후 `SuspendThread`를 호출하여 실행을 즉시 정지(Freeze)시킵니다.
+* 동결 완료 플래그(`is_suspended = true`)를 포함한 텔레메트리를 gRPC를 통해 상위 계층으로 발송합니다.
 
 ---
 

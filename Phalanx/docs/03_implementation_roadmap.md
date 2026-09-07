@@ -45,7 +45,7 @@ related:
 * **주요 개발 내용**:
   * .NET 8/9 C# `Phalanx.Core` 프로젝트 생성 및 gRPC 수신 서비스 구축.
   * `LiteDB 5.0` 기반의 임베디드 Threat Graph 메모리 구축 (프로세스 부모-자식 트리 및 인과 관계망 매핑).
-  * gRPC 역방향 방어 명령 RPC (`DispatchMitigation`) 연동.
+  * gRPC `StreamTelemetry` 양방향 스트림의 역방향 응답 채널을 통한 `MitigationCommand` 하달 연동.
   * **결정론적 1차 룰 엔진 (Deterministic Engine)** 구축:
     * *규칙 1: `winword.exe`, `excel.exe` ➔ 자식 `powershell.exe`, `cmd.exe` 스폰 감지.*
     * *규칙 2: 명령줄 인자에 `-enc`, `-EncodedCommand`, `DownloadString` 포함 여부 판별.*
@@ -69,7 +69,7 @@ related:
   * 구조화 JSON 기반 침해사고 서사(Incident Narrative) 생성 엔진 완성.
   * API 키 부재 시 자동으로 룰 엔진으로만 동작하는 **Graceful Degradation** 모드 전환 검증.
 * **완료 정의 (DoD)**:
-  * 모의 침투 페이로드 실행 시, AI 에이전트가 도구를 호출하여 C2 IP를 스스로 알아내고 자연어 분석 보고서 JSON을 3초 이내에 도출.
+  * 모의 침투 페이로드 실행 시, AI 에이전트가 도구를 호출하여 C2 IP를 스스로 알아내고 자연어 분석 보고서 JSON을 도출. (전형적 위협 시나리오 1~2회 반복 기준 3초 이내 도출, 복합 다단계 심층 분석 시 5~8초 허용).
 
 ---
 

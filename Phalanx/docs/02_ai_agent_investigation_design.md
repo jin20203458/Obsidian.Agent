@@ -64,6 +64,11 @@ flowchart TD
 | `MitreClassifierTool` | `string observedBehavior` | 관찰된 행위 문자열을 MITRE ATT&CK Matrix 기법(ID)으로 자동 매핑 | `T1059.001`, `T1566` 등의 기법 코드 및 설명 |
 | `SystemFirewallTool` | `string maliciousIp` | Windows Filtering Platform(WFP) 또는 Netsh 명령으로 해당 IP 인/아웃바운드 즉시 차단 | 차단 성공 여부 (bool) |
 
+> **설계 원칙 및 구현 분리 지침 (Design Separation)**:
+> * 본 문서는 에이전트와 도구 간의 상위 인터페이스 규격을 정의합니다.
+> * 각 도구의 다단계 디코딩 재귀 종료 조건, P/Invoke 메모리 접근 시의 `SeDebugPrivilege` 권한 획득 처리, 로컬 IoC 캐시 구조(SQLite/BloomFilter) 등의 세부 알고리즘은 Phase 3 착수 시 `docs/04_tool_detailed_design.md`로 독립 분리하여 상세 설계합니다.
+> * **추론 레이턴시 특성**: 대부분의 명확한 위협은 1~2회 반복 이내에 확신도 90%에 도달하여 약 2~3초 내에 종결되며, 고도화된 다단계 난독화 분석(최대 5회 순환) 시에는 5~8초의 심층 분석 시간이 소요될 수 있습니다.
+
 ---
 
 ## 4. Threat Graph Memory 계층화 구조
