@@ -7,3 +7,7 @@ Thumbs.db
 
 # PixAI
 PixAI/
+
+# Confidential / Enterprise Local Troubleshooting (Do NOT track)
+troubleshooting/arqa_static.md
+troubleshooting/arqa*.md
