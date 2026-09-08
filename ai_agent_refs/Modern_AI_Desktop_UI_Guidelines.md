@@ -4,7 +4,6 @@ description: >-
 related:
   - ../README.md
   - ./WPF_Architecture_Guidelines.md
-  - ../Phalanx/docs/01_system_architecture.md
 ---
 # Modern AI Desktop UI Guidelines
 
@@ -16,8 +15,8 @@ related:
 
 현대 데스크톱 UI는 과거의 과도한 장식(스큐어모피즘, 번지는 드롭 섀도우)이나 극단적인 플랫 디자인을 지양하고, **고성능 프로 도구(Pro-Tool High-Performance Aesthetic)**를 지향합니다.
 
-* **결정론적 관제 뼈대 (Deterministic Frame)**: `ArqaStatic`에서 검증된 1280px 이상의 대형 분할 레이아웃, 캡슐형 컨트롤, 다크 팔레트를 기반으로 엔터프라이즈 전문 도구의 안정감을 제공합니다.
-* **지능형 추론 서사 (Agentic Narrative Soul)**: `GRC`에서 검증된 실시간 사고(Thought) 및 서사(Narrative) 스트리밍 타이포그래피를 이식하여, AI가 내린 판단의 설명 가능성(Explainability)과 생동감을 극대화합니다.
+* **결정론적 관제 뼈대 (Deterministic Frame)**: 상용 엔터프라이즈 분석 및 보안 관제 콘솔에서 검증된 1280px 이상의 대형 분할 레이아웃, 캡슐형 컨트롤, 다크 팔레트를 기반으로 엔터프라이즈 전문 도구의 안정감을 제공합니다.
+* **지능형 추론 서사 (Agentic Narrative Soul)**: 고도화된 데스크톱 AI 클라이언트에서 검증된 실시간 사고(Thought) 및 서사(Narrative) 스트리밍 타이포그래피를 채택하여, AI가 내린 판단의 설명 가능성(Explainability)과 생동감을 극대화합니다.
 * **Electron 대비 고성능 네이티브 우위**: 웹 브라우저 엔진의 300MB~1GB 풋프린트를 배제하고, DirectX 하드웨어 가속 기반의 가벼운 수십 MB 풋프린트와 무프리징 렌더링을 보장합니다.
 
 ---
@@ -116,7 +115,7 @@ related:
 현대 추론형 AI 모델의 **확장 사고(Extended CoT, Chain-of-Thought / Internal Reasoning) 패러다임**에 맞추어, **AI의 내부 추론/조사 과정(`<think>`)과 최종 분석 서사(Narrative)를 시각적으로 엄격히 분리**합니다.
 
 ```xml
-<!-- GRC 기반 스트리밍 타이포그래피 리소스 -->
+<!-- 실시간 AI 추론 및 서사 스트리밍 타이포그래피 리소스 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
