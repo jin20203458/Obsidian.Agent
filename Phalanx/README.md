@@ -14,3 +14,4 @@ related:
 - [01_system_architecture.md](./docs/01_system_architecture.md): C++ 고성능 센서, gRPC 양방향 스트리밍 파이프라인 및 WPF 관제 콘솔 토폴로지
 - [02_ai_agent_investigation_design.md](./docs/02_ai_agent_investigation_design.md): ReAct 자율 위협 헌터 에이전트, Tool Calling 생태계 및 Threat Graph Memory 계층 설계
 - [03_implementation_roadmap.md](./docs/03_implementation_roadmap.md): 단계별(Phase) 기능 구현 마일스톤 및 완료 정의(DoD)
+- [04_concurrency_queue_benchmark.md](./docs/04_concurrency_queue_benchmark.md): Boost 락프리 SPSC 링버퍼 vs 더블 버퍼드 락-스왑 큐 1:1 실측 벤치마크 보고서
