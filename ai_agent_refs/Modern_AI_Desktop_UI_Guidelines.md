@@ -4,6 +4,7 @@ description: >-
 related:
   - ../README.md
   - ./WPF_Architecture_Guidelines.md
+  - ../Phalanx/docs/01_system_architecture.md
 ---
 # Modern AI Desktop UI Guidelines
 
