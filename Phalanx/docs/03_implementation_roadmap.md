@@ -101,19 +101,22 @@ related:
 
 ---
 
-## 4. 참조 로컬 코드 자산 (Reference Code Assets)
+## 4. 참조 로컬 코드 자산 및 차용 원칙 (Reference Assets & Clean-Room Principles)
 
-본 프로젝트 개발 시 새로운 패턴을 바닥부터 구현하지 않고, 동일 로컬 환경에 검증된 기존 코드베이스의 핵심 구현체를 직접 참조·재활용합니다:
+> ** 참조 원칙 (Clean-Room Implementation Rule)**:
+> * 본 참조 자산은 **'아키텍처 패턴(Boilerplate)', '동시성 알고리즘 뼈대', 'UI 디자인 토큰(XAML 스타일)'**만을 학습·차용하기 위한 것입니다.
+> * 기존 프로젝트의 **파일 통째 복사, 비즈니스 도메인 모델(게임 NPC/대화, 정적분석 진단 등), 고유 네임스페이스를 복제하는 행위는 엄격히 금지**됩니다.
+> * 모든 코드는 Phalanx의 보안/EDR 도메인(`ProcessEvent`, `ThreatGraph`, `MitigationCommand`)에 맞추어 **새롭게 독립 구현(Clean-Room)**되어야 합니다.
 
 1. **C++ 락-스왑 큐 & 비동기 gRPC 클라이언트**:
    * 저장소 경로: `C:\Users\user\Documents\GitHub\MundusVivens.GameServer.Cpp`
-   * 핵심 참조: `AsyncGrpcClient.cpp` (`agrpc::ClientRPC` + `boost::asio::co_spawn` 패턴) 및 메인 스레드 락-스왑 스왑 큐 메커니즘
+   * **참조 범위 (Pattern Only)**: `AsyncGrpcClient.cpp`의 `agrpc::ClientRPC` + `boost::asio::co_spawn` 비동기 호출 **패턴 구조** 및 락-스왑 템플릿 알고리즘 (게임 로직 복제 금지).
 2. **C# gRPC 수신 서비스 & 계층형 메모리**:
    * 저장소 경로: `C:\Users\user\Documents\GitHub\MundusVivens`
-   * 핵심 참조: `Grpc.AspNetCore` 양방향 스트리밍 수신 파이프라인 및 `LiteDB` 기반 Hot/Cold 캐시 아키텍처
+   * **참조 범위 (Pattern Only)**: `Grpc.AspNetCore` 양방향 스트리밍 수신 파이프라인 및 `Channel<T>` 기반 백그라운드 LiteDB 비동기 쓰기(Write-Behind) **패턴** (게임 세이브/에이전트 모델 복제 금지).
 3. **AI 실시간 사고(Thinking) 스트리밍 타이포그래피**:
    * 저장소 경로: `C:\Users\user\Documents\GitHub\GRC`
-   * 핵심 참조: `GRC/Themes/ModernStyles.xaml` (`StreamingThoughtTextStyle` 이탤릭 슬레이트 블루, `StreamingNarrativeTextStyle`)
+   * **참조 범위 (Tokens Only)**: `GRC/Themes/ModernStyles.xaml`의 폰트 크기, 행간, 이탤릭 슬레이트 블루(`#A2B9D8`) 등 **순수 텍스트 스타일 정의** (롤플레잉 시나리오/뷰모델 복제 금지).
 4. **엔터프라이즈 대시보드 레이아웃 & 캡슐 버튼 스타일**:
    * 저장소 경로: `C:\clang-lab\UI_WPF\ArqaStatic`
-   * 핵심 참조: `ArqaStatic/Themes/DarkTheme.xaml`, 캡슐형 플랫 버튼(`CornerRadius="24"`), 커스텀 윈도우 다크 타이틀바(`WindowTitleBarBehavior`)
+   * **참조 범위 (Tokens Only)**: `ArqaStatic/Themes/DarkTheme.xaml`의 캡슐형 플랫 버튼(`CornerRadius="24"`), 다크 타이틀바, 다크 팔레트 브러시 **키값** (정적분석 진단 로직 및 다국어 번역 복제 금지).
