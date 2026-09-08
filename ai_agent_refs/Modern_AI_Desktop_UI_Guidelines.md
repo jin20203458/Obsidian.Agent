@@ -113,7 +113,7 @@ related:
 
 ## 4. 실시간 AI 사고(Thinking) 및 서사(Narrative) 스트리밍 UI
 
-최신 추론 모델(o1, DeepSeek-R1, Claude 3.7)의 패러다임에 맞추어, **AI의 내부 추론 과정(`<think>`)과 최종 분석 서사(Narrative)를 시각적으로 엄격히 분리**합니다.
+차세대 추론형 모델(OpenAI o3/o-series, Gemini Thinking, Claude Extended Thinking 등)의 **확장 사고(Extended CoT, Chain-of-Thought) 패러다임**에 맞추어, **AI의 내부 추론/조사 과정(`<think>`)과 최종 분석 서사(Narrative)를 시각적으로 엄격히 분리**합니다.
 
 ```xml
 <!-- GRC 기반 스트리밍 타이포그래피 리소스 -->
