@@ -98,3 +98,22 @@ related:
 | **C# 패키지** | `Grpc.AspNetCore`, `LiteDB 5.0.21`, `QuestPDF` | 통신, 그래프 DB, 리포팅 |
 | **WPF UI** | `CommunityToolkit.Mvvm`, `ModernWpfUI` | MVVM 다크 테마 관제 인터페이스 |
 | **AI LLM** | `Google.Apis.Auth` / Gemini 2.0 Flash / Ollama | 구조화 JSON 모드 및 Tool Calling |
+
+---
+
+## 4. 참조 로컬 코드 자산 (Reference Code Assets)
+
+본 프로젝트 개발 시 새로운 패턴을 바닥부터 구현하지 않고, 동일 로컬 환경에 검증된 기존 코드베이스의 핵심 구현체를 직접 참조·재활용합니다:
+
+1. **C++ 락-스왑 큐 & 비동기 gRPC 클라이언트**:
+   * 저장소 경로: `C:\Users\user\Documents\GitHub\MundusVivens.GameServer.Cpp`
+   * 핵심 참조: `AsyncGrpcClient.cpp` (`agrpc::ClientRPC` + `boost::asio::co_spawn` 패턴) 및 메인 스레드 락-스왑 스왑 큐 메커니즘
+2. **C# gRPC 수신 서비스 & 계층형 메모리**:
+   * 저장소 경로: `C:\Users\user\Documents\GitHub\MundusVivens`
+   * 핵심 참조: `Grpc.AspNetCore` 양방향 스트리밍 수신 파이프라인 및 `LiteDB` 기반 Hot/Cold 캐시 아키텍처
+3. **AI 실시간 사고(Thinking) 스트리밍 타이포그래피**:
+   * 저장소 경로: `C:\Users\user\Documents\GitHub\GRC`
+   * 핵심 참조: `GRC/Themes/ModernStyles.xaml` (`StreamingThoughtTextStyle` 이탤릭 슬레이트 블루, `StreamingNarrativeTextStyle`)
+4. **엔터프라이즈 대시보드 레이아웃 & 캡슐 버튼 스타일**:
+   * 저장소 경로: `C:\clang-lab\UI_WPF\ArqaStatic`
+   * 핵심 참조: `ArqaStatic/Themes/DarkTheme.xaml`, 캡슐형 플랫 버튼(`CornerRadius="24"`), 커스텀 윈도우 다크 타이틀바(`WindowTitleBarBehavior`)
