@@ -170,8 +170,9 @@ message TelemetryBatch {
 message MitigationCommand {
     enum ActionType {
         ACTION_KILL = 0;
-        ACTION_RESUME = 1;      // 스레드 동결 해제 (Unfreeze)
-        ACTION_BLOCK_IP = 2;    // 센서 레벨 패킷 차단 또는 코어 방화벽 연동
+        ACTION_RESUME = 1;          // 스레드 동결 해제 (Unfreeze)
+        ACTION_BLOCK_IP = 2;        // 센서 레벨 패킷 차단 또는 코어 방화벽 연동
+        ACTION_EXTEND_TIMEOUT = 3;  // AI 심층 수사 진입 시 1회성 타임아웃 연장 (최대 1회 엄격 제한)
     }
     ActionType action = 1;
     uint32 target_pid = 2;
