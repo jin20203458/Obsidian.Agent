@@ -71,31 +71,30 @@ flowchart TD
 
 ---
 
-## 4. Threat Graph Memory 계층화 구조
+## 4. 포렌식 인과 저장소 (Incident Forensic Store & LiteDB)
 
-계층화된 핫/콜드 작업 메모리(Tiered Working Memory) 아키텍처를 적용하여 토큰 소모를 최소화하고 조사 속도를 극대화합니다.
+Phalanx는 활성 프로세스 트리를 C++ 네이티브 RAM 상에서 초고속 O(1) 해시맵으로 관리하며, C# 관제 계층은 수사된 침해사고 이력과 포렌식 스냅샷을 영속화하기 위해 임베디드 `LiteDB`를 포렌식 아카이브로 활용합니다.
 
 ```mermaid
 flowchart TD
-    subgraph RAM ["RAM (Hot Working Memory)"]
-        Active["Active Incidents (최근 15분)"]
-        Active --> QuickQuery["O(1) 인과 역추적"]
+    subgraph CPP_RAM ["C++ Engine In-Memory"]
+        Active["Active Process DAG (실시간 O(1) 족보)"]
     end
 
-    subgraph DISK ["LiteDB (Cold Archive)"]
-        Resolved["Resolved Incidents (영구 보관)"]
-        Normal["Whitelist Profile (정상 프로파일)"]
+    subgraph CS_APP ["C# Cockpit Local Storage"]
+        Investigate["Active Investigation Context (수사 중 세션)"]
+        ColdArchive["LiteDB (Resolved Incidents & Forensic Reports)"]
     end
 
-    Active -->|"조사 종결 및 15분 경과"| Resolved
+    Active -->|"회색지대 동결 (is_suspended = true)"| Investigate
+    Investigate -->|"AI 판결 종결 및 PDF 생성"| ColdArchive
 ```
 
-1. **Hot Working Memory (RAM)**:
-   * 현재 시스템에서 활성화되어 있거나 최근 15분 이내에 발생한 프로세스 트리만 그래프 노드로 유지합니다.
-   * 부모-자식 탐색 및 엣지 추가가 인메모리에서 지연 없이 수행됩니다.
-2. **Cold Archive (LiteDB)**:
-   * 조사가 완료된 침해사고 객체와 정상으로 판정된 일상 프로세스 프로파일은 디스크 상의 LiteDB로 즉시 이관(Eviction)됩니다.
-   * Threat Graph 인메모리 작업 캐시를 30MB 이하로 유지하는 핵심 메커니즘입니다.
+1. **C++ In-Memory Process DAG (실시간 활성 메모리)**:
+   * 현재 OS에서 실행 중인 모든 프로세스의 부모-자식 관계와 실행 인자는 C++ RAM 상에서 나노초 단위로 관리됩니다.
+2. **C# Cold Forensic Archive (LiteDB)**:
+   * AI 수사가 완료된 침해사고 객체, AI의 사고 과정(Thought/Action 추적 로그), 그리고 최종 JSON 서사는 `LiteDB`에 영구 보관됩니다.
+   * 사용자가 언제든지 과거 침해사고를 조회하고 동일한 QuestPDF 포렌식 리포트를 재출력할 수 있도록 지원합니다.
 
 ---
 
