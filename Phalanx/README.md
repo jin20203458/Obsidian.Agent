@@ -15,3 +15,4 @@ related:
 - [02_ai_agent_investigation_design.md](./docs/02_ai_agent_investigation_design.md): ReAct 자율 위협 헌터 에이전트, Tool Calling 생태계 및 Threat Graph Memory 계층 설계
 - [03_implementation_roadmap.md](./docs/03_implementation_roadmap.md): 단계별(Phase) 기능 구현 마일스톤 및 완료 정의(DoD)
 - [04_concurrency_queue_benchmark.md](./docs/04_concurrency_queue_benchmark.md): Boost 락프리 SPSC 링버퍼 vs 더블 버퍼드 락-스왑 큐 1:1 실측 벤치마크 보고서
+- [05_edr_reflex_pipeline_profiling.md](./docs/05_edr_reflex_pipeline_profiling.md): 오피스-파워셸 실제 공격 체인 E2E 반사신경 차단 파이프라인 실측 프로파일링 보고서 (Phase 2.5 산출물)

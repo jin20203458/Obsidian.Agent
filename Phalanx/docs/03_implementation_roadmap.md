@@ -6,6 +6,8 @@ related:
   - ./00_project_overview.md
   - ./01_system_architecture.md
   - ./02_ai_agent_investigation_design.md
+  - ./04_concurrency_queue_benchmark.md
+  - ./05_edr_reflex_pipeline_profiling.md
 ---
 # Phalanx Implementation Roadmap & Milestones
 
@@ -16,10 +18,10 @@ related:
 ## 1. 단계별 구현 마일스톤 흐름
 
 ```
-[ Phase 1: Sensor & IPC ] ──▶ [ Phase 2: Core & Reflex ] ──▶ [ Phase 3: AI Agent & Tools ] ──▶ [ Phase 4: Cockpit & Presentation ]
-  • ETW 커널 수집 루프       • gRPC 양방향 수신 파이프라인 • ReAct 추론 루프              • WPF 노드 그래프 UI
-  • 락-스왑 무손실 버퍼      • LiteDB 프로세스 트리        • 5대 OS 도구 호출 체계        • QuestPDF 침해사고 리포트
-  • Suspend/Kill 액추에이터  • 로컬 결정론적 룰 엔진       • Fallback 모드 전환 검증      • E2E 차단 시나리오 데모화
+[ Phase 1: Sensor & IPC ] ──▶ [ Phase 1.5: Atomic Freeze ] ──▶ [ Phase 2: Core & Reflex ] ──▶ [ Phase 2.5: Reflex Profiling ] ──▶ [ Phase 3: AI Agent & Tools ] ──▶ [ Phase 4: Cockpit & Presentation ]
+  • ETW 커널 수집 루프         • NtSuspendProcess 원자적 동결   • gRPC 양방향 수신 파이프라인 • E2E 왕복 지연 실측 (RTT)    • ReAct 추론 루프              • WPF 노드 그래프 UI
+  • 락-스왑 무손실 버퍼        • 100배 가속 (10~20μs)           • LiteDB 프로세스 트리        • 오피스-파워셸 공격 시나리오 • 5대 OS 도구 호출 체계        • QuestPDF 침해사고 리포트
+  • Suspend/Kill 액추에이터    • Toolhelp32 우아한 폴백         • 로컬 결정론적 룰 엔진       • CLR 웜업 대비 차단 입증     • Fallback 모드 전환 검증      • E2E 차단 시나리오 데모화
 ```
 
 ---
@@ -40,6 +42,20 @@ related:
 
 ---
 
+### Phase 1.5: 원자적 고속 동결 엔진 및 안전 폴백 (Atomic Freeze & Fallback)
+* **목표**: `ntdll.dll`의 미공개 커널 API(`NtSuspendProcess`/`NtResumeProcess`)를 `Common::UniqueHModule`로 동적 로드하여 동결 지연 시간을 100배 단축(수 ms ➔ 10~20μs)하고 스레드 레이스 컨디션을 원천 차단하며, 실패 시 기존 Toolhelp32 방식으로 우아하게 후퇴(Fallback)하는 2중 방어선 구축.
+* **주요 개발 내용**:
+  * `ProcessActuator` 내부에 `NtSuspendProcess` / `NtResumeProcess` 함수 포인터 시그니처 및 동적 로딩 구현 (`Common::UniqueHModule` 활용).
+  * **1순위 (Primary)**: `NtSuspendProcess`를 통한 프로세스 레벨 원자적 동결 집행 (동결 도중 신규 스레드 생성 탈출 불가).
+  * **2순위 (Fallback)**: API 로드 실패 또는 특정 OS 환경 비호환 시 기존 `CreateToolhelp32Snapshot` + `SuspendThread` 순회 루프로 즉각 자동 폴백(Graceful Degradation).
+  * 복구(Resume) 시에도 동일하게 `NtResumeProcess` 1순위 시도 후 실패 시 스레드별 `ResumeThread` 2순위 폴백.
+  * `SensorTests`에 `NtSuspendProcess` 원자적 동결 검증 및 강제 폴백(Fault Injection) 테스트 케이스 추가.
+* **완료 정의 (DoD)**:
+  * `NtSuspendProcess` 성공 시 프로세스 동결 소요 시간이 50μs 미만으로 단축됨을 단위 테스트에서 확인.
+  * 가상 실패 주입 시에도 Win32 스냅샷 폴백이 즉각 작동하여 프로세스가 100% 정상 동결/복구됨을 확인 (Exit Code 0).
+
+---
+
 ### Phase 2: 코어 엔진 및 결정론적 1차 방어 (Core & Reflex)
 * **목표**: C# 백엔드에서 텔레메트리를 수신해 인과 그래프를 구성하고, 룰 엔진을 통해 0.05초 이내에 자동 차단하는 닫힌 루프(Closed-Loop) 완성.
 * **주요 개발 내용**:
@@ -52,6 +68,25 @@ related:
   * 규칙 충족 시 C++ 센서로 `ACTION_KILL` 명령을 자동 하달.
 * **완료 정의 (DoD)**:
   * 테스트 매크로 스크립트 실행 시, 사람의 개입 없이 0.05초(50ms) 이내에 파워셸 프로세스가 강제 종료되어야 함.
+
+---
+
+### Phase 2.5: 반사신경 파이프라인 E2E 실측 및 프로파일링 (Reflex Pipeline Profiling)
+* **목표**: Phase 2에서 완성된 C++ 센서와 C# 코어 간의 양방향 닫힌 루프(Closed-Loop) 파이프라인을 바탕으로, 실제 공격 시나리오(오피스 매크로 난독화 파워셸 스폰)에 대한 엔드투엔드(E2E) 반사신경 차단 시간(Round-Trip Time, RTT)을 C++ 관점에서 실측하고, 파이프라인 지연 시간을 프로파일링하여 문서화(`05_edr_reflex_pipeline_profiling.md`).
+* **주요 개발 내용**:
+  * **C++ 센서 관점의 RTT 계측 체계 구축**:
+    * 텔레메트리 패킷 발송 시점(`t0 = high_resolution_clock::now()`)과 C# 코어로부터 `ACTION_KILL` 응답 수신 후 프로세스 강제 종료(`TerminateProcess`) 집행 완료 시점(`t1`) 간의 순수 왕복 시간(Round-Trip Time) 계측.
+    * 프로세스 간 시계 동기화 오버헤드를 배제하고 외부 관측자(C++ 센서) 기준의 단일 타임라인 확립.
+  * **C# 코어 내부 경량 진단 로깅**:
+    * `Stopwatch`를 활용하여 gRPC 수신 시점부터 50ms 결정론적 룰 엔진 판정 완료 시점까지의 순수 판단 소요 시간 보조 로깅.
+  * **실제 악성 모의 공격 시나리오 검증**:
+    * 부모 프로세스(`winword.exe` 모사) ➔ 자식 프로세스(`powershell.exe -WindowStyle Hidden -EncodedCommand ...`) 스폰 공격 체인 실행.
+    * 파워셸의 .NET CLR 로딩 및 런타임 웜업 윈도우(약 150~250ms) 대비 Phalanx의 반사신경 차단 완료 시점 실측치 비교 분석.
+  * **벤치마크 보고서 문서화**:
+    * `05_edr_reflex_pipeline_profiling.md` 작성 (구간별 소요 시간 표, 파이프라인 타임라인 간트 차트, 공격자 실행 윈도우 대비 차단 시점 분석 수록).
+* **완료 정의 (DoD)**:
+  * 모의 악성 스크립트 실행 시, C++ 단독 RTT 기준 전체 E2E 차단 소요 시간이 50ms 미만(실측 목표 15~20ms)으로 검증됨을 확인.
+  * `Obsidian.Agent/Phalanx/docs/05_edr_reflex_pipeline_profiling.md` 보고서가 작성되어 커밋됨.
 
 ---
 
@@ -103,7 +138,7 @@ related:
 
 ## 4. 참조 로컬 코드 자산 및 차용 원칙 (Reference Assets & Clean-Room Principles)
 
-> ** 참조 원칙 (Clean-Room Implementation Rule)**:
+> **참조 원칙 (Clean-Room Implementation Rule)**:
 > * 본 참조 자산은 **'아키텍처 패턴(Boilerplate)', '동시성 알고리즘 뼈대', 'UI 디자인 토큰(XAML 스타일)'**만을 학습·차용하기 위한 것입니다.
 > * 기존 프로젝트의 **파일 통째 복사, 비즈니스 도메인 모델(게임 NPC/대화, 정적분석 진단 등), 고유 네임스페이스를 복제하는 행위는 엄격히 금지**됩니다.
 > * 모든 코드는 Phalanx의 보안/EDR 도메인(`ProcessEvent`, `ThreatGraph`, `MitigationCommand`)에 맞추어 **새롭게 독립 구현(Clean-Room)**되어야 합니다.

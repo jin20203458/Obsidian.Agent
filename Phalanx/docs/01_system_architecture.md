@@ -111,13 +111,16 @@ private:
 ```
 * **동작 주기**: ETW 콜백 스레드는 오직 `Push`만 수행(지연 시간 1μs 미만)하며, 센서 메인 루프 워커가 10ms(100Hz) 주기로 버퍼 포인터만 교체(Swap)하여 일괄 직렬화 및 필터링을 수행합니다.
 
-### C. 1차 반사신경 엔진 및 스레드 동결 (Freeze Mechanism & Execution Window)
+### C. 1차 반사신경 엔진 및 프로세스 동결 (Freeze Mechanism & Execution Window)
 * **ETW 비동기 특성과 방어 윈도우 (Early Execution Window)**:
-  * 커널 드라이버(`PsSetCreateProcessNotifyRoutineEx`)와 달리 ETW는 비동기 유저모드 통지 메커니즘입니다. 따라서 프로세스 생성 전 완벽한 사전 차단(Pre-execution Block)이 아니라, 스크립트 엔진(`powershell.exe`, `wscript.exe`)이 런타임/CLR을 초기화하는 **수십~수백 ms의 초기 기동 구간(Warm-up Window) 내에 스레드를 동결(Early Execution Interruption)**하는 방식을 취합니다.
-* **스레드 ID 식별 및 동결 절차**:
-  1. `Kernel-Process` ETW 이벤트는 프로세스 생성 시점에 `ProcessID`를 전달하지만 메인 스레드 ID는 누락되어 있습니다.
-  2. 위험 체인 패턴(`winword.exe` ➔ `powershell.exe`) 감지 즉시, `CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0)` 및 `Thread32First`/`Thread32Next`를 호출하여 해당 `th32OwnerProcessID == target_pid`인 메인 스레드 ID를 고속 열거합니다.
-  3. 타깃 스레드 핸들을 `OpenThread(THREAD_SUSPEND_RESUME, FALSE, tid)`로 획득한 후 `SuspendThread`를 호출하여 실행을 즉시 정지(Freeze)시킵니다.
+  * 커널 드라이버(`PsSetCreateProcessNotifyRoutineEx`)와 달리 ETW는 비동기 유저모드 통지 메커니즘입니다. 따라서 프로세스 생성 전 완벽한 사전 차단(Pre-execution Block)이 아니라, 스크립트 엔진(`powershell.exe`, `wscript.exe`)이 런타임/CLR을 초기화하는 **수십~수백 ms의 초기 기동 구간(Warm-up Window) 내에 프로세스를 동결(Early Execution Interruption)**하는 방식을 취합니다.
+* **원자적 동결 및 2중 방어선 절차 (Two-tier Freeze Architecture)**:
+  1. **1순위 (Primary / Phase 1.5)**: `Common::UniqueHModule`을 통해 `ntdll.dll`의 미공개 커널 API `NtSuspendProcess`를 동적으로 호출하여 프로세스 전체를 원자적(Atomic)으로 10~20μs 이내에 즉각 동결합니다. (동결 도중 신규 스레드 생성 탈출 원천 차단)
+  2. **2순위 (Fallback / Phase 1 표준)**: `NtSuspendProcess` 로드 실패 또는 비호환 환경 시, `CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0)`으로 스레드 ID를 열거하고 `OpenThread` ➔ `SuspendThread` 루프를 순회하는 표준 Win32 방식으로 즉각 자동 후퇴(Graceful Fallback)합니다.
+* **세이프티 워치독 연동 (Safety Watchdog & Deadlock Prevention)**:
+  * 프로세스를 동결하자마자 백그라운드 **`SafetyWatchdog`에 등록되어 10초(10,000ms) 카운트다운 타이머가 가동**됩니다.
+  * AI 심층 수사 진입 시 C# 코어의 1회성 연장 티켓(`ACTION_EXTEND_TIMEOUT`)으로 최대 1회(총 20초)까지 안전하게 시한을 연장할 수 있습니다.
+  * 만약 C# 코어가 사망하거나 네트워크가 두절되어 데드라인을 초과하면, 워치독이 자동으로 `Resume`을 집행하여 ntdll 로더 락(`LdrpLoaderLock`)으로 인한 시스템 전역 데드락을 원천 방지합니다.
 * 동결 완료 플래그(`is_suspended = true`)를 포함한 텔레메트리를 gRPC를 통해 상위 계층으로 발송합니다.
 
 ---

@@ -61,3 +61,19 @@ related:
 2. 모든 C++ 헤더에서 `<windows.h>` 호출 전 `<winsock2.h>`와 `<ws2tcpip.h>`를 선행 인클루드하도록 구조화.
 3. CMake 링크 플래그에 MSVC 네이티브 UAC 임베딩 지시어 `/MANIFEST:EMBED /MANIFESTUAC:"level='requireAdministrator' uiAccess='false'"` 적용하여 `mt.exe` 충돌 없이 PE 바이너리에 권한 임베딩 완료 (Ninja 빌드 및 `IpcE2ETest.exe` Exit Code 0 통과).
 
+---
+
+## 2026-09-10: [Resolved] Phase 1.5 원자적 프로세스 동결 엔진(NtSuspendProcess) 및 2중 안전 폴백 체계 구축
+
+### [현상 (Symptom)]
+* 기존 Win32 `CreateToolhelp32Snapshot` + `SuspendThread` 스레드 순회 방식은 스냅샷 생성 및 스레드 오픈 순회 과정에서 수십 ms의 지연이 발생(약 35ms 계측).
+* 순회 도중 타깃 악성 프로세스가 신규 워커 스레드를 즉각 분기(`CreateThread`)하여 페이로드를 실행하고 탈출할 수 있는 미세한 동시성 레이스 컨디션(Race Window) 취약점 존재.
+
+### [원인 (Root Cause)]
+* Win32 공개 API군에는 단일 호출로 프로세스 내 모든 스레드를 일괄 정지시키는 표준 인터페이스가 부재하여, 유저모드 스레드 열거 순회 방식에 의존함.
+
+### [해결책 (Resolution)]
+1. `ProcessActuator`에 `ntdll.dll`의 미공개 커널 네이티브 API `NtSuspendProcess` 및 `NtResumeProcess`를 동적으로 바인딩하여 1순위 원자적(Atomic) 동결 파이프라인 구축.
+2. 단위 테스트 계측 결과, 동결 소요 시간이 기존 35,281μs(~35ms)에서 **23μs(마이크로초, 1000배 이상 단축)**로 극적으로 단축되었으며 스레드 탈출 레이스 윈도우 원천 차단 확인.
+3. 권한 부족, 특정 OS 비호환 환경 또는 결함 발생 시 즉시 기존 `Toolhelp32` 방식으로 우아하게 자동 후퇴(Graceful Fallback)하는 2중 방어선 구현.
+4. `SensorTests`에 결함 주입(`force_fallback = true`) 테스트 케이스를 포함하여 2순위 폴백 경로에서도 정상 동결/복구됨을 완전 검증 (Exit Code 0).
