@@ -15,7 +15,7 @@ related:
 ## 1. 벤치마크 배경 및 가설
 
 ### A. 기술적 쟁점 (Theoretical Dilemma)
-* ETW 커널 수집기는 단일 콜백 스레드에서 이벤트를 뿜어내고, gRPC 전송 워커가 이를 10ms(100Hz) 주기로 일괄 소비하므로 이론상 **SPSC (Single-Producer, Single-Consumer)** 구조를 형성합니다.
+* ETW 커널 수집기는 콜백 스레드에서 이벤트를 뿜어내고, C++ 엔진 분석 및 배치 스트리밍 워커가 이를 10ms(100Hz) 주기로 일괄 소비하므로 이론상 **SPSC (Single-Producer, Single-Consumer)** 구조를 형성합니다.
 * 이론적으로는 락이 전혀 없는 `boost::lockfree::spsc_queue`가 가장 빠를 것으로 예상되나, **EDR의 데이터 특성(대량 배치 수송 & 순간적 버스트 폭주)**에서는 낱개 원자적 인출 방식이 오히려 캐시 경합과 소비자 블로킹을 유발할 수 있다는 가설을 세우고 이를 실측 검증했습니다.
 
 ---
@@ -30,7 +30,7 @@ related:
 | **이벤트 페이로드** | **128 Bytes POD 구조체** (`BenchmarkProcessEvent`) | 실제 `ProcessEvent`와 동일한 크기 및 메모리 정렬 |
 | **총 이벤트 부하** | **1,000,000 건 (100만 건)** | 해커 침투 및 스크립트 난사 시의 버스트 스파이크 모사 |
 | **생산자 동작 (Producer)** | ETW 콜백 스레드 모사 (쉬지 않고 연속 고속 푸시) | 이벤트 수집기 역할 |
-| **소비자 동작 (Consumer)** | **10ms(100Hz) 주기** 일괄 인출 (`sleep_for(10ms)`) | gRPC 배치 전송 워커 역할 |
+| **소비자 동작 (Consumer)** | **10ms(100Hz) 주기** 일괄 인출 (`sleep_for(10ms)`) | C++ 엔진 분석 및 배치 스트리밍 워커 역할 |
 | **시간 계측 기준** | `std::chrono::high_resolution_clock` (ns 정밀도) | 소비자 순수 블로킹 시간 분리 측정 |
 
 ---
