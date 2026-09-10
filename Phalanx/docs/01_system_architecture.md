@@ -118,7 +118,7 @@ private:
   * C++ 인메모리 프로세스 트리 상에서 비할당 `std::string_view`와 고속 ASCII 대소문자 무시 비교(< 20ns)를 통해 룰을 평가합니다:
     * **고신뢰도 악성 체인**: `vssadmin.exe delete shadows`, `bcdedit /set`, `wbadmin delete catalog` 등.
     * **회색지대 LOLBAS**: `excel.exe`, `winword.exe` ➔ `powershell.exe`, `certutil.exe` 스폰.
-  * **실측 성능**: 50,000회 연속 평가 시 **평균 0.354μs (초당 257만 건 처리, P99 0.7μs)**로 기준(100μs) 대비 280배 고속 판정 달성 (`docs/05_engine_reflex_benchmark.md` 참조).
+  * **실측 성능**: 50,000회 연속 평가 시 **평균 0.354μs (초당 257만 건 처리, P99 0.7μs)**로 기준(100μs) 대비 280배 고속 판정 달성 (`docs/04_performance_benchmarks.md` 참조).
 * **이원화 즉각 조치 (Dual Mitigation Actuator)**:
   1. **고신뢰도 악성 사살 (Immediate Kill, 0.1ms)**: `TerminateProcess`를 호출하여 현장 즉시 사살 집행 (`is_terminated = true`).
   2. **회색지대 선제 동결 (Atomic Suspend, 24μs)**: `ntdll!NtSuspendProcess`를 동적 호출하여 **24~27μs** 만에 프로세스 원자적 동결 집행(Toolhelp32 스레드 순회 대비 1,170배 고속) 및 타깃 RAM 보존 ➔ 10초 `SafetyWatchdog` 가동 ➔ C# AI 에이전트에 수사 의뢰 (`is_suspended = true`).
