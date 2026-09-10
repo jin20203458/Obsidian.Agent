@@ -30,10 +30,8 @@ flowchart TD
         ETW_Img --> Krabs
         
         Krabs --> IngestQueue["Double-Buffered Swap Queue (Lock-Swap)"]
-        IngestQueue --> ReflexEngine{"1차 반사신경 휴리스틱"}
-        
-        ReflexEngine -- "이상 징후 즉시 동결" --> Win32Act["Win32 Actuator (SuspendThread)"]
-        ReflexEngine --> GrpcClient["Async gRPC Streaming Client (agrpc)"]
+        IngestQueue --> GrpcClient["Async gRPC Streaming Client (agrpc)"]
+        GrpcClient --> Win32Act["Process Actuator (NtSuspendProcess / TerminateProcess)"]
     end
 
     subgraph CS_CORE ["Layer 2: CSharp .NET AI Brain 및 Ingest (Phalanx.Core)"]
@@ -42,13 +40,13 @@ flowchart TD
         
         ThreatGraph --> DecisionRouter{"Decision Router"}
         
-        DecisionRouter -- "오프라인/기본 모드" --> DeterministicRules["Deterministic Rule Engine (Sigma)"]
-        DecisionRouter -- "AI 활성화 모드" --> AgentOrchestrator["Autonomous Hunter Agent (ReAct)"]
+        DecisionRouter -- "고신뢰도 악성 체인" --> DeterministicRules["Deterministic Rule Engine (Sigma)"]
+        DecisionRouter -- "회색지대 위협 분석" --> AgentOrchestrator["Autonomous Hunter Agent (ReAct)"]
         
-        DeterministicRules --> ActionCoordinator["Action Coordinator"]
-        AgentOrchestrator --> ActionCoordinator
+        DeterministicRules -- "15ms 즉각 사살 (Kill)" --> ActionCoordinator["Action Coordinator"]
+        AgentOrchestrator -- "타깃 동결/연장/해제 (Suspend/Resume)" --> ActionCoordinator
         
-        ActionCoordinator -->|"Downstream Command (Kill/Unfreeze)"| GrpcServer
+        ActionCoordinator -->|"Downstream Command (Kill/Suspend/Resume)"| GrpcServer
         GrpcServer --> Win32Act
     end
 
@@ -111,17 +109,18 @@ private:
 ```
 * **동작 주기**: ETW 콜백 스레드는 오직 `Push`만 수행(지연 시간 1μs 미만)하며, 센서 메인 루프 워커가 10ms(100Hz) 주기로 버퍼 포인터만 교체(Swap)하여 일괄 직렬화 및 필터링을 수행합니다.
 
-### C. 1차 반사신경 엔진 및 프로세스 동결 (Freeze Mechanism & Execution Window)
-* **ETW 비동기 특성과 방어 윈도우 (Early Execution Window)**:
-  * 커널 드라이버(`PsSetCreateProcessNotifyRoutineEx`)와 달리 ETW는 비동기 유저모드 통지 메커니즘입니다. 따라서 프로세스 생성 전 완벽한 사전 차단(Pre-execution Block)이 아니라, 스크립트 엔진(`powershell.exe`, `wscript.exe`)이 런타임/CLR을 초기화하는 **수십~수백 ms의 초기 기동 구간(Warm-up Window) 내에 프로세스를 동결(Early Execution Interruption)**하는 방식을 취합니다.
+### C. 이원화 프로세스 제어 및 원자적 동결 (Dual Mitigation Actuator & Target Preservation)
+* **ETW 비동기 특성과 방어 윈도우 (Execution Window Dynamics)**:
+  * 커널 드라이버(`PsSetCreateProcessNotifyRoutineEx`)와 달리 ETW는 비동기 유저모드 통지 메커니즘입니다.
+  * **스크립트 기반 공격(`powershell.exe`, `cscript.exe`)**: .NET CLR 런타임을 초기화하고 JIT 컴파일을 완료하는 데 최소 150~250ms의 웜업 구간(Warm-up Window)이 소요됩니다. 따라서 C# 룰 엔진의 E2E 왕복 지연 시간(~15ms) 내에 즉각 사살(`ACTION_KILL`)을 집행하면 파일/네트워크 IO 발생 전 100% 선제 차단이 완료됩니다.
+  * **회색지대 위협 및 AI 심층 수사**: 즉각 사살할 수 없는 모호한 공격 체인은 C#의 `ACTION_SUSPEND` 명령에 의해 C++ 액추에이터가 24μs 만에 원자적으로 동결하여 공격자의 탈출을 막고 메모리 상태를 보존합니다.
 * **원자적 동결 및 2중 방어선 절차 (Two-tier Freeze Architecture)**:
-  1. **1순위 (Primary / Phase 1.5)**: `Common::UniqueHModule`을 통해 `ntdll.dll`의 미공개 커널 API `NtSuspendProcess`를 동적으로 호출하여 프로세스 전체를 원자적(Atomic)으로 10~20μs 이내에 즉각 동결합니다. (동결 도중 신규 스레드 생성 탈출 원천 차단)
+  1. **1순위 (Primary / Phase 1.5)**: `Common::UniqueHModule`을 통해 `ntdll.dll`의 미공개 커널 API `NtSuspendProcess`를 동적으로 호출하여 프로세스 전체를 원자적(Atomic)으로 24μs 이내에 즉각 동결합니다. (동결 도중 신규 스레드 생성 탈출 원천 차단)
   2. **2순위 (Fallback / Phase 1 표준)**: `NtSuspendProcess` 로드 실패 또는 비호환 환경 시, `CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0)`으로 스레드 ID를 열거하고 `OpenThread` ➔ `SuspendThread` 루프를 순회하는 표준 Win32 방식으로 즉각 자동 후퇴(Graceful Fallback)합니다.
 * **세이프티 워치독 연동 (Safety Watchdog & Deadlock Prevention)**:
   * 프로세스를 동결하자마자 백그라운드 **`SafetyWatchdog`에 등록되어 10초(10,000ms) 카운트다운 타이머가 가동**됩니다.
   * AI 심층 수사 진입 시 C# 코어의 1회성 연장 티켓(`ACTION_EXTEND_TIMEOUT`)으로 최대 1회(총 20초)까지 안전하게 시한을 연장할 수 있습니다.
   * 만약 C# 코어가 사망하거나 네트워크가 두절되어 데드라인을 초과하면, 워치독이 자동으로 `Resume`을 집행하여 ntdll 로더 락(`LdrpLoaderLock`)으로 인한 시스템 전역 데드락을 원천 방지합니다.
-* 동결 완료 플래그(`is_suspended = true`)를 포함한 텔레메트리를 gRPC를 통해 상위 계층으로 발송합니다.
 
 ---
 
@@ -176,6 +175,7 @@ message MitigationCommand {
         ACTION_RESUME = 1;          // 스레드 동결 해제 (Unfreeze)
         ACTION_BLOCK_IP = 2;        // 센서 레벨 패킷 차단 또는 코어 방화벽 연동
         ACTION_EXTEND_TIMEOUT = 3;  // AI 심층 수사 진입 시 1회성 타임아웃 연장 (최대 1회 엄격 제한)
+        ACTION_SUSPEND = 4;         // AI 심층 수사를 위한 타깃 프로세스 원자적 동결 (휘발성 메모리 보존)
     }
     ActionType action = 1;
     uint32 target_pid = 2;

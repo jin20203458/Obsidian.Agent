@@ -93,3 +93,19 @@ related:
 1. `impl_->running.compare_exchange_strong(expected, true, std::memory_order_acq_rel)`을 적용하여 복수의 스레드가 동시 진입하더라도 오직 하나의 스레드만 `false -> true` 전이에 성공하도록 원자적 상태 전이 보장.
 2. 스레드 생성부를 `try-catch`로 감싸 `std::thread` 생성 실패 시 `impl_->running.store(false, std::memory_order_release)`로 원자적 롤백 수행 및 `false` 반환하도록 예외 안전성 확보.
 3. `build.ps1` 재빌드, `SensorTests.exe` 및 `IpcE2ETest.exe`를 실행하여 정상 동작 및 Exit Code 0 통과 확인.
+
+---
+
+## 2026-09-10: [Resolved] MitigationCommand 프로토콜 비대칭 해소 및 ACTION_SUSPEND 동결 핸들러 연동
+
+### [현상 (Symptom)]
+* C# 코어에서 모호한 위협을 감지했을 때 AI 심층 수사를 위해 프로세스를 선제 동결(`NtSuspendProcess`)하려 해도, gRPC 프로토콜 `MitigationCommand`에 `ACTION_SUSPEND` 명령이 누락되어 있어 원격 동결 명령을 하달할 수 없는 비대칭성 존재.
+* C++ 센서 수신 루프(`GrpcStreamClient`)에 `ACTION_SUSPEND` 분기 핸들러가 부재하여 프로세스 동결 액추에이터를 원격 트리거할 수 없었음.
+
+### [원인 (Root Cause)]
+* 기획 초기 "C++ 센서가 모든 프로세스를 선제 동결하고 C#은 해제/사살만 판단한다"는 단방향 가정으로 인해 `ACTION_RESUME`과 `ACTION_KILL`만 정의되었음.
+
+### [해결책 (Resolution)]
+1. `proto/phalanx.proto`의 `MitigationCommand::ActionType`에 `ACTION_SUSPEND = 4` 추가.
+2. `GrpcStreamClient.cpp`의 수신 루프에 `case phalanx::MitigationCommand::ACTION_SUSPEND:`를 추가하고 `impl_->actuator->SuspendProcess(cmd.target_pid())` 연동.
+3. `build.ps1`을 통해 Protobuf 코드 생성 및 빌드 성공(Exit Code 0), `SensorTests.exe` 및 `IpcE2ETest.exe` 통과 확인 (커밋 `89768b4`).

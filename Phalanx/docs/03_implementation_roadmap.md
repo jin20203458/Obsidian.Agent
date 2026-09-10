@@ -18,17 +18,17 @@ related:
 ## 1. 단계별 구현 마일스톤 흐름
 
 ```
-[ Phase 1: Sensor & IPC ] ──▶ [ Phase 1.5: Atomic Freeze ] ──▶ [ Phase 2: Core & Reflex ] ──▶ [ Phase 2.5: Reflex Profiling ] ──▶ [ Phase 3: AI Agent & Tools ] ──▶ [ Phase 4: Cockpit & Presentation ]
-  • ETW 커널 수집 루프         • NtSuspendProcess 원자적 동결   • gRPC 양방향 수신 파이프라인 • E2E 왕복 지연 실측 (RTT)    • ReAct 추론 루프              • WPF 노드 그래프 UI
-  • 락-스왑 무손실 버퍼        • 100배 가속 (10~20μs)           • LiteDB 프로세스 트리        • 오피스-파워셸 공격 시나리오 • 5대 OS 도구 호출 체계        • QuestPDF 침해사고 리포트
-  • Suspend/Kill 액추에이터    • Toolhelp32 우아한 폴백         • 로컬 결정론적 룰 엔진       • CLR 웜업 대비 차단 입증     • Fallback 모드 전환 검증      • E2E 차단 시나리오 데모화
+[ Phase 1: Sensor & IPC ] ──▶ [ Phase 1.5: Atomic Freeze ] ──▶ [ Phase 2: Core & Dual Mitigation ] ──▶ [ Phase 2.5: Defense Profiling Benchmark ] ──▶ [ Phase 3: AI Agent & Target Preservation ] ──▶ [ Phase 4: Cockpit & Presentation ]
+  • ETW 커널 수집 루프 (완료)   • NtSuspendProcess 동결 (완료)  • gRPC 양방향 수신 파이프라인       • 스크립트 150ms 웜업 vs 15ms 차단 실측       • ReAct 추론 루프 및 5대 도구           • WPF 노드 그래프 UI
+  • 락-스왑 무손실 버퍼 (완료)  • Toolhelp32 폴백 (완료)        • LiteDB 프로세스 트리 DAG 매핑     • 네이티브 바이너리 2ms 실행 누수 계측        • 동결 타깃 휘발성 메모리 보존 수사    • QuestPDF 침해사고 리포트
+  • ACTION_SUSPEND 대칭 (완료)  • 10초 세이프티 워치독 (완료)   • 1차 결정론적 룰 엔진 (Kill/Suspend) • Canary 파일 생성 차단 여부 실증          • 10초 워치독 1회 연장 연동           • E2E 차단 시나리오 데모화
 ```
 
 ---
 
 ## 2. 단계별 세부 구현 태스크 및 완료 정의 (DoD)
 
-### Phase 1: 고성능 센서 및 통신 파이프라인 (Sensor & IPC)
+### Phase 1: 고성능 센서 및 통신 파이프라인 (Sensor & IPC) [완료]
 * **목표**: Windows 커널 프로세스 이벤트를 유실 없이 수집하고 gRPC로 고속 송신하는 네이티브 C++ 파이프라인 구축.
 * **주요 개발 내용**:
   * Visual Studio 2022 기반 C++20 `Phalanx.Sensor` 프로젝트 스캐폴딩.
@@ -36,57 +36,65 @@ related:
   * `DoubleBufferedSwapQueue` 락-스왑 템플릿 구현 및 주기적 스왑 플러시 루프 계측.
   * Win32 `OpenThread` ➔ `SuspendThread` 및 `TerminateProcess` 안전 래퍼 함수 구현.
   * `phalanx.proto` 정의 및 `asio-grpc` 비동기 스트리밍 클라이언트 연동.
+  * `EtwKernelCollector::Start()` 원자적 CAS 상태 전이 및 예외 안전성 롤백 적용 (`edc00bf`).
 * **완료 정의 (DoD)**:
-  * 로컬에서 `powershell.exe` 실행 시, C++ 센서가 이벤트를 드롭 없이 캡처하여 콘솔에 즉시 출력.
-  * `SuspendThread` 호출 시 타깃 프로세스가 20ms 이내에 완전히 정지(Freeze)됨을 작업 관리자에서 확인.
+  * 로컬에서 `powershell.exe` 실행 시, C++ 센서가 이벤트를 드롭 없이 캡처하여 콘솔에 즉시 출력 (완료).
+  * `SuspendThread` 호출 시 타깃 프로세스가 20ms 이내에 완전히 정지(Freeze)됨을 작업 관리자에서 확인 (완료).
 
 ---
 
-### Phase 1.5: 원자적 고속 동결 엔진 및 안전 폴백 (Atomic Freeze & Fallback)
-* **목표**: `ntdll.dll`의 미공개 커널 API(`NtSuspendProcess`/`NtResumeProcess`)를 `Common::UniqueHModule`로 동적 로드하여 동결 지연 시간을 100배 단축(수 ms ➔ 10~20μs)하고 스레드 레이스 컨디션을 원천 차단하며, 실패 시 기존 Toolhelp32 방식으로 우아하게 후퇴(Fallback)하는 2중 방어선 구축.
+### Phase 1.5: 원자적 고속 동결 엔진 및 안전 폴백 (Atomic Freeze & Fallback) [완료]
+* **목표**: `ntdll.dll`의 미공개 커널 API(`NtSuspendProcess`/`NtResumeProcess`)를 `Common::UniqueHModule`로 동적 로드하여 동결 지연 시간을 100배 단축(수 ms ➔ 24μs)하고 스레드 레이스 컨디션을 원천 차단하며, 실패 시 기존 Toolhelp32 방식으로 우아하게 후퇴(Fallback)하는 2중 방어선 구축.
 * **주요 개발 내용**:
   * `ProcessActuator` 내부에 `NtSuspendProcess` / `NtResumeProcess` 함수 포인터 시그니처 및 동적 로딩 구현 (`Common::UniqueHModule` 활용).
   * **1순위 (Primary)**: `NtSuspendProcess`를 통한 프로세스 레벨 원자적 동결 집행 (동결 도중 신규 스레드 생성 탈출 불가).
   * **2순위 (Fallback)**: API 로드 실패 또는 특정 OS 환경 비호환 시 기존 `CreateToolhelp32Snapshot` + `SuspendThread` 순회 루프로 즉각 자동 폴백(Graceful Degradation).
   * 복구(Resume) 시에도 동일하게 `NtResumeProcess` 1순위 시도 후 실패 시 스레드별 `ResumeThread` 2순위 폴백.
-  * `SensorTests`에 `NtSuspendProcess` 원자적 동결 검증 및 강제 폴백(Fault Injection) 테스트 케이스 추가.
+  * 데드락 방지용 10초 `SafetyWatchdog` (1회 한정 +10초 연장 가드, 자동 Resume) 연동.
+  * `phalanx.proto` 및 `GrpcStreamClient`에 `ACTION_SUSPEND = 4` 핸들러 추가로 프로토콜 대칭성 확립 (`89768b4`).
 * **완료 정의 (DoD)**:
-  * `NtSuspendProcess` 성공 시 프로세스 동결 소요 시간이 50μs 미만으로 단축됨을 단위 테스트에서 확인.
-  * 가상 실패 주입 시에도 Win32 스냅샷 폴백이 즉각 작동하여 프로세스가 100% 정상 동결/복구됨을 확인 (Exit Code 0).
+  * `NtSuspendProcess` 성공 시 프로세스 동결 소요 시간이 50μs 미만(실측 24~27μs)으로 단축됨을 단위 테스트에서 확인 (완료).
+  * 가상 실패 주입 시에도 Win32 스냅샷 폴백이 즉각 작동하여 프로세스가 100% 정상 동결/복구됨을 확인 (완료, Exit Code 0).
 
 ---
 
-### Phase 2: 코어 엔진 및 결정론적 1차 방어 (Core & Reflex)
-* **목표**: C# 백엔드에서 텔레메트리를 수신해 인과 그래프를 구성하고, 룰 엔진을 통해 0.05초 이내에 자동 차단하는 닫힌 루프(Closed-Loop) 완성.
+### Phase 2: 코어 엔진 및 이원화 완화 체계 (Core & Dual Mitigation)
+* **목표**: C# .NET 9 백엔드에서 텔레메트리를 수신해 인과 그래프를 구성하고, 룰 엔진을 통해 15ms 이내에 즉각 사살(`Kill`)하거나 회색지대 위협을 동결(`Suspend`)하는 닫힌 루프(Closed-Loop) 완성.
 * **주요 개발 내용**:
-  * .NET 8/9 C# `Phalanx.Core` 프로젝트 생성 및 gRPC 수신 서비스 구축.
-  * `LiteDB 5.0` 기반의 임베디드 Threat Graph 메모리 구축 (프로세스 부모-자식 트리 및 인과 관계망 매핑).
+  * .NET 9 C# `Phalanx.Core` 프로젝트 생성 및 gRPC 양방향 스트리밍 수신 서비스 구축 (`Phalanx.Shared.Protos`).
+  * `LiteDB 5.0` 기반의 임베디드 Threat Graph 메모리 구축 (프로세스 부모-자식 트리 DAG 및 인과 관계망 매핑).
   * gRPC `StreamTelemetry` 양방향 스트림의 역방향 응답 채널을 통한 `MitigationCommand` 하달 연동.
-  * **결정론적 1차 룰 엔진 (Deterministic Rule Engine)** 구축:
-    * *규칙 1: `winword.exe`, `excel.exe` ➔ 자식 `powershell.exe`, `cmd.exe` 스폰 감지.*
-    * *규칙 2: 명령줄 인자에 `-enc`, `-EncodedCommand`, `DownloadString` 포함 여부 판별.*
-  * 규칙 충족 시 C++ 센서로 `ACTION_KILL` 명령을 자동 하달.
+  * **결정론적 이원화 룰 엔진 (Deterministic Dual-Path Rule Engine)** 구축:
+    * **경로 1 (고신뢰도 악성 사살 - ACTION_KILL)**:
+      * 규칙: `winword.exe`, `excel.exe` ➔ 자식 `powershell.exe`, `cmd.exe` 스폰 및 명령줄 인자에 `-enc`, `-EncodedCommand`, `DownloadString` 포함.
+      * 조치: C++ 센서로 즉시 `ACTION_KILL` 명령을 하달하여 15ms 이내에 사살.
+    * **경로 2 (회색지대 타깃 보존 - ACTION_SUSPEND)**:
+      * 규칙: 부모-자식 관계가 비정형적이거나 탐색 행위(Discovery/Enum) 의심 프로세스.
+      * 조치: C++ 센서로 `ACTION_SUSPEND` 명령을 하달하여 24μs 원자적 동결 집행 및 10초 세이프티 워치독 가동 ➔ Phase 3 AI 심층 수사 윈도우 확보.
 * **완료 정의 (DoD)**:
-  * 테스트 매크로 스크립트 실행 시, 사람의 개입 없이 0.05초(50ms) 이내에 파워셸 프로세스가 강제 종료되어야 함.
+  * 테스트 스크립트 실행 시, 사람의 개입 없이 15ms(E2E) 이내에 파워셸 프로세스가 강제 종료(`TerminateProcess`)되어야 함.
+  * 회색지대 이벤트 주입 시, 타깃 프로세스가 `NtSuspendProcess`에 의해 안전하게 동결되고 10초 워치독이 정상 동작해야 함.
 
 ---
 
-### Phase 2.5: 반사신경 파이프라인 E2E 실측 및 프로파일링 (Reflex Pipeline Profiling)
-* **목표**: Phase 2에서 완성된 C++ 센서와 C# 코어 간의 양방향 닫힌 루프(Closed-Loop) 파이프라인을 바탕으로, 실제 공격 시나리오(오피스 매크로 난독화 파워셸 스폰)에 대한 엔드투엔드(E2E) 반사신경 차단 시간(Round-Trip Time, RTT)을 C++ 관점에서 실측하고, 파이프라인 지연 시간을 프로파일링하여 문서화(`05_edr_reflex_pipeline_profiling.md`).
+### Phase 2.5: 방어 파이프라인 실측 및 공격 윈도우 벤치마크 (Defense Profiling Benchmark)
+* **목표**: Phase 2에서 완성된 C++ 센서와 C# 코어 간의 양방향 파이프라인을 바탕으로, 실제 공격 시나리오(스크립트 기반 vs 네이티브 바이너리)에 대해 E2E 차단 시간과 실행 누수(Canary Execution Leak) 여부를 실측하고, 벤치마크 보고서(`05_edr_reflex_pipeline_profiling.md`) 작성.
 * **주요 개발 내용**:
-  * **C++ 센서 관점의 RTT 계측 체계 구축**:
-    * 텔레메트리 패킷 발송 시점(`t0 = high_resolution_clock::now()`)과 C# 코어로부터 `ACTION_KILL` 응답 수신 후 프로세스 강제 종료(`TerminateProcess`) 집행 완료 시점(`t1`) 간의 순수 왕복 시간(Round-Trip Time) 계측.
-    * 프로세스 간 시계 동기화 오버헤드를 배제하고 외부 관측자(C++ 센서) 기준의 단일 타임라인 확립.
-  * **C# 코어 내부 경량 진단 로깅**:
-    * `Stopwatch`를 활용하여 gRPC 수신 시점부터 50ms 결정론적 룰 엔진 판정 완료 시점까지의 순수 판단 소요 시간 보조 로깅.
-  * **실제 악성 모의 공격 시나리오 검증**:
-    * 부모 프로세스(`winword.exe` 모사) ➔ 자식 프로세스(`powershell.exe -WindowStyle Hidden -EncodedCommand ...`) 스폰 공격 체인 실행.
-    * 파워셸의 .NET CLR 로딩 및 런타임 웜업 윈도우(약 150~250ms) 대비 Phalanx의 반사신경 차단 완료 시점 실측치 비교 분석.
+  * **C++ 센서 관점의 E2E RTT 정밀 계측**:
+    * 텔레메트리 패킷 발송 시점(`t0 = high_resolution_clock::now()`)부터 C# 응답 수신 및 집행 완료 시점(`t1`)까지의 순수 왕복 시간(Round-Trip Time) 나노초 단위 계측.
+  * **[실험 1] 관리형 스크립트 공격 윈도우 검증**:
+    * 모의 부모 프로세스 ➔ `powershell.exe -enc ...` (카나리 파일 쓰기 시도) 스폰.
+    * .NET CLR 런타임 웜업 윈도우(약 150~250ms) 대비 Phalanx의 E2E 차단 완료 시점(~15ms) 실측 비교.
+    * 카나리 파일 생성 전 100% 선제 차단(Zero Payload Execution) 성공 여부 검증.
+  * **[실험 2] 네이티브 바이너리 공격 윈도우 한계 측정**:
+    * C/C++ 네이티브 모의 바이너리(`MockNativeRansomware.exe`, 진입점 0.5~2ms 이내 디스크 쓰기) 실행.
+    * C# 원격 사살(15ms) 환경에서 카나리 파일이 쓰여지는지(실행 누수 발생 여부) 실측.
+    * (선택적 평가) C++ 로컬 반사 사살(Local Reflex Kill, 1ms 미만) 필요성에 대한 실측 데이터 기반 분석.
   * **벤치마크 보고서 문서화**:
-    * `05_edr_reflex_pipeline_profiling.md` 작성 (구간별 소요 시간 표, 파이프라인 타임라인 간트 차트, 공격자 실행 윈도우 대비 차단 시점 분석 수록).
+    * `05_edr_reflex_pipeline_profiling.md`에 타임라인 간트 차트 및 실측 데이터 기록.
 * **완료 정의 (DoD)**:
-  * 모의 악성 스크립트 실행 시, C++ 단독 RTT 기준 전체 E2E 차단 소요 시간이 50ms 미만(실측 목표 15~20ms)으로 검증됨을 확인.
-  * `Obsidian.Agent/Phalanx/docs/05_edr_reflex_pipeline_profiling.md` 보고서가 작성되어 커밋됨.
+  * 스크립트 모의 공격에 대해 E2E 차단 소요 시간 20ms 미만 및 카나리 파일 미생성(100% 방어) 확인.
+  * 네이티브 바이너리 공격 시 실행 윈도우 비교 실측 데이터 도출 및 문서 커밋 완료.
 
 ---
 
