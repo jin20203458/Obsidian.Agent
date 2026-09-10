@@ -58,30 +58,33 @@ related:
 
 ---
 
-### Phase 2: C++ 인메모리 프로세스 트리 및 100μs 로컬 룰 엔진 (In-Memory DAG & Local Rules)
+### Phase 2: C++ 인메모리 프로세스 트리 및 100μs 로컬 룰 엔진 (In-Memory DAG & Local Rules) [완료]
 * **목표**: C++ 네이티브 엔진 내부에서 활성 프로세스 트리(DAG)를 O(1)로 유지하고, 100μs 이내에 고위험 공격은 현장 즉시 사살(`0.1ms`), 회색지대 위협은 선제 동결(`24μs`)하는 자율 완결형 EDR 엔진 완성.
 * **주요 개발 내용**:
   * **C++ 인메모리 프로세스 트리 (`ProcessTree`) 구현**:
     * `std::unordered_map<uint32_t, ProcessNode>` 기반 O(1) 부모-자식 관계 추적.
-    * 프로세스 생성 이벤트 인입 시 부모의 이미지 경로, 커맨드라인, 서명 상태를 1μs 이내에 역추적.
-    * 프로세스 종료 이벤트 감지 시 메모리 트리에서 노드 정리.
+    * 기동 시 `InitializeFromSnapshot()`을 통한 335개 OS 프로세스 웜업 적재.
+    * PID 재사용 대응 및 10,000개 Tombstone 메모리 바운딩.
+    * 프로세스 족보 역추적(`GetAncestry`) 10,000회 평균 `0.436μs` 달성.
   * **로컬 결정론적 룰 엔진 (`LocalRuleEngine`) 구현**:
+    * 비할당 `std::string_view` 및 ASCII 고속 대소문자 무시 비교(< 20ns) 적용.
     * **경로 1 (고신뢰도 악성 ➔ 즉각 사살)**:
-      * 규칙: `excel.exe`, `winword.exe` ➔ 자식 `powershell.exe`, `cmd.exe` 및 인자에 `-enc`, `DownloadString` 포함.
-      * 조치: 현장에서 `ProcessActuator::TerminateTargetProcess` 즉시 호출 (0.1ms 이내 사살 완료).
+      * 규칙: `vssadmin.exe delete shadows`, `bcdedit /set`, `wbadmin delete catalog` 등.
+      * 조치: 현장에서 `ProcessActuator::TerminateTargetProcess` 즉시 호출 (0.1ms 이내 사살, `is_terminated = true`).
     * **경로 2 (회색지대 위협 ➔ 선제 동결)**:
-      * 규칙: `winword.exe` ➔ `certutil.exe` (LOLBin 다운로더) 등 정상 도구 악용 의심 행위.
+      * 규칙: `winword.exe` ➔ `powershell.exe`, `certutil.exe` (LOLBAS 다운로더/스폰) 행위.
       * 조치: 현장에서 `ProcessActuator::SuspendProcess` 호출 (24μs 원자적 동결) ➔ 10초 `SafetyWatchdog` 등록 ➔ gRPC 스트림으로 `is_suspended = true` 보고하여 C# AI 에이전트에 수사 의뢰.
     * **경로 3 (정상 작업 ➔ 무간섭 패스스루)**:
-      * 신뢰된 개발/시스템 도구 체인 통과.
+      * 신뢰된 개발/시스템 도구 체인 통과 (`PASS_DEFAULT`).
 * **완료 정의 (DoD)**:
-  * 단위 테스트(`SensorTests`)에서 모의 고위험 프로세스 생성 시 0.1ms 이내에 사살 처리됨을 확인.
-  * 모의 회색지대 프로세스 생성 시 24μs 만에 동결되고 `is_suspended == true`로 큐에 적재됨을 확인 (Exit Code 0).
+  * 단위/벤치마크 테스트(`EngineTests.exe`)에서 50,000회 연속 룰 평가 시 평균 `0.354μs`(초당 257만 건, < 100μs 기준 통과), 10,000회 족보 역추적 시 평균 `0.436μs` 검증 완료.
+  * 안전 픽스처 테스트에서 모의 고위험 프로세스 사살(`is_terminated = true`) 및 모의 회색지대 프로세스 24μs 동결(`is_suspended = true`) 확인 (Exit Code 0).
+  * 벤치마크 보고서 `docs/05_engine_reflex_benchmark.md` 작성 및 커밋 완료 (`69930b3`).
 
 ---
 
 ### Phase 2.5: 방어 파이프라인 실측 및 공격 윈도우 벤치마크 (Defense Profiling Benchmark)
-* **목표**: Phase 2에서 완성된 C++ 네이티브 엔진의 실시간 차단 능력에 대해, 실제 공격 시나리오(스크립트 기반 vs 네이티브 바이너리)를 대상으로 E2E 차단 시간과 실행 누수(Canary Execution Leak) 여부를 실측하고, 벤치마크 보고서(`05_edr_reflex_pipeline_profiling.md`) 작성.
+* **목표**: Phase 2에서 완성된 C++ 네이티브 엔진의 실시간 차단 능력에 대해, 실제 공격 시나리오(스크립트 기반 vs 네이티브 바이너리)를 대상으로 E2E 차단 시간과 실행 누수(Canary Execution Leak) 여부를 실측하고, 벤치마크 보고서(`06_edr_reflex_pipeline_profiling.md`) 작성.
 * **주요 개발 내용**:
   * **[실험 1] 관리형 스크립트 공격 윈도우 검증**:
     * 모의 부모 프로세스 ➔ `powershell.exe -enc ...` (카나리 파일 생성 시도) 스폰.
@@ -91,10 +94,10 @@ related:
     * C/C++ 네이티브 모의 바이너리(`MockNativeRansomware.exe`, 진입점 0.5~2ms 이내 디스크 쓰기) 실행.
     * C++ 로컬 룰 엔진(0.1ms)에 의해 카나리 파일 생성이 원천 차단되는지 실측.
   * **벤치마크 보고서 문서화**:
-    * `05_edr_reflex_pipeline_profiling.md`에 타임라인 간트 차트 및 실측 데이터 기록.
+    * `06_edr_reflex_pipeline_profiling.md`에 타임라인 간트 차트 및 실측 데이터 기록.
 * **완료 정의 (DoD)**:
   * 스크립트 및 네이티브 모의 공격 모두에서 1ms 미만의 현장 사살로 카나리 파일 미생성(100% 방어) 확인.
-  * `Obsidian.Agent/Phalanx/docs/05_edr_reflex_pipeline_profiling.md` 작성 및 커밋 완료.
+  * `Obsidian.Agent/Phalanx/docs/06_edr_reflex_pipeline_profiling.md` 작성 및 커밋 완료.
 
 ---
 

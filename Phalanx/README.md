@@ -15,4 +15,5 @@ related:
 - [02_ai_agent_investigation_design.md](./docs/02_ai_agent_investigation_design.md): ReAct 자율 위협 헌터 에이전트, 5대 OS 수사 도구 및 포렌식 아카이브 설계
 - [03_implementation_roadmap.md](./docs/03_implementation_roadmap.md): 단계별(Phase) 기능 구현 마일스톤 및 완료 정의(DoD)
 - [04_concurrency_queue_benchmark.md](./docs/04_concurrency_queue_benchmark.md): Boost 락프리 SPSC 링버퍼 vs 더블 버퍼드 락-스왑 큐 1:1 실측 벤치마크 보고서
-- [05_edr_reflex_pipeline_profiling.md](./docs/05_edr_reflex_pipeline_profiling.md): 오피스-파워셸 실제 공격 체인 E2E 반사신경 차단 파이프라인 실측 프로파일링 보고서 (Phase 2.5 산출물)
+- [05_engine_reflex_benchmark.md](./docs/05_engine_reflex_benchmark.md): C++ 엔진 반사신경 및 로컬 룰 지연시간 실측 벤치마크 보고서 (Phase 1.5 ~ Phase 2)
+- [06_edr_reflex_pipeline_profiling.md](./docs/06_edr_reflex_pipeline_profiling.md): 오피스-파워셸 실제 공격 체인 E2E 반사신경 차단 파이프라인 실측 프로파일링 보고서 (Phase 2.5 산출물)

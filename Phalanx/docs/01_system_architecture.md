@@ -112,15 +112,16 @@ private:
 ### C. 인메모리 프로세스 트리 (In-Memory DAG) & 로컬 룰 엔진
 * **인메모리 프로세스 트리**:
   * `std::unordered_map<uint32_t, ProcessNode>`를 통해 활성 프로세스의 부모-자식 관계망(DAG)을 C++ RAM 상에 유지합니다.
-  * 신규 프로세스 생성 시 부모 프로세스의 실행 경로, 커맨드라인, 서명 정보를 **O(1) (1μs 미만)** 시간 복잡도로 즉시 역추적합니다.
+  * 기동 시 `InitializeFromSnapshot()`으로 335개 OS 프로세스를 사전 웜업 적재하고, PID 재사용 및 10,000개 Tombstone 상한으로 메모리를 30MB 이내로 바운딩합니다.
+  * 신규 프로세스 생성 시 부모 프로세스의 족보(`GetAncestry`)를 **실측 0.436μs (< 10μs 기준 통과)** 만에 즉시 역추적합니다.
 * **로컬 룰 판정 (< 100μs)**:
-  * C++ 인메모리 프로세스 트리 상에서 지연 없이 직접 규칙을 평가합니다:
-    * **고신뢰도 악성 체인**: `excel.exe`, `winword.exe` ➔ `powershell.exe`, `cmd.exe` 및 인자에 `-enc`, `DownloadString` 포함.
-    * **랜섬웨어 복구 파괴**: `vssadmin.exe delete shadows`, `bcdedit /set ignoreallfailures`.
-    * **자격증명 탈취**: `comsvcs.dll MiniDump` (LSASS 덤프 시도).
+  * C++ 인메모리 프로세스 트리 상에서 비할당 `std::string_view`와 고속 ASCII 대소문자 무시 비교(< 20ns)를 통해 룰을 평가합니다:
+    * **고신뢰도 악성 체인**: `vssadmin.exe delete shadows`, `bcdedit /set`, `wbadmin delete catalog` 등.
+    * **회색지대 LOLBAS**: `excel.exe`, `winword.exe` ➔ `powershell.exe`, `certutil.exe` 스폰.
+  * **실측 성능**: 50,000회 연속 평가 시 **평균 0.354μs (초당 257만 건 처리, P99 0.7μs)**로 기준(100μs) 대비 280배 고속 판정 달성 (`docs/05_engine_reflex_benchmark.md` 참조).
 * **이원화 즉각 조치 (Dual Mitigation Actuator)**:
-  1. **고신뢰도 악성 사살 (Immediate Kill, 0.1ms)**: `TerminateProcess`를 호출하여 파워셸 CLR 런타임 웜업(150~250ms)의 1%도 안 되는 시점에 즉각 사살.
-  2. **회색지대 선제 동결 (Atomic Suspend, 24μs)**: `ntdll!NtSuspendProcess`를 동적 호출하여 24μs 만에 프로세스 원자적 동결 집행 및 타깃 RAM 보존 ➔ 10초 `SafetyWatchdog` 가동 ➔ C# AI 에이전트에 수사 의뢰.
+  1. **고신뢰도 악성 사살 (Immediate Kill, 0.1ms)**: `TerminateProcess`를 호출하여 현장 즉시 사살 집행 (`is_terminated = true`).
+  2. **회색지대 선제 동결 (Atomic Suspend, 24μs)**: `ntdll!NtSuspendProcess`를 동적 호출하여 **24~27μs** 만에 프로세스 원자적 동결 집행(Toolhelp32 스레드 순회 대비 1,170배 고속) 및 타깃 RAM 보존 ➔ 10초 `SafetyWatchdog` 가동 ➔ C# AI 에이전트에 수사 의뢰 (`is_suspended = true`).
 
 ---
 
@@ -144,6 +145,7 @@ message ProcessEvent {
     bool is_suspended = 6;
     uint32 session_id = 7;
     uint32 token_elevation_type = 8;
+    bool is_terminated = 9;     // 현장 사살(0.1ms) 완료 여부
 }
 
 message NetworkEvent {
