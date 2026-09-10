@@ -8,7 +8,7 @@ related:
 ---
 # Phalanx AI Agent Investigation & Reasoning Engine Specification
 
-본 문서는 `Phalanx.Core`에 내장된 **자율 위협 헌팅 에이전트(Autonomous Hunter Agent)**의 인지 모델, 도구 호출(Tool Calling) 생태계, ReAct 추론 파이프라인 및 침해사고 서사(Incident Narrative) 생성 메커니즘을 정의합니다.
+본 문서는 `Phalanx.Cockpit`에 내장된 **자율 위협 헌팅 에이전트(Autonomous Hunter Agent)**의 인지 모델, 도구 호출(Tool Calling) 생태계, ReAct 추론 파이프라인 및 침해사고 서사(Incident Narrative) 생성 메커니즘을 정의합니다.
 
 ---
 
@@ -18,19 +18,20 @@ Phalanx의 AI 에이전트는 단순한 텍스트 챗봇이 아니라, **운영�
 
 ```mermaid
 flowchart TD
-    Trigger["이상 징후 인입 (Suspicious Event Chain)"] --> Ingest["Working Memory 활성화 (Hot Context)"]
+    Trigger["C++ 동결 수사 요청 (is_suspended = true)"] --> Ingest["Working Memory 활성화 (Incident Context)"]
     
     subgraph REACT_LOOP ["ReAct 자율 조사 루프 (최대 5회 반복)"]
         Ingest --> Thought["(1) 추론 (Thought): 가설 수립 및 액션 결정"]
         Thought --> ToolAction["(2) 행동 (Action): OS 조사 도구 자율 호출"]
         ToolAction --> Observation["(3) 관찰 (Observation): 도구 실행 결과 분석"]
-        Observation --> Decision{"위협 확신도 90% 이상 또는 조사 한계"}
+        Decision{"위협 확신도 90% 이상 또는 조사 한계"}
+        Observation --> Decision
         Decision -->|"미충족 (추가 조사 필요)"| Thought
     end
 
-    Decision -->|"확정 (Verdict Reach)"| Mitigation["물리 방어 명령 하달 (Kill / Block IP)"]
+    Decision -->|"확정 (Verdict Reach)"| Mitigation["최종 판결 명령 하달 (ACTION_KILL / ACTION_RESUME)"]
     Mitigation --> Narrative["침해사고 서사 리포트 자동 작성"]
-    Narrative --> ColdArchive["LiteDB cold_archive 이관"]
+    Narrative --> ColdArchive["LiteDB 포렌식 아카이브 영속화"]
 ```
 
 ---
@@ -121,7 +122,7 @@ flowchart TD
 ## 6. 회복탄력성 및 Fallback 설계 (Graceful Degradation)
 
 * **API 키 미등록 / 네트워크 단절 시**:
-  * AI 에이전트 인스턴스는 인스턴스화되지 않으며, `DeterministicRuleEngine`이 단독으로 디시전을 담당합니다.
-  * 룰 기반으로 판정된 차단 내역은 표준 텍스트 템플릿 기반으로 포맷팅되어 대시보드와 리포트에 정상 노출됩니다.
+  * AI 에이전트 인스턴스는 활성화되지 않으며, C++ 네이티브 엔진의 `LocalRuleEngine` 및 `SafetyWatchdog`이 단독으로 로컬 방어를 완결합니다.
+  * 차단 내역은 표준 포맷 텍스트로 대시보드와 리포트에 정상 출력됩니다.
 * **로컬 LLM (Ollama) 지원**:
-  * 외부 인터넷이 차단된 환경에서는 `http://localhost:11434` 엔드포인트를 통해 로컬 Qwen 2.5 또는 Llama 3 모델로 추론을 라우팅할 수 있는 플러그인 구조를 갖춥니다.
+  * 외부 인터넷이 차단된 폐쇄망 환경에서는 `http://localhost:11434` 엔드포인트를 통해 로컬 Qwen 2.5 또는 Llama 3 모델로 추론을 라우팅할 수 있는 플러그인 구조를 갖춥니다.

@@ -114,7 +114,7 @@ private:
   * `std::unordered_map<uint32_t, ProcessNode>`를 통해 활성 프로세스의 부모-자식 관계망(DAG)을 C++ RAM 상에 유지합니다.
   * 신규 프로세스 생성 시 부모 프로세스의 실행 경로, 커맨드라인, 서명 정보를 **O(1) (1μs 미만)** 시간 복잡도로 즉시 역추적합니다.
 * **로컬 룰 판정 (< 100μs)**:
-  * 외부 IPC나 네트워크 호출 없이 C++ 메모리 상에서 직접 규칙을 평가합니다:
+  * C++ 인메모리 프로세스 트리 상에서 지연 없이 직접 규칙을 평가합니다:
     * **고신뢰도 악성 체인**: `excel.exe`, `winword.exe` ➔ `powershell.exe`, `cmd.exe` 및 인자에 `-enc`, `DownloadString` 포함.
     * **랜섬웨어 복구 파괴**: `vssadmin.exe delete shadows`, `bcdedit /set ignoreallfailures`.
     * **자격증명 탈취**: `comsvcs.dll MiniDump` (LSASS 덤프 시도).

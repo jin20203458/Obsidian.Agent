@@ -18,7 +18,7 @@ related:
 ## 1. 단계별 구현 마일스톤 흐름
 
 ```
-[ Phase 1: Sensor & IPC ] ──▶ [ Phase 1.5: Atomic Freeze ] ──▶ [ Phase 2: In-Memory DAG & Rules ] ──▶ [ Phase 2.5: Defense Profiling Benchmark ] ──▶ [ Phase 3: AI Agent & Forensic Tools ] ──▶ [ Phase 4: Cockpit & Presentation ]
+[ Phase 1: Kernel Sensor & Telemetry ] ──▶ [ Phase 1.5: Atomic Freeze ] ──▶ [ Phase 2: In-Memory DAG & Rules ] ──▶ [ Phase 2.5: Defense Profiling Benchmark ] ──▶ [ Phase 3: AI Agent & Forensic Tools ] ──▶ [ Phase 4: Cockpit & Presentation ]
   • ETW 커널 수집 루프 (완료)   • NtSuspendProcess 동결 (완료)  • C++ 인메모리 프로세스 트리 DAG     • 스크립트 150ms 웜업 vs 0.1ms 차단 실측       • Gemini 2.0 Flash ReAct 루프             • ModernWpfUI 다크 대시보드
   • 락-스왑 무손실 버퍼 (완료)  • Toolhelp32 폴백 (완료)        • 로컬 룰 판정 (< 100μs)              • 네이티브 바이너리 2ms 실행 누수 계측        • 5대 OS 수사 도구 (메모리 스캔 등)        • 인터랙티브 프로세스 트리 Canvas
   • ACTION_SUSPEND 대칭 (완료)  • 10초 세이프티 워치독 (완료)   • 0.1ms 현장 사살 & 24μs 선제 동결     • Canary 파일 생성 차단 여부 실증          • 동결 타깃 수사 ➔ 사형/해제 최종 판결    • QuestPDF 포렌식 리포트 출력
@@ -28,7 +28,7 @@ related:
 
 ## 2. 단계별 세부 구현 태스크 및 완료 정의 (DoD)
 
-### Phase 1: 고성능 센서 및 통신 파이프라인 (Sensor & IPC) [완료]
+### Phase 1: 고성능 커널 센서 및 텔레메트리 파이프라인 (Kernel Sensor & Telemetry) [완료]
 * **목표**: Windows 커널 프로세스 이벤트를 유실 없이 수집하고 gRPC로 고속 송신하는 네이티브 C++ 파이프라인 구축.
 * **주요 개발 내용**:
   * Visual Studio 2022 기반 C++20 `Phalanx.Sensor` 프로젝트 스캐폴딩.
