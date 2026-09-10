@@ -77,3 +77,19 @@ related:
 2. 단위 테스트 계측 결과, 동결 소요 시간이 기존 35,281μs(~35ms)에서 **23μs(마이크로초, 1000배 이상 단축)**로 극적으로 단축되었으며 스레드 탈출 레이스 윈도우 원천 차단 확인.
 3. 권한 부족, 특정 OS 비호환 환경 또는 결함 발생 시 즉시 기존 `Toolhelp32` 방식으로 우아하게 자동 후퇴(Graceful Fallback)하는 2중 방어선 구현.
 4. `SensorTests`에 결함 주입(`force_fallback = true`) 테스트 케이스를 포함하여 2순위 폴백 경로에서도 정상 동결/복구됨을 완전 검증 (Exit Code 0).
+
+---
+
+## 2026-09-10: [Resolved] EtwKernelCollector::Start() 동시성 레이스 컨디션 해결 및 원자적 CAS 적용
+
+### [현상 (Symptom)]
+* `EtwKernelCollector::Start()`를 복수의 스레드가 동시에 호출할 경우, 이미 가동 중인 스레드가 덮어씌워지며 C++ 런타임에 의해 `std::terminate()` 크래시가 유발될 수 있는 잠재적 취약점 존재.
+* 스레드 기동 중 시스템 자원 부족 예외(`std::system_error` 등) 발생 시 상태 플래그 롤백 로직이 부재하여 `running`이 `true`로 고착되는 상태 불일치 발생.
+
+### [원인 (Root Cause)]
+* 기존 코드가 `running.load()`를 확인하고 `running.store(true)`를 호출하는 전형적인 **Check-Then-Act (TOCTOU) 비원자적 상태 전이** 구조로 작성되어 있었음.
+
+### [해결책 (Resolution)]
+1. `impl_->running.compare_exchange_strong(expected, true, std::memory_order_acq_rel)`을 적용하여 복수의 스레드가 동시 진입하더라도 오직 하나의 스레드만 `false -> true` 전이에 성공하도록 원자적 상태 전이 보장.
+2. 스레드 생성부를 `try-catch`로 감싸 `std::thread` 생성 실패 시 `impl_->running.store(false, std::memory_order_release)`로 원자적 롤백 수행 및 `false` 반환하도록 예외 안전성 확보.
+3. `build.ps1` 재빌드, `SensorTests.exe` 및 `IpcE2ETest.exe`를 실행하여 정상 동작 및 Exit Code 0 통과 확인.
