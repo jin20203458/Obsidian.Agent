@@ -159,4 +159,24 @@ related:
    - `DefenseProfilingTest.exe`, `EngineTests.exe`, `SensorTests.exe`, `IpcE2ETest.exe` 전원 통과 (Exit Code 0).
    - 통합 벤치마크 레지스트리 `04_performance_benchmarks.md` Section 6 업데이트 완료.
 
+---
+
+## 2026-09-14: [Resolved] ProcessTree PID 재사용 시 유령 부모(Ghost Parent) 족보 왜곡 방어
+
+### [현상 (Symptom)]
+* 윈도우 OS는 종료된 프로세스의 PID를 빠른 속도로 재할당함.
+* 부모 프로세스 A(PID: 1000)가 자식 B(PID: 2000, `ppid = 1000`)를 생성한 후 A가 먼저 종료되고 자식 B는 계속 실행 중인 상태에서, OS가 동일한 PID 1000을 전혀 무관한 새 프로세스 C에 재할당하는 경우.
+* 이때 C++ `ProcessTree`가 PID 1000 노드를 새 프로세스 C로 덮어쓰면, 기존 자식 B의 `ppid`가 여전히 1000을 가리키고 있어 B가 엉뚱한 새 프로세스 C를 자기 부모로 오인하고 족보를 거슬러 올라가는 **유령 부모(Ghost Parent) 족보 왜곡** 취약점 발견.
+
+### [원인 (Root Cause)]
+* 윈도우 OS 커널은 부모 프로세스가 종료되어도 고아 자식 프로세스의 `ParentProcessId`를 0으로 재설정해주지 않음 (죽은 부모 PPID 영구 보존).
+* 기존 `ProcessTree::InsertOrOverwriteNodeInternal`은 PID 재사용 시 이전 노드의 부모(`old_ppid`)와의 링크만 절단하고, **이전 노드가 낳았던 자식들(`it->second.children_pids`)의 부모 링크(`child.ppid = 0`) 절단 처리가 누락**되어 있었음.
+
+### [해결책 (Resolution)]
+1. **자식 노드 고아 처리 및 부모 링크 원자적 절단 (`ProcessTree.cpp`)**:
+   * PID 덮어쓰기 직전, 이전 프로세스의 자식 노드들을 순회하여 `child.ppid == pid`인 경우 `ppid = 0`으로 재설정하여 엉뚱한 새 프로세스로의 유령 입양 원천 차단.
+2. **검증 및 회귀 테스트 통과**:
+   * `build.ps1`, `EngineTests.exe`, `DefenseProfilingTest.exe`, `SensorTests.exe`, `IpcE2ETest.exe` 4대 테스트 스위트 전원 통과 (Exit Code 0).
+   * 커밋: `8161881` (`fix(processtree): sever ghost parent linkage for orphaned children on PID reuse`).
+
 
