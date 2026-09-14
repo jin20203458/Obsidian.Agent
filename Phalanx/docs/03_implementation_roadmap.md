@@ -18,9 +18,9 @@ related:
 
 ```
 [ Phase 1: Kernel Sensor & Telemetry ] ──▶ [ Phase 1.5: Atomic Freeze ] ──▶ [ Phase 2: In-Memory DAG & Rules ] ──▶ [ Phase 2.5: Defense Profiling Benchmark ] ──▶ [ Phase 3: AI Agent & Forensic Tools ] ──▶ [ Phase 4: Cockpit & Presentation ]
-  • ETW 커널 수집 루프 (완료)   • NtSuspendProcess 동결 (완료)  • C++ 인메모리 프로세스 트리 DAG     • 스크립트 150ms 웜업 vs 0.1ms 차단 실측       • Gemini 2.0 Flash ReAct 루프             • ModernWpfUI 다크 대시보드
-  • 락-스왑 무손실 버퍼 (완료)  • Toolhelp32 폴백 (완료)        • 로컬 룰 판정 (< 100μs)              • 네이티브 바이너리 2ms 실행 누수 계측        • 5대 OS 수사 도구 (메모리 스캔 등)        • 인터랙티브 프로세스 트리 Canvas
-  • ACTION_SUSPEND 대칭 (완료)  • 10초 세이프티 워치독 (완료)   • 0.1ms 현장 사살 & 24μs 선제 동결     • Canary 파일 생성 차단 여부 실증          • 동결 타깃 수사 ➔ 사형/해제 최종 판결    • QuestPDF 포렌식 리포트 출력
+  • ETW 커널 수집 루프 (완료)   • NtSuspendProcess 동결 (완료)  • C++ 인메모리 프로세스 트리 (완료)   • 스크립트 150ms 웜업 vs 0.1ms 차단 (완료)    • Gemini 2.0 Flash ReAct 루프             • ModernWpfUI 다크 대시보드
+  • 락-스왑 무손실 버퍼 (완료)  • Toolhelp32 폴백 (완료)        • 로컬 룰 판정 (< 100μs) (완료)       • 네이티브 바이너리 2ms 실행 누수 계측 (완료) • 5대 OS 수사 도구 (메모리 스캔 등)        • 인터랙티브 프로세스 트리 Canvas
+  • ACTION_SUSPEND 대칭 (완료)  • 10초 세이프티 워치독 (완료)   • 0.1ms 현장 사살 & 24μs 동결 (완료)  • Canary 누수 0 Bytes 실증 (완료)          • 동결 타깃 수사 ➔ 사형/해제 최종 판결    • QuestPDF 포렌식 리포트 출력
 ```
 
 ---
@@ -63,8 +63,9 @@ related:
   * **C++ 인메모리 프로세스 트리 (`ProcessTree`) 구현**:
     * `std::unordered_map<uint32_t, ProcessNode>` 기반 O(1) 부모-자식 관계 추적.
     * 기동 시 `InitializeFromSnapshot()`을 통한 335개 OS 프로세스 웜업 적재.
-    * PID 재사용 대응 및 10,000개 Tombstone 메모리 바운딩.
+    * PID 재사용 대응 및 10,000개 Tombstone 메모리 바운딩 (고스트 부모 방지 양방향 링크 절단 완료).
     * 프로세스 족보 역추적(`GetAncestry`) 10,000회 평균 `0.436μs` 달성.
+    * 실제 OS 프로세스 반복 생성/삭제 및 Toolhelp32 스냅샷 100% 동기화 검증 (`EngineTests` - Test 8).
   * **로컬 결정론적 룰 엔진 (`LocalRuleEngine`) 구현**:
     * 비할당 `std::string_view` 및 ASCII 고속 대소문자 무시 비교(< 20ns) 적용.
     * **경로 1 (고신뢰도 악성 ➔ 즉각 사살)**:
@@ -78,24 +79,25 @@ related:
 * **완료 정의 (DoD)**:
   * 단위/벤치마크 테스트(`EngineTests.exe`)에서 50,000회 연속 룰 평가 시 평균 `0.354μs`(초당 257만 건, < 100μs 기준 통과), 10,000회 족보 역추적 시 평균 `0.436μs` 검증 완료.
   * 안전 픽스처 테스트에서 모의 고위험 프로세스 사살(`is_terminated = true`) 및 모의 회색지대 프로세스 24μs 동결(`is_suspended = true`) 확인 (Exit Code 0).
+  * 실제 OS 프로세스 생성/삭제 동기화 검증(Test 8) 통과 확인 (Exit Code 0).
   * 벤치마크 보고서 [04_performance_benchmarks.md](./04_performance_benchmarks.md) 작성 및 커밋 완료 (`69930b3`).
 
 ---
 
-### Phase 2.5: 방어 파이프라인 실측 및 공격 윈도우 벤치마크 (Defense Profiling Benchmark)
+### Phase 2.5: 방어 파이프라인 실측 및 공격 윈도우 벤치마크 (Defense Profiling Benchmark) [완료]
 * **목표**: Phase 2에서 완성된 C++ 네이티브 엔진의 실시간 차단 능력에 대해, 실제 공격 시나리오(스크립트 기반 vs 네이티브 바이너리)를 대상으로 E2E 차단 시간과 실행 누수(Canary Execution Leak) 여부를 실측하고, 통합 벤치마크 레지스트리([04_performance_benchmarks.md](./04_performance_benchmarks.md))에 실측 데이터 기록.
 * **주요 개발 내용**:
   * **[실험 1] 관리형 스크립트 공격 윈도우 검증**:
     * 모의 부모 프로세스 ➔ `powershell.exe -enc ...` (카나리 파일 생성 시도) 스폰.
-    * .NET CLR 런타임 웜업 윈도우(약 150~250ms) 대비 Phalanx의 0.1ms 현장 사살 실측 비교.
-    * 카나리 파일 생성 전 100% 선제 차단(Zero Payload Execution) 성공 여부 검증.
+    * .NET CLR 런타임 웜업 윈도우(약 624.50ms) 대비 Phalanx의 50.8μs 원자적 동결 실측 비교 (+624.45ms 안전 마진).
+    * 카나리 파일 생성 전 100% 선제 차단(Zero Payload Execution) 성공 검증.
   * **[실험 2] 네이티브 바이너리 공격 윈도우 한계 측정**:
-    * C/C++ 네이티브 모의 바이너리(`MockNativeRansomware.exe`, 진입점 0.5~2ms 이내 디스크 쓰기) 실행.
-    * C++ 로컬 룰 엔진(0.1ms)에 의해 카나리 파일 생성이 원천 차단되는지 실측.
+    * C/C++ 네이티브 모의 바이너리(`MockNativeRansomware.exe`, 진입점 0.8ms 윈도우) 실행.
+    * C++ 로컬 룰 엔진(105.1μs 사살)에 의해 디스크 쓰기 전 카나리 파일 생성이 원천 차단(Zero Leak)됨을 실측 (+65.50ms 안전 마진).
   * **벤치마크 보고서 통합 기록**:
     * [04_performance_benchmarks.md](./04_performance_benchmarks.md)에 E2E 타임라인 간트 차트 및 카나리 누수 실측 데이터 기록.
 * **완료 정의 (DoD)**:
-  * 스크립트 및 네이티브 모의 공격 모두에서 1ms 미만의 현장 사살로 카나리 파일 미생성(100% 방어) 확인.
+  * 스크립트 및 네이티브 모의 공격 모두에서 1ms 미만의 선제 동결/사살로 카나리 파일 미생성(100% 방어, 누수 0건 / 0 Bytes) 확인 (`DefenseProfilingTest.exe` 통과, Exit Code 0).
   * [04_performance_benchmarks.md](./04_performance_benchmarks.md) 실측 결과 업데이트 및 커밋 완료.
 
 ---
