@@ -203,4 +203,50 @@ related:
 * `EngineTests.exe`에 `TestRealOSProcessTreeSynchronization` (Test 8) 구현 및 커밋 (`020101a`).
 * `build.ps1`, `EngineTests.exe`, `DefenseProfilingTest.exe`, `SensorTests.exe`, `IpcE2ETest.exe` 전원 Exit Code 0 통과 완료.
 
+---
+
+## 2026-09-14: [Resolved] Phase 3 CQRS 프로젝션 파이프라인 개통 및 초기 스냅샷 핸드셰이크 구축
+
+### [현상 (Symptom)]
+* C# Cockpit이 가동되었을 때 C++ 센서로부터 실시간 증분 이벤트만 수신할 경우, 센서 기동 전이나 Cockpit 기동 전부터 실행 중이던 프로세스(약 300여 개)의 계층 관계를 알지 못해 자식 프로세스 인입 시 족보 추적(`GetAncestry`)이 루트에서 단절되는 콜드 스타트 문제 발생.
+* C++ `EtwKernelCollector`에서 프로세스 종료 이벤트(`ProcessStop`) 발생 시 내부 옵저버(`observer_->OnProcessStop`)에게만 통지하고 gRPC 락-스왑 큐 푸시가 누락되어, C# 프로젝션 트리가 종료된 프로세스를 인지하지 못하고 영구 활성 상태로 방치하는 메모리/상태 누수 존재.
+
+### [원인 (Root Cause)]
+* 1단계 프로토콜 설계 시 `ProcessEvent`에 프로세스 생명주기 구분이 없었고, 센서-클라이언트 간 gRPC 스트림 연결 시 초기 상태 동기화(Initial State Synchronization) 프로토콜 규약이 부재했음.
+
+### [해결책 (Resolution)]
+1. **`phalanx.proto` 생명주기 및 GUID 확장**:
+   - `ProcessLifecycle` enum 추가: `LIFECYCLE_UNKNOWN(0)`, `LIFECYCLE_SNAPSHOT(1)`, `LIFECYCLE_START(2)`, `LIFECYCLE_STOP(3)`, `LIFECYCLE_SUSPENDED(4)`, `LIFECYCLE_TERMINATED(5)`.
+   - `ProcessEvent`에 `lifecycle`, `process_guid`, `parent_process_guid`, `exit_code` 필드 확장.
+2. **C++ `EtwKernelCollector`의 `ProcessStop` 큐 푸시 연동**:
+   - 커널 `ProcessStop` 이벤트 수신 시 `ProcessTree::OnProcessStop`을 통해 종료 노드의 메타데이터를 획득하고, `LIFECYCLE_STOP` 태깅 및 종료 코드(`exit_code`)를 포함하여 락-스왑 큐에 원자적 푸시.
+3. **`GrpcStreamClient` 초기 300여 개 스냅샷 일괄 덤프 핸드셰이크**:
+   - `ProcessTree::GetActiveSnapshotEvents()` 메서드를 구축하여 활성 노드들의 스냅샷 이벤트를 생성.
+   - gRPC 스트림 연결 직후 1회 한정으로 활성 프로세스 스냅샷 배치(`LIFECYCLE_SNAPSHOT`)를 C# Cockpit으로 일괄 전송하는 핸드셰이크 구현.
+4. **`tests/IpcE2ETest/CMakeLists.txt` 빌드 종속성 보완**:
+   - `GrpcStreamClient`의 `ProcessTree` 참조에 따라 `E2E_SOURCES`에 `ProcessTree.cpp` 추가하여 링크 에러 방지.
+5. **검증**:
+   - `build.ps1`, `EngineTests.exe`, `SensorTests.exe`, `IpcE2ETest.exe`, `DefenseProfilingTest.exe` 전원 Exit Code 0 통과 확인.
+
+---
+
+## 2026-09-14: [Resolved] C# ProcessTreeProjectionManager의 PID 재사용 및 선제 조치 상태 전이 안전성 확보
+
+### [현상 (Symptom)]
+* C++ 센서에서 선제 동결(`LIFECYCLE_SUSPENDED`) 또는 즉각 사살(`LIFECYCLE_TERMINATED`) 이벤트를 수신했을 때, 신규 GUID가 생성되거나 활성 PID 매핑이 갱신되면서 기존 프로세스 노드와 분리되어 상태가 전이되지 않는 현상.
+* Windows OS의 빈번한 PID 재사용 환경에서 종료된 이전 프로세스의 잔존 포인터로 인해 직계 족보 체인이 왜곡될 위험.
+
+### [원인 (Root Cause)]
+* 이벤트 처리기가 들어오는 모든 이벤트를 단순히 PID 기준으로 신규 등록하거나, 생명주기 전이(Start ➔ Suspend/Resume ➔ Stop/Terminate)의 원자적 상태 머신 검증 없이 처리함.
+
+### [해결책 (Resolution)]
+1. **상태 전이 라우팅 분기 구현 (`ProcessTreeProjectionManager.cs`)**:
+   - `LIFECYCLE_SUSPENDED`, `LIFECYCLE_TERMINATED` 수신 시 `_activePidToGuid`를 우선 조회하여 기존 활성 노드의 `IsSuspended`, `IsTerminated` 플래그를 원자적으로 갱신.
+   - `LIFECYCLE_STOP` 수신 시 활성 노드를 Tombstone화(`IsAlive = false`, `ExitCode` 반영)하고 `_activePidToGuid`에서 안전하게 퇴출.
+   - `LIFECYCLE_START` 수신 시 동일 PID의 활성 노드가 존재하면 이전 노드를 즉시 Tombstone 처리하고 신규 GUID 노드로 덮어씌워 유령 족보 연결 원천 차단.
+2. **0초 인메모리 족보 탐색 보장**:
+   - `_nodesByGuid` 딕셔너리를 활용한 O(Depth) 고속 상향 순회로 C++ 센서에 대한 IPC 왕복 지연 없이 즉각적으로 직계 선조 체인(`GetAncestry`) 획득 가능.
+3. **단위 테스트 검증**:
+   - `ProcessTreeProjectionTests.cs`를 구축하여 350개 노드 스냅샷 일괄 인입, 족보 상향 추적, 델타 생명주기 이벤트(Start/Suspend/Stop), PID 재사용 시 유령 부모 절단 등 4대 핵심 시나리오 100% 통과 (Exit Code 0).
+
 
