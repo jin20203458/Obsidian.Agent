@@ -103,9 +103,15 @@ related:
 ### Phase 3: C# 자율 AI 위협 헌터 및 포렌식 도구 (AI Agent & Forensic Tools)
 * **목표**: C++ 엔진이 동결해 둔 회색지대 타깃을 대상으로, C# AI 에이전트가 ReAct 루프를 돌며 5대 OS 도구를 직접 호출해 3초 이내에 심층 수사를 완료하고 사형/해제 최종 판결 도출.
 * **주요 개발 내용**:
-  * .NET 9 기반 `Phalanx.Cockpit` 내부 AI 에이전트 서브시스템 구축.
-  * Gemini 2.0 Flash 기반의 ReAct 추론 루프 (`Thought ➔ Tool Action ➔ Observation ➔ Final Verdict`) 구현.
-  * **5대 OS 수사 도구(Tool) 구현**:
+  * **[Step 1] gRPC 프로토콜 및 CQRS 트리 프로젝션 파이프라인 개통**:
+    * `phalanx.proto`: `ProcessLifecycle` enum 및 PID 재사용 방지용 `process_guid` 필드 추가.
+    * C++ `EtwKernelCollector`: `ProcessStop` 이벤트 발생 시 `LIFECYCLE_STOP`으로 `DoubleBufferedSwapQueue` 적재 누락 보완.
+    * C++ `GrpcStreamClient`: C# 관제 콘솔 최초 접속 시 `ProcessTree::InitializeFromSnapshot()` 데이터를 `LIFECYCLE_SNAPSHOT`으로 1회 일괄 덤프 전송.
+    * C# `ProcessTreeProjectionManager`: 수신된 스냅샷과 델타 이벤트를 바탕으로 로컬 메모리에 완전한 `ObservableCollection` 기반 프로세스 트리 DAG 구축 (C++ 역질의 없이 로컬 0초 족보 탐색).
+  * **[Step 2] .NET 9 기반 `Phalanx.Cockpit` 내부 AI 에이전트 서브시스템 구축**:
+    * Gemini 2.0 Flash 기반의 ReAct 추론 루프 (`Thought ➔ Tool Action ➔ Observation ➔ Final Verdict`) 구현.
+    * 로컬 프로세스 트리를 기반으로 부모-자식-조부모 족보 문맥을 프롬프트에 무지연 주입.
+  * **[Step 3] 5대 OS 수사 도구(Tool) 구현**:
     1. `DecodePayloadTool`: Base64 다단계 난독화 스크립트 해독.
     2. `ProcessMemoryScanTool`: 동결된 타깃 RAM 영역에서 C2 URL/IP 정규식 스캔.
     3. `ThreatReputationTool`: 로컬 위협 DB 및 도메인 평판 조회.
@@ -114,7 +120,8 @@ related:
   * 수사 결과에 따라 C++ 엔진으로 `ACTION_KILL` 또는 `ACTION_RESUME` gRPC 명령 하달.
   * 구조화 JSON 기반 침해사고 서사(Incident Narrative) 생성 및 `LiteDB` 포렌식 아카이브 영속화.
 * **완료 정의 (DoD)**:
-  * 가상 동결 프로세스 인입 시, AI 에이전트가 메모리를 스캔하고 C2 평판을 확인하여 3초 이내에 사살 명령과 JSON 서사를 도출함을 확인 (Exit Code 0).
+  * C# 접속 시 C++로부터 300여 개 초기 스냅샷이 수신되어 C# 로컬 트리가 즉각 완성되고, 신규 프로세스 생성/종료/동결/사살 이벤트가 실시간 반영됨을 확인.
+  * 가상 동결 프로세스 인입 시, AI 에이전트가 로컬 트리의 족보 문맥을 바탕으로 메모리를 스캔하고 C2 평판을 확인하여 3초 이내에 사살 명령과 JSON 서사를 도출함을 확인 (Exit Code 0).
 
 ---
 

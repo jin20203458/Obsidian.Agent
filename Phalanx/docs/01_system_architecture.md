@@ -125,7 +125,31 @@ private:
 
 ---
 
-## 3. 통신 프로토콜 스키마 (`phalanx.proto`)
+## 3. 프로세스 트리 상태 동기화 및 통신 프로토콜 (`phalanx.proto`)
+
+### A. CQRS 기반 하이브리드 프로젝션 (Process Tree State Synchronization)
+
+Phalanx는 고성능 엔드포인트 보안 시스템의 정형적 패턴인 **CQRS(Command Query Responsibility Segregation) 하이브리드 프로젝션** 모델을 채택합니다.
+
+```
+[ C++ 네이티브 엔진 (Command Master) ]
+  • 역할: 100μs 룰 평가, 0.1ms 사살, 24μs 원자적 동결을 집행하는 실시간 상태 단일 원본(SSOT).
+  • 특징: C# 관제기의 읽기 질의(RPC Query)를 원천 배제하여 `rw_lock_` 락 경합을 차단하고 10,000개 Tombstone 상한으로 메모리를 바운딩함.
+        │
+        ▼ (비동기 gRPC 단방향 스트림: 최초 스냅샷 1회 덤프 + 델타 이벤트)
+[ C# 관제 콘솔 (Query Projection) ]
+  • 역할: 60FPS 인터랙티브 WPF 캔버스 렌더링 및 Gemini ReAct AI 헌터의 심층 족보 수사용 읽기 모델(Read Model).
+  • 특징: C++이 푸시하는 이벤트를 수신하여 로컬 RAM에 완전한 프로세스 트리 DAG를 실시간 투영. C++로의 역질의 없이 로컬에서 0초 만에 족보 탐색.
+```
+
+1. **초기 스냅샷 핸드셰이크 (Snapshot Handshake)**:
+   * C# 관제기가 gRPC 스트림에 접속할 때, C++ `ProcessTree`에 캐싱된 현재 OS 활성 프로세스(약 330~400개)를 `LIFECYCLE_SNAPSHOT` 배치로 1회 일괄 전송하여 C# 메모리에 기저 트리를 즉각 완성합니다.
+2. **실시간 생명주기 델타 스트리밍 (Lifecycle Delta Streaming)**:
+   * 프로세스 생성(`LIFECYCLE_START`), 종료(`LIFECYCLE_STOP`), 선제 동결(`LIFECYCLE_SUSPENDED`), 즉각 사살(`LIFECYCLE_TERMINATED`) 이벤트를 실시간으로 C#에 스트리밍하여 로컬 트리의 노드를 갱신합니다.
+3. **PID 재사용 방지를 위한 `ProcessGuid` 체계**:
+   * Windows 환경의 빠른 PID 재할당으로 인한 부모-자식 노드 뒤엉킴을 방지하기 위해, C++ 엔진은 프로세스 생성 시점에 `(start_time_ns << 32) | pid` 조합의 전역 고유 식별자(`process_guid`)를 발급하여 모든 이벤트에 태깅합니다.
+
+### B. 프로토콜 버퍼 스키마 명세 (`phalanx.proto`)
 
 센서/엔진과 관제 콘솔 간의 통신은 Protocol Buffers v3로 엄격히 직렬화됩니다.
 
@@ -136,16 +160,29 @@ package phalanx;
 
 option csharp_namespace = "Phalanx.Shared.Protos";
 
+enum ProcessLifecycle {
+    LIFECYCLE_UNKNOWN = 0;
+    LIFECYCLE_SNAPSHOT = 1;     // 엔진 기동/재연결 시 기존 프로세스 일괄 주입
+    LIFECYCLE_START = 2;        // 신규 프로세스 생성 (ProcessStart)
+    LIFECYCLE_STOP = 3;         // 프로세스 정상 종료 (ProcessStop)
+    LIFECYCLE_SUSPENDED = 4;    // 24μs 원자적 동결 집행 완료
+    LIFECYCLE_TERMINATED = 5;   // 0.1ms 현장 사살 완료
+}
+
 message ProcessEvent {
-    uint32 process_id = 1;
-    uint32 parent_process_id = 2;
-    string image_name = 3;
-    string command_line = 4;
-    uint64 timestamp_ns = 5;
-    bool is_suspended = 6;
-    uint32 session_id = 7;
-    uint32 token_elevation_type = 8;
-    bool is_terminated = 9;     // 현장 사살(0.1ms) 완료 여부
+    ProcessLifecycle lifecycle = 1;
+    uint64 process_guid = 2;        // PID 재사용 방지용 전역 고유 ID
+    uint32 process_id = 3;
+    uint64 parent_process_guid = 4; // 부모 고유 ID
+    uint32 parent_process_id = 5;
+    string image_name = 6;
+    string command_line = 7;
+    uint64 timestamp_ns = 8;
+    uint64 exit_code = 9;           // LIFECYCLE_STOP 시 프로세스 종료 코드
+    bool is_suspended = 10;
+    bool is_terminated = 11;        // 현장 사살(0.1ms) 완료 여부
+    uint32 session_id = 12;
+    uint32 token_elevation_type = 13;
 }
 
 message NetworkEvent {
@@ -197,9 +234,11 @@ service PhalanxService {
 
 ### A. WPF 관제 대시보드 (Modern SOC Cockpit)
 * **프레임워크**: `.NET 9`, `CommunityToolkit.Mvvm`, `ModernWpfUI` 다크 테마.
+* **CQRS 로컬 트리 프로젝션 (ProcessTree Projection)**:
+  * C++ 엔진에서 수신한 초기 스냅샷 및 생명주기 델타 이벤트를 바탕으로 C# 로컬 RAM 상에 완전한 `ObservableCollection` 기반 프로세스 트리 DAG를 실시간 유지.
+  * C++로의 추가 쿼리(RPC) 없이 로컬 메모리에서 즉시 족보를 순회하여 WPF Canvas 60FPS 렌더링 및 Gemini AI 에이전트의 0초 족보 조회를 지원.
 * **인터랙티브 프로세스 트리 Canvas**:
-  * C++ 엔진에서 스트리밍되는 활성 프로세스 트리를 실시간 렌더링.
-  * 안전 프로세스(초록), 동결 수사 중 프로세스(파랑 펄스 애니메이션), 사살 완료 프로세스(빨강 및 `[KILLED]` 배지) 상태 가시화.
+  * 안전 프로세스(초록), 동결 수사 중 프로세스(파랑 펄스 애니메이션), 사살 완료 프로세스(빨강 및 `[KILLED]` 배지), 정상 종료 프로세스(회색 톰스톤) 상태 가시화.
 * **토스트 알림 (Windows Notification)**:
   * 0.1ms 차단 발생 시 작업 표시줄에 토스트 알림 표시.
 
