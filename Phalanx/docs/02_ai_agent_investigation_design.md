@@ -18,7 +18,7 @@ Phalanx의 AI 에이전트는 단순한 텍스트 챗봇이 아니라, **운영�
 
 ```mermaid
 flowchart TD
-    Trigger["C++ 동결 수사 요청 (is_suspended = true)"] --> Ingest["Working Memory 활성화 (Incident Context)"]
+    Trigger["C++ 선제 동결 인입 (LIFECYCLE_SUSPENDED)"] --> Ingest["Working Memory 활성화 (Incident Context)"]
     
     subgraph REACT_LOOP ["ReAct 자율 조사 루프 (최대 5회 반복)"]
         Ingest --> Thought["(1) 추론 (Thought): 가설 수립 및 액션 결정"]
@@ -59,41 +59,47 @@ flowchart TD
 
 | 도구명 (Tool Name) | 매개변수 (Parameters) | 수행 작업 (Functionality) | 반환값 (Return) |
 | :--- | :--- | :--- | :--- |
-| `DecodePayloadTool` | `string rawEncodedText` | Base64, Hex, URL, Gzip 압축 스크립트를 다단계 자동 해독 | 해독된 평문 스크립트 문자열 |
-| `ProcessMemoryScanTool` | `uint targetPid` | `OpenProcess` ➔ `VirtualQueryEx`로 타깃 프로세스 메모리 영역에서 URL, IPv4, 악성 API 패턴 정규식 스캔 | 발견된 C2 주소 및 인젝션 흔적 리스트 |
-| `ThreatReputationTool` | `string indicator` (IP/Domain/Hash) | 로컬 알려진 악성 IoC 데이터베이스 및 외부 평판 엔진 조회 | 위험도 점수 및 위협 분류 카테고리 |
+| `DecodePayloadTool` | `string encodedCommand` | Base64, Hex 등 다단계 난독화 인자 재귀적 디코딩 | 원본 텍스트 스크립트 및 URL 목록 |
+| `ProcessMemoryScanTool` | `uint32 targetPid` | 타깃 RAM 가상 메모리(`ReadProcessMemory`) 정규식/YARA 스캔 | 발견된 C2 도메인, IP, 특이 문자열 |
+| `ThreatReputationTool` | `string targetIndicator` | 로컬 SQLite IoC 해시 및 악성 IP/도메인 블랙리스트 조회 | 평판 점수 (0~100) 및 알려진 악성 그룹명 |
 | `MitreClassifierTool` | `string observedBehavior` | 관찰된 행위 문자열을 MITRE ATT&CK Matrix 기법(ID)으로 자동 매핑 | `T1059.001`, `T1566` 등의 기법 코드 및 설명 |
 | `SystemFirewallTool` | `string maliciousIp` | Windows Filtering Platform(WFP) 또는 Netsh 명령으로 해당 IP 인/아웃바운드 즉시 차단 | 차단 성공 여부 (bool) |
 
 > **설계 원칙 및 구현 분리 지침 (Design Separation)**:
 > * 본 문서는 에이전트와 도구 간의 상위 인터페이스 규격을 정의합니다.
-> * 각 도구의 다단계 디코딩 재귀 종료 조건, P/Invoke 메모리 접근 시의 `SeDebugPrivilege` 권한 획득 처리, 로컬 IoC 캐시 구조(SQLite/BloomFilter) 등의 세부 알고리즘은 Phase 3 착수 시 `docs/04_tool_detailed_design.md`로 독립 분리하여 상세 설계합니다.
+> * 각 도구의 다단계 디코딩 재귀 종료 조건, P/Invoke 메모리 접근 시의 `SeDebugPrivilege` 권한 획득 처리, 로컬 IoC 캐시 구조(SQLite/BloomFilter) 등의 세부 알고리즘은 Phase 3 착수 시 별도 도구 상세 설계 문서로 분리하여 상세 설계합니다.
 > * **추론 레이턴시 특성**: 대부분의 명확한 위협은 1~2회 반복 이내에 확신도 90%에 도달하여 약 2~3초 내에 종결되며, 고도화된 다단계 난독화 분석(최대 5회 순환) 시에는 5~8초의 심층 분석 시간이 소요될 수 있습니다.
 
 ---
 
 ## 4. 포렌식 인과 저장소 (Incident Forensic Store & LiteDB)
 
-Phalanx는 활성 프로세스 트리를 C++ 네이티브 RAM 상에서 초고속 O(1) 해시맵으로 관리하며, C# 관제 계층은 수사된 침해사고 이력과 포렌식 스냅샷을 영속화하기 위해 임베디드 `LiteDB`를 포렌식 아카이브로 활용합니다.
+Phalanx는 CQRS 아키텍처에 따라 C++ 네이티브 엔진과 C# 관제 콘솔 간의 상태 저장소를 분리하여 운용합니다. C++ 엔진은 100μs 실시간 룰 집행을 위한 인메모리 DAG를 소유하며, C# 관제 콘솔은 gRPC 스트림으로 수신한 스냅샷과 델타 이벤트를 바탕으로 로컬 메모리에 완전한 `ProcessTree Projection DAG`를 유지합니다. AI 에이전트는 C++로의 추가 질의(RPC) 없이 로컬 프로젝션에서 즉시 0초 만에 족보를 조회하여 수사를 진행하며, 종결된 사건은 임베디드 `LiteDB`에 영구 보관합니다.
 
 ```mermaid
 flowchart TD
-    subgraph CPP_RAM ["C++ Engine In-Memory"]
-        Active["Active Process DAG (실시간 O(1) 족보)"]
+    subgraph CPP_RAM ["C++ Engine (Command Master)"]
+        Active["Active Process DAG (0.436μs 초고속 족보)"]
     end
 
-    subgraph CS_APP ["C# Cockpit Local Storage"]
-        Investigate["Active Investigation Context (수사 중 세션)"]
+    subgraph CS_RAM ["C# Cockpit (Query Projection)"]
+        TreeProjection["ProcessTree Projection DAG (로컬 완전 복제본)"]
+        Investigate["Active Investigation Context (ReAct 수사 세션)"]
         ColdArchive["LiteDB (Resolved Incidents & Forensic Reports)"]
     end
 
-    Active -->|"회색지대 동결 (is_suspended = true)"| Investigate
+    Active -->|"gRPC 스냅샷 + 생명주기 델타 스트림"| TreeProjection
+    Active -.->|"선제 동결 인입 (LIFECYCLE_SUSPENDED)"| Investigate
+    TreeProjection -->|"0초 로컬 족보 문맥 즉각 주입"| Investigate
     Investigate -->|"AI 판결 종결 및 PDF 생성"| ColdArchive
 ```
 
-1. **C++ In-Memory Process DAG (실시간 활성 메모리)**:
-   * 현재 OS에서 실행 중인 모든 프로세스의 부모-자식 관계와 실행 인자는 C++ RAM 상에서 나노초 단위로 관리됩니다.
-2. **C# Cold Forensic Archive (LiteDB)**:
+1. **C++ In-Memory Process DAG (실시간 활성 메모리, Command Master)**:
+   * 현재 OS에서 실행 중인 활성 프로세스의 부모-자식 관계와 실행 인자를 C++ RAM 상에서 나노초 단위로 관리하며 100μs 룰 엔진의 현장 사살/동결 판정에 직접 사용됩니다.
+2. **C# ProcessTree Projection DAG (로컬 완전 복제본, Query Read Model)**:
+   * C++ 엔진에서 수신된 스냅샷과 생명주기 델타 이벤트를 로컬 RAM에 투영한 완전한 프로세스 트리입니다.
+   * AI 에이전트가 ReAct 루프를 순환할 때 C++로 네트워크 역질의를 하지 않고 로컬 메모리에서 즉시(0초) 부모-자식-조부모 체인을 프롬프트에 주입할 수 있도록 보장합니다.
+3. **C# Cold Forensic Archive (LiteDB)**:
    * AI 수사가 완료된 침해사고 객체, AI의 사고 과정(Thought/Action 추적 로그), 그리고 최종 JSON 서사는 `LiteDB`에 영구 보관됩니다.
    * 사용자가 언제든지 과거 침해사고를 조회하고 동일한 QuestPDF 포렌식 리포트를 재출력할 수 있도록 지원합니다.
 
@@ -110,7 +116,7 @@ flowchart TD
   "confidence_score": 0.98,
   "mitre_tactics": ["T1566.001", "T1059.001", "T1071.001"],
   "summary_title": "악성 오피스 매크로를 통한 파일리스 C2 다운로더 침투 시도",
-  "narrative": "16시 56분, 사용자 계정에서 실행된 2026_09_invoice.docm 문서가 winword.exe를 통해 난독화된 파워셸을 은밀히 기동했습니다. Phalanx 센서가 0.02초 만에 스레드를 동결하였으며, AI 에이전트의 메모리 역추적 결과 해외 악성 C2(185.220.101.5)로의 통신 시도가 확인되어 프로세스를 강제 종료하고 IP를 차단했습니다.",
+  "narrative": "16시 56분, 사용자 계정에서 실행된 2026_09_invoice.docm 문서가 winword.exe를 통해 난독화된 파워셸을 은밀히 기동했습니다. Phalanx 센서가 24μs(0.024ms) 만에 프로세스를 원자적으로 동결하였으며, AI 에이전트의 메모리 역추적 결과 해외 악성 C2(185.220.101.5)로의 통신 시도가 확인되어 프로세스를 강제 종료하고 IP를 차단했습니다.",
   "root_cause_process": "winword.exe (PID: 3104)",
   "terminated_processes": ["powershell.exe (PID: 8492)"],
   "remediation_status": "SECURED"

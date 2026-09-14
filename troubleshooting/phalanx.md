@@ -34,13 +34,13 @@ related:
 * **현상**: 관리자 권한이 없는 일반 사용자 권한으로 센서 실행 시 `krabs-etw` 세션 생성 단계에서 `ACCESS_DENIED (0x5)` 예외 발생.
 * **대응책**: `Phalanx.Sensor.exe`의 매니페스트 파일(`app.manifest`)에 `requireAdministrator` 실행 수준을 필수 명시할 것.
 
-### 2. SuspendThread 데드락 예외 및 안전 복구 (Safety Watchdog)
-* **현상**: 타깃 프로세스가 크리티컬 섹션이나 ntdll 로더 락(`LdrpLoaderLock`)을 쥐고 있는 상태에서 비동기 `SuspendThread` 호출 시 시스템 전역 리소스 경합 또는 데드락 발생 가능성.
+### 2. 프로세스 원자적 동결 데드락 예외 및 안전 복구 (Safety Watchdog)
+* **현상**: 타깃 프로세스가 크리티컬 섹션이나 ntdll 로더 락(`LdrpLoaderLock`)을 쥐고 있는 상태에서 비동기 동결 호출 시 시스템 전역 리소스 경합 또는 데드락 발생 가능성.
 * **대응책**:
-  * `SuspendThread`는 자체 타임아웃 파라미터가 없으므로, 센서 내부에 **비동기 안전 타이머(Safety Watchdog, 기본 10,000ms)**를 운영하여 C# 대뇌가 크래시되거나 네트워크가 두절되어 응답이 없는 비정상 상태(Orphan Freeze) 감지 시 자동으로 `ResumeThread`를 호출하여 시스템 프리징을 해제하는 안전 폴백 메커니즘을 구비할 것.
-  * **AI 수사 1회성 타임아웃 연장 티켓 (One-shot Extension Ticket: `ACTION_EXTEND_TIMEOUT`)**: 50ms 결정론적 룰 엔진으로 즉각 판정되지 않고 AI 심층 조사(2~5초 소요)로 넘어갈 경우, C# 코어는 조사 개시 시점에 단 1회 타임아웃 연장 티켓(`ACTION_EXTEND_TIMEOUT`)을 발송하여 워치독 마감 시한을 10,000ms 연장할 수 있다.
-  * **절대 상한선 (Hard Ceiling / Fail-Safe)**: C++ 워치독은 시스템 데드락(로더 락 등)을 원천 차단하기 위해 **타임아웃 연장을 최대 1회로 엄격히 제한**한다. 1회를 초과하는 추가 연장 요청은 즉시 거부되며, 최초 동결 시점으로부터 최대 20초(기본 10초 + 연장 10초)를 초과하면 워치독이 자동으로 `ResumeThread`를 강제 집행하여 OS 안정성을 보장한다.
-  * 타깃 프로세스가 완전히 안전하거나 정상으로 판정된 경우 즉시 `MitigationCommand(ACTION_RESUME)`를 하달하여 스레드를 정상 복구할 것.
+  * 동결 API(`ntdll!NtSuspendProcess` 및 폴백 `SuspendThread`)는 자체 타임아웃 파라미터가 없으므로, 센서 내부에 **비동기 안전 타이머(Safety Watchdog, 기본 10,000ms)**를 운영하여 C# 대뇌가 크래시되거나 네트워크가 두절되어 응답이 없는 비정상 상태(Orphan Freeze) 감지 시 자동으로 `NtResumeProcess`(폴백 시 `ResumeThread`)를 호출하여 시스템 프리징을 해제하는 안전 폴백 메커니즘을 구비할 것.
+  * **AI 수사 1회성 타임아웃 연장 티켓 (One-shot Extension Ticket: `ACTION_EXTEND_TIMEOUT`)**: 100μs(실측 0.354μs) 초고속 로컬 룰 엔진으로 즉각 판정되지 않고 AI 심층 조사(2~5초 소요)로 넘어갈 경우, C# 코어는 조사 개시 시점에 단 1회 타임아웃 연장 티켓(`ACTION_EXTEND_TIMEOUT`)을 발송하여 워치독 마감 시한을 10,000ms 연장할 수 있다.
+  * **절대 상한선 (Hard Ceiling / Fail-Safe)**: C++ 워치독은 시스템 데드락(로더 락 등)을 원천 차단하기 위해 **타임아웃 연장을 최대 1회로 엄격히 제한**한다. 1회를 초과하는 추가 연장 요청은 즉시 거부되며, 최초 동결 시점으로부터 최대 20초(기본 10초 + 연장 10초)를 초과하면 워치독이 자동으로 `NtResumeProcess`(폴백 시 `ResumeThread`)를 강제 집행하여 OS 안정성을 보장한다.
+  * 타깃 프로세스가 완전히 안전하거나 정상으로 판정된 경우 즉시 `MitigationCommand(ACTION_RESUME)`를 하달하여 프로세스를 정상 복구할 것.
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 description: >-
-  Phalanx 2계층(2-Tier) 시스템 아키텍처, C++ 네이티브 탐지 엔진, gRPC 통신 스키마 및 C# WPF AI 관제 콘솔 설계 명세.
+  Phalanx 2계층(2-Tier) 시스템 아키텍처, C++ 네이티브 탐지 엔진, gRPC 통신 스키마 및 C# WPF AI 관제 콘솔 설계 명세. 시스템 토폴로지, 프로세스 트리 동기화(CQRS) 및 gRPC 프로토콜 수정/설계 시 참조.
 related:
   - ../README.md
   - ./00_project_overview.md
@@ -118,7 +118,7 @@ private:
   * C++ 인메모리 프로세스 트리 상에서 비할당 `std::string_view`와 고속 ASCII 대소문자 무시 비교(< 20ns)를 통해 룰을 평가합니다:
     * **고신뢰도 악성 체인**: `vssadmin.exe delete shadows`, `bcdedit /set`, `wbadmin delete catalog` 등.
     * **회색지대 LOLBAS**: `excel.exe`, `winword.exe` ➔ `powershell.exe`, `certutil.exe` 스폰.
-  * **실측 성능**: 50,000회 연속 평가 시 **평균 0.354μs (초당 257만 건 처리, P99 0.7μs)**로 기준(100μs) 대비 280배 고속 판정 달성 (`docs/04_performance_benchmarks.md` 참조).
+  * **실측 성능**: 50,000회 연속 평가 시 **평균 0.354μs (초당 257만 건 처리, P99 0.7μs)**로 기준(100μs) 대비 280배 고속 판정 달성 ([04_performance_benchmarks.md](./04_performance_benchmarks.md) 참조).
 * **이원화 즉각 조치 (Dual Mitigation Actuator)**:
   1. **고신뢰도 악성 사살 (Immediate Kill, 0.1ms)**: `TerminateProcess`를 호출하여 현장 즉시 사살 집행 (`is_terminated = true`).
   2. **회색지대 선제 동결 (Atomic Suspend, 24μs)**: `ntdll!NtSuspendProcess`를 동적 호출하여 **24~27μs** 만에 프로세스 원자적 동결 집행(Toolhelp32 스레드 순회 대비 1,170배 고속) 및 타깃 RAM 보존 ➔ 10초 `SafetyWatchdog` 가동 ➔ C# AI 에이전트에 수사 의뢰 (`is_suspended = true`).
@@ -170,19 +170,19 @@ enum ProcessLifecycle {
 }
 
 message ProcessEvent {
-    ProcessLifecycle lifecycle = 1;
-    uint64 process_guid = 2;        // PID 재사용 방지용 전역 고유 ID
-    uint32 process_id = 3;
-    uint64 parent_process_guid = 4; // 부모 고유 ID
-    uint32 parent_process_id = 5;
-    string image_name = 6;
-    string command_line = 7;
-    uint64 timestamp_ns = 8;
-    uint64 exit_code = 9;           // LIFECYCLE_STOP 시 프로세스 종료 코드
-    bool is_suspended = 10;
-    bool is_terminated = 11;        // 현장 사살(0.1ms) 완료 여부
-    uint32 session_id = 12;
-    uint32 token_elevation_type = 13;
+    uint32 process_id = 1;
+    uint32 parent_process_id = 2;
+    string image_name = 3;
+    string command_line = 4;
+    uint64 timestamp_ns = 5;
+    bool is_suspended = 6;
+    uint32 session_id = 7;
+    uint32 token_elevation_type = 8;
+    bool is_terminated = 9;         // 현장 사살(0.1ms) 완료 여부
+    ProcessLifecycle lifecycle = 10;
+    uint64 process_guid = 11;        // PID 재사용 방지용 전역 고유 ID
+    uint64 parent_process_guid = 12; // 부모 고유 ID
+    uint64 exit_code = 13;           // LIFECYCLE_STOP 시 프로세스 종료 코드
 }
 
 message NetworkEvent {

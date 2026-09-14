@@ -1,6 +1,6 @@
 ---
 description: >-
-  Phalanx 프로젝트의 비전, 해결 과제, 3대 핵심 엔지니어링 가치 및 시스템 정량 목표 명세.
+  Phalanx 프로젝트의 비전, 해결 과제, 3대 핵심 엔지니어링 가치 및 시스템 정량 목표 명세. Phalanx 프로젝트 전체 비전, 아키텍처 개요 확인 및 시스템 목표 파악 시 참조.
 related:
   - ../README.md
   - ./01_system_architecture.md
