@@ -174,9 +174,33 @@ related:
 
 ### [해결책 (Resolution)]
 1. **자식 노드 고아 처리 및 부모 링크 원자적 절단 (`ProcessTree.cpp`)**:
-   * PID 덮어쓰기 직전, 이전 프로세스의 자식 노드들을 순회하여 `child.ppid == pid`인 경우 `ppid = 0`으로 재설정하여 엉뚱한 새 프로세스로의 유령 입양 원천 차단.
+   * **[경로 1: 즉각 재사용 덮어쓰기 (`InsertOrOverwriteNodeInternal`)]**: PID 덮어쓰기 직전, 이전 프로세스의 자식 노드들을 순회하여 `child.ppid == pid`인 경우 `ppid = 0`으로 재설정하여 엉뚱한 새 프로세스로의 유령 입양 원천 차단 (`8161881`).
+   * **[경로 2: 10,000개 상한선 영구 퇴출 (`EvictOldestTombstoneInternal`)]**: 톰스톤 노드가 메모리에서 완전히 삭제(Evict)될 때도, 상향 링크(부모의 `children_pids`에서 나를 제거)뿐만 아니라 하향 링크(자식 노드들의 `ppid = 0` 고아 처리)를 양방향으로 원자적 절단 (`7cb4554`).
 2. **검증 및 회귀 테스트 통과**:
    * `build.ps1`, `EngineTests.exe`, `DefenseProfilingTest.exe`, `SensorTests.exe`, `IpcE2ETest.exe` 4대 테스트 스위트 전원 통과 (Exit Code 0).
-   * 커밋: `8161881` (`fix(processtree): sever ghost parent linkage for orphaned children on PID reuse`).
+
+---
+
+## 2026-09-14: [Verified] 실제 OS 프로세스 계층 반복 생성/삭제 & ProcessTree vs OS 실시간 동기화 검증
+
+### [현상 및 검증 목적 (Objective)]
+* ProcessTree가 인메모리에서 관리하는 증분(Incremental) 상태와 실제 Windows OS 커널의 `EPROCESS` 테이블(`CreateToolhelp32Snapshot`) 간에 프로세스가 동적으로 생성되고 종료되는 동안 상태 불일치(State Drift)가 발생하는지 여부를 실제 OS 레벨에서 검증할 필요성 대두.
+
+### [검증 설계 (Verification Design)]
+1. **실제 OS 프로세스 계층(부모-자식) 동적 기동 (`EngineTests` - Test 8)**:
+   - `CreateProcessA`로 실제 `cmd.exe /c timeout /t 10 > nul` 자식 프로세스 2개를 OS에 동적 스폰 (`UniqueHandle` RAII 보호).
+2. **실시간 OS 스냅샷 vs 증분 트리 상호 비교 (State Reconciliation)**:
+   - 증분 트리(`incremental_tree`)에 시작 이벤트 반영 후, OS 커널 전체 스냅샷(`os_snapshot_tree.InitializeFromSnapshot()`)을 동시 채취하여 대조.
+   - PID 존재 여부, 부모 PPID 일치성, 부모의 `children_pids` 목록, 직계 족보 체인(`GetAncestry`)의 100% 완전 일치 확인.
+3. **종료 후 사망자 격리 검증**:
+   - `TerminateProcess`로 자식 1을 사살한 뒤 OS 스냅샷 채취.
+   - OS 테이블에서는 자식 1이 완전히 소멸했음을 확인하고, 증분 트리에서는 사후 포렌식을 위한 Tombstone(`is_alive = false`)으로 안전하게 격리 보존됨을 확인.
+   - 아직 살아있는 자식 2는 OS와 증분 트리 모두에서 `is_alive = true`로 유지됨을 확인.
+4. **반복 사이클 신뢰성**:
+   - 총 3회 반복 사이클 동안 누적 생성 6건, 종료 6건을 수행하며 단 1건의 메모리 누수나 링크 왜곡 없이 100% 동기화 유지 입증.
+
+### [해결 및 증빙 (Resolution & Verification)]
+* `EngineTests.exe`에 `TestRealOSProcessTreeSynchronization` (Test 8) 구현 및 커밋 (`020101a`).
+* `build.ps1`, `EngineTests.exe`, `DefenseProfilingTest.exe`, `SensorTests.exe`, `IpcE2ETest.exe` 전원 Exit Code 0 통과 완료.
 
 
