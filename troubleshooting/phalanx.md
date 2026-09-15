@@ -310,11 +310,13 @@ related:
 ### [해결책 (Resolution)]
 1. **실시간 벤치마크 하네스 구축 (`LlmArchitectureBenchmarkTests.cs`)**:
    - 동일한 악성 프로세스 동결 인입 조건에서 방식당 10회씩 총 30회 세션(약 40회 실시간 API 호출) 연속 실측 수행.
-2. **실측 결과 및 판정 (Ground Truth)**:
-   - **방식 1 (Current JSON Mode)**: 80% 파싱 성공, 평균 317자의 풍부한 보안 사고 과정(CoT) 생성, 1회 왕복, 프로덕션 최적안으로 확정.
-   - **방식 2 (OpenAPI responseSchema)**: 10회 중 9회 15초 타임아웃, 1회 역직렬화 실패 (성공률 0.0%). 구글 서버 측 CFG 디코딩 지연으로 실무 배제 확정.
-   - **방식 3 (Native Function Calling)**: 90% 도구 호출 성공했으나 사고 과정(`Thought`)이 100% 누락(0자), 2회 멀티턴 왕복 필수(누적 9.1초 지연), 토큰 과금 2.5배(1,271토큰) 폭증으로 실시간 EDR에 부적합 판정.
-3. **검증**: `LlmArchitectureBenchmarkTests.RunFullComprehensiveBenchmark_10IterationsEach` 6분 24초 동안 전회차 실행 완료 (Exit Code 0).
+2. **실측 결과 및 판정 (Ground Truth - 2차 튜닝 재측정 완료)**:
+   - **1차 responseSchema 0% 실패 원인 규명**: Gemini 2.5 Flash 내부 `thoughtsTokenCount`(770~979토큰)가 `MaxOutputTokens`(4096)의 예산을 잠식하고, 필드 설명이 없는 `summary_title`에서 CFG 문법 제약 퇴행 무한 반복 루프(1,832토큰 도달)가 발생하여 15초 타임아웃에 도달했던 구조적 원인 발견.
+   - **2차 튜닝 후 10회 연속 재측정 (MaxOutputTokens=8192, 필드 설명 주입, 25초 타임아웃)**:
+     - **방식 1 (Current JSON Mode)**: **10/10 (100.0% 만점 성공)**, 도구 선택 100%, 필수 인자 100%, **평균 444자의 완벽한 보안 사고 과정(CoT)** 생성, 단일 왕복 완결 ➔ 프로덕션 최적안으로 확정.
+     - **방식 2 (Tuned responseSchema)**: **7/10 (70.0% 성공)**으로 개선되었으나, 스키마로 인한 과도한 제약으로 모델이 도구 호출을 건너뛰는 현상(Miss 60%)이 발생하여 도구 선택 정확도가 40%로 급락.
+     - **방식 3 (Native Function Calling)**: 9/10 (90.0% 도구 호출 성공)했으나 사고 과정(`Thought`)이 10회 중 9회에서 100% 누락(평균 18자), 2회 멀티턴 필수(누적 9.3초 지연), 토큰 과금 2.05배(1,313토큰) 폭증 및 2턴 응답 비정형화로 EDR 부적합 재확인.
+3. **검증**: `LlmArchitectureBenchmarkTests.RunFullComprehensiveBenchmark_10IterationsEach` 6분 20초 동안 전회차 100% 통과 (Exit Code 0).
 
 
 
