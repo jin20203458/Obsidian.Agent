@@ -38,8 +38,8 @@ related:
 * **현상**: 타깃 프로세스가 크리티컬 섹션이나 ntdll 로더 락(`LdrpLoaderLock`)을 쥐고 있는 상태에서 비동기 동결 호출 시 시스템 전역 리소스 경합 또는 데드락 발생 가능성.
 * **대응책**:
   * 동결 API(`ntdll!NtSuspendProcess` 및 폴백 `SuspendThread`)는 자체 타임아웃 파라미터가 없으므로, 센서 내부에 **비동기 안전 타이머(Safety Watchdog, 기본 10,000ms)**를 운영하여 C# 대뇌가 크래시되거나 네트워크가 두절되어 응답이 없는 비정상 상태(Orphan Freeze) 감지 시 자동으로 `NtResumeProcess`(폴백 시 `ResumeThread`)를 호출하여 시스템 프리징을 해제하는 안전 폴백 메커니즘을 구비할 것.
-  * **AI 수사 1회성 타임아웃 연장 티켓 (One-shot Extension Ticket: `ACTION_EXTEND_TIMEOUT`)**: 100μs(실측 0.354μs) 초고속 로컬 룰 엔진으로 즉각 판정되지 않고 AI 심층 조사(2~5초 소요)로 넘어갈 경우, C# 코어는 조사 개시 시점에 단 1회 타임아웃 연장 티켓(`ACTION_EXTEND_TIMEOUT`)을 발송하여 워치독 마감 시한을 10,000ms 연장할 수 있다.
-  * **절대 상한선 (Hard Ceiling / Fail-Safe)**: C++ 워치독은 시스템 데드락(로더 락 등)을 원천 차단하기 위해 **타임아웃 연장을 최대 1회로 엄격히 제한**한다. 1회를 초과하는 추가 연장 요청은 즉시 거부되며, 최초 동결 시점으로부터 최대 20초(기본 10초 + 연장 10초)를 초과하면 워치독이 자동으로 `NtResumeProcess`(폴백 시 `ResumeThread`)를 강제 집행하여 OS 안정성을 보장한다.
+  * **AI 수사 1회성 타임아웃 연장 티켓 (One-shot Extension Ticket: `ACTION_EXTEND_TIMEOUT`)**: 100μs(실측 0.354μs) 초고속 로컬 룰 엔진으로 즉각 판정되지 않고 AI 심층 조사(멀티턴 ReAct 툴링 루프)로 넘어갈 경우, C# 코어는 조사 개시 시점에 단 1회 타임아웃 연장 티켓(`ACTION_EXTEND_TIMEOUT`)을 발송하여 워치독 마감 시한을 50,000ms(50초) 연장할 수 있다.
+  * **절대 상한선 (Hard Ceiling / Fail-Safe)**: C++ 워치독은 시스템 데드락(로더 락 등)을 원천 차단하기 위해 **타임아웃 연장을 최대 1회로 엄격히 제한**한다. 1회를 초과하는 추가 연장 요청은 즉시 거부되며, 최초 동결 시점으로부터 최대 60초(기본 10초 + 1회 연장 50초)를 초과하면 워치독이 자동으로 `NtResumeProcess`(폴백 시 `ResumeThread`)를 강제 집행하여 OS 안정성을 보장한다.
   * 타깃 프로세스가 완전히 안전하거나 정상으로 판정된 경우 즉시 `MitigationCommand(ACTION_RESUME)`를 하달하여 프로세스를 정상 복구할 것.
 
 ---
@@ -380,3 +380,32 @@ related:
    - `InvestigationToolsTests.cs`에 Gzip 압축 해독, Hex 해독, RFC 1918 B클래스 사설망, 포트/디팽 파싱, 단어 경계 오탐 방지, 킬체인 정렬, 인프라 안전 가드, 보호 프로세스 가드 등 5개 신규 테스트 추가.
    - C# 전체 20개 단위 테스트 전원 통과 (`Exit Code 0`, 기간 1분 16초 - 라이브 Vertex AI 테스트 포함).
    - C++ `SensorTests.exe` (5/5) 및 `EngineTests.exe` (8/8) 전원 통과 (`Exit Code 0`).
+
+---
+
+## 2026-09-15: [Optimized] 프로세스 동결 세이프티 워치독 타임아웃 분할 최적화 (10초 기본 + 50초 연장 = 총 60초)
+
+### [현상 (Symptom)]
+* 기존 멀티턴 AI 수사 지원을 위해 C++ 센서 세이프티 워치독 기본 타임아웃을 30초, 연장 티켓을 30초(총 60초)로 설정한 구조에서 잠재적 리스크 분석:
+  * 만약 C# 상위 AI 계층이 네트워크 단절, 프로세스 OOM, 비정상 크래시 등으로 인해 살아있지 않은 상태(Orphan Freeze)일 때, 최초 동결된 타깃 프로세스가 30초 동안 불필요하게 멈춰 있게 됨.
+  * 타깃 프로세스가 OS 로더 락(`LdrpLoaderLock`)이나 크리티컬 섹션을 쥔 상태라면 30초 동안 시스템 전역 지연 및 데드락 윈도우가 과도하게 길어지는 부작용 발생.
+
+### [원인 (Root Cause)]
+* 타임아웃 분할 비율이 1:1(`30s + 30s`)로 균등 배분되어 있어, C# 에이전트의 생존 여부(Heartbeat)를 확인하는 초기 유예 시간이 과도하게 길었음.
+
+### [해결책 (Resolution)]
+1. **타임아웃 분할 비율 재설계 (`10s 기본 + 50s 연장 = 누적 60초`)**:
+   * **초기 워치독(10초)**: C# 에이전트 생존 확인용 하트비트 역할 수행. C# 에이전트가 정상 작동 중이라면 수사 개시 즉시(~5ms) C++로 `ACTION_EXTEND_TIMEOUT` 연장 티켓을 전송하므로 실질적인 AI 수사 시간(총 60초)에는 아무런 제약이 없음. 반면 C#이 크래시된 고아 상태라면 기존 30초 대비 1/3인 10초 만에 신속하게 자동 복구(`AutoResume`)되어 데드락 노출 창을 67% 감축.
+   * **1회성 연장 티켓(50초)**: AI 에이전트가 5대 수사 도구와 멀티턴 ReAct 루프를 안전하게 완결할 수 있는 충분한 수사 예산(50초)을 제공.
+   * **C# CTS 상위 제한(50,000ms)**: C++ 워치독 마감 시한(누적 60초) 만료 10초 전 안전 마진을 두어 통신 레이스 컨디션을 완벽 차단.
+2. **코드 반영**:
+   * C++ `SafetyWatchdog.h`: `default_timeout = 10000ms`, `extend_by = 50000ms`.
+   * C++ `ProcessActuator.h`: `extend_by = 50000ms`.
+   * C++ `main.cpp`: 워치독 기본 인자 10000ms 명시.
+   * C# `AutonomousHunterAgent.cs`: 1회성 연장 사유 메시지 `(50초)` 갱신 및 주석 동기화.
+   * C# `AutonomousHunterAgentTests.cs`: 연장 검증 주석 갱신.
+3. **검증 (Ground Truth)**:
+   * C++ `build.ps1` 빌드 성공 (`Exit Code 0`).
+   * C++ `SensorTests.exe` (5/5 단위테스트 통과, `Exit Code 0`).
+   * C++ `EngineTests.exe` (8/8 단위 및 벤치마크 테스트 통과, `Exit Code 0`).
+   * C# `dotnet test tests/Phalanx.Agent.Tests/` 전체 20개 테스트 무결성 통과 (`Exit Code 0`).
