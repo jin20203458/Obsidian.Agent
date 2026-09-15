@@ -249,4 +249,28 @@ related:
 3. **단위 테스트 검증**:
    - `ProcessTreeProjectionTests.cs`를 구축하여 350개 노드 스냅샷 일괄 인입, 족보 상향 추적, 델타 생명주기 이벤트(Start/Suspend/Stop), PID 재사용 시 유령 부모 절단 등 4대 핵심 시나리오 100% 통과 (Exit Code 0).
 
+---
+
+## 2026-09-15: [Resolved] Gemini 2.0 Flash REST API 실제 연동 및 하이브리드 ReAct 무중단 폴백(Fallback) 엔진 구축
+
+### [현상 (Symptom)]
+* `AutonomousHunterAgent.cs`에 `_geminiApiKey` 필드는 선언되어 있었으나, 실제 외부 Google Gemini REST API(`generativelanguage.googleapis.com`) 호출 통신 클라이언트가 부재하여 하드코딩된 규칙 기반 5단계 시뮬레이터(더미 스크립트)로만 동작하는 한계 존재.
+* 외부 네트워크 API 호출을 단순 추가할 경우, API Key가 없는 환경이나 네트워크 단절 환경에서 단위 테스트가 실패하거나 C++ 센서 워치독 SLA(3초)를 초과하여 타임아웃이 발생할 수 있는 잠재적 취약점 존재.
+
+### [원인 (Root Cause)]
+* Phase 3 초기 구현 시 로드맵 문서의 참조 자산 링크 누락으로 인해 MundusVivens의 `GeminiApiService.cs` 통신 패턴이 이식되지 않았고, 단위 테스트 고속 통과만을 위해 로컬 오프라인 시뮬레이터로만 작성되었음.
+
+### [해결책 (Resolution)]
+1. **Gemini REST API 클라이언트 및 DTO 신설 (`Agent/Gemini/`)**:
+   - `GeminiApiDto.cs`: Gemini 2.0 Flash REST 표준 스키마 및 구조화 출력(`AiInvestigationDecision`) 선언.
+   - `LlmJsonParser.cs`: 마크다운 코드블록 정제 및 중첩 중괄호 균형 탐색을 통한 안전한 JSON 파서 구현.
+   - `GeminiRestClient.cs`: 2.5초 내부 SLA Linked CTS가 결합된 비동기 HTTP 통신 클라이언트 구축.
+2. **하이브리드 ReAct 아키텍처 구축 (`AutonomousHunterAgent.cs`)**:
+   - `GEMINI_API_KEY` 존재 시: 실제 Gemini 2.0 Flash 호출을 통해 프로세스 족보 및 5대 도구 동적 실행, 실시간 서사 도출 (`InvestigateWithGeminiAsync`).
+   - `GEMINI_API_KEY` 부재 또는 네트워크 장애/타임아웃 시: 기존 23ms 오프라인 결정론적 엔진(`InvestigateOfflineDeterministicAsync`)으로 무중단 자동 폴백(Graceful Degradation).
+3. **검증 및 무결성 확인 (Ground Truth)**:
+   - `AutonomousHunterAgentTests.cs`에 `TestGeminiLiveModeWithMockHttp` 및 `TestGeminiFallbackToOfflineOnNetworkFailure` 추가.
+   - 단위 테스트 11종 전원 통과 (`Exit Code 0`), C++ 4대 테스트 스위트 전원 통과 확인.
+
+
 
