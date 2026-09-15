@@ -318,5 +318,22 @@ related:
      - **방식 3 (Native Function Calling)**: 9/10 (90.0% 도구 호출 성공)했으나 사고 과정(`Thought`)이 10회 중 9회에서 100% 누락(평균 18자), 2회 멀티턴 필수(누적 9.3초 지연), 토큰 과금 2.05배(1,313토큰) 폭증 및 2턴 응답 비정형화로 EDR 부적합 재확인.
 3. **검증**: `LlmArchitectureBenchmarkTests.RunFullComprehensiveBenchmark_10IterationsEach` 6분 20초 동안 전회차 100% 통과 (Exit Code 0).
 
+---
 
+## 2026-09-15: [Resolved] SafetyWatchdog 타임아웃 연장 시 마감시간 누적 가산 공식 불일치 버그
 
+### [현상 (Symptom)]
+* C# AI 에이전트가 수사 개시 즉시 1회성 타임아웃 연장 패킷(`ACTION_EXTEND_TIMEOUT`)을 발송했을 때, C++ 센서 내부에서 기존 마감 기한(30초)에 30초가 추가되어 60초가 되는 것이 아니라, 호출 시점(`steady_clock::now()`)으로부터 30초로 리셋되어 총 동결 시간이 약 30.1초에 머무는 잠재적 SLA 레이스 위험 존재.
+* C#의 전체 수사 타임아웃 CTS(50초)와 C++ 워치독의 실질 마감 시한(30.1초) 간에 약 20초의 괴리가 발생하여, LLM 지연 발생 시 워치독이 수사 완료 전 프로세스를 강제 자동 재개(Auto-Resume)할 위험성 발견.
+
+### [원인 (Root Cause)]
+* `SafetyWatchdog.cpp`의 `ExtendTimeout` 메서드 내부에서 `it->second.deadline = std::chrono::steady_clock::now() + extend_by;`로 작성되어, 기존 `deadline`에 연장 시간을 가산하는 것이 아니라 현재 시각을 기준으로 재설정(Overwrite)되고 있었음.
+
+### [해결책 (Resolution)]
+1. **누적 가산 수식으로 정합 (`SafetyWatchdog.cpp`)**:
+   - `it->second.deadline = (std::max)(it->second.deadline, std::chrono::steady_clock::now()) + extend_by;`로 수정하여, 수사 개시 직후 패킷이 도착하더라도 기존 마감시간(30초)에 30초가 정확히 가산되어 총 60초로 확장되도록 교정.
+2. **단위 테스트 슬립 정합 (`tests/SensorTests/main.cpp`)**:
+   - 초기 200ms + 연장 300ms = 총 500ms 만료 대기 시, 워치독 루프 틱(200ms)을 고려하여 슬립을 750ms로 설정.
+3. **검증 (Ground Truth)**:
+   - C++ `SensorTests.exe` 및 `EngineTests.exe` 빌드 및 실행 완료 (Exit Code 0).
+   - C# `dotnet test tests/Phalanx.Agent.Tests/` 15개 단위 테스트 전원 통과 확인 (Exit Code 0).
