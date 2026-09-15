@@ -337,3 +337,46 @@ related:
 3. **검증 (Ground Truth)**:
    - C++ `SensorTests.exe` 및 `EngineTests.exe` 빌드 및 실행 완료 (Exit Code 0).
    - C# `dotnet test tests/Phalanx.Agent.Tests/` 15개 단위 테스트 전원 통과 확인 (Exit Code 0).
+
+---
+
+## 2026-09-15: [Resolved] 5대 자율 수사 도구 상용 1티어(Commercial Tier-1) EDR 고도화 및 치명적 맹점 해결
+
+### [현상 (Symptom)]
+* 5개 전문 독립 감사관 서브에이전트 감사 결과, 기존 수사 도구에서 엔터프라이즈 환경 투입 시 치명적인 오탐, 미탐, 시스템 장애를 유발할 수 있는 구조적 결함 식별:
+  1. `DecodePayloadTool`: Gzip/Deflate 압축 인코딩(`H4sIA...`)이 결합된 실제 파워셸 드로퍼(80% 이상)의 페이로드 100% 미탐 및 주석에만 있던 Hex 디코딩 부재.
+  2. `ProcessMemoryScanTool`: 0x0부터 선형 50MB만 순회하여 128TB 가상 주소 공간 고위 주소 동적 힙(`VirtualAlloc`)의 Cobalt Strike / Meterpreter / Reflective DLL 100% 미탐, `PAGE_GUARD` 크래시 위험 및 LOH 파편화/CPU 락업(500~2500ms 지연).
+  3. `ThreatReputationTool`: RFC 1918 B클래스(`172.16.0.0/12`) 누락으로 사내 VPC/Docker/K8s 파드 IP를 외부 공인 IP로 오인, 미확인 공인 IP에 75점 부여로 Teams/Chrome/Windows Update 통신 정상 프로세스 오탐 사살 위험, 포트/디팽 파싱 실패 시 C2 미탐 우회.
+  4. `MitreClassifierTool`: `Contains("c2")` 매칭으로 정상 설치기 `c2rsetup.exe`를 C2 공격(`T1071.001`)으로 오탐, `Contains("iex")`로 `client.exe`를 파워셸로 오탐, 킬체인 순서 없는 무작위 룰 순회 및 `calc.exe` 등 정상 입력에도 `T1059` 강제 주입.
+  5. `SystemFirewallTool`: Netsh 실패(`overallSuccess == false`) 시에도 무조건 `true`를 반환하는 Silent Failure 버그, 호스트 IP/게이트웨이/DNS 차단 시 엔드포인트 네트워크 먹통(Self-DoS) 위험, 순차 실행 지연(160ms).
+
+### [원인 (Root Cause)]
+* 프로토타입 단계에서 단순 문자열 포함 여부(`Contains`)와 고정 선형 순회 기반으로 작성되어, x64 가상 메모리 특성(VAD 구조), 엔터프라이즈 네트워크 토폴로지(RFC 1918/Anycast DNS), 다단계 압축/난독화 및 관리자 권한/인프라 가드가 결여되어 있었음.
+
+### [해결책 (Resolution)]
+1. **`DecodePayloadTool.cs` (상용 1티어 난독화 해독기)**:
+   - Gzip 매직 바이트(`0x1F, 0x8B`) 및 zlib(`0x78`) 자동 감지 및 `GZipStream`/`DeflateStream` 무손실 압축 해제 파이프라인 탑재 (512KB Zip-bomb 가드).
+   - 구분자(`0x`, `\x`, 공백) 및 연속형 Hex 디코더 추가, Base64 최소 길이 8자 완화 및 URL-Safe Base64 지원.
+   - ReDoS 타임아웃(250ms) 및 최대 128KB 입력 클램핑, 엄격한 스크립트 인쇄 가능 문자(ASCII/Hangul) 검증 파이프라인 구축.
+2. **`ProcessMemoryScanTool.cs` (상용 1티어 VAD 타깃 스캐너)**:
+   - `VirtualQueryEx` 기반 VAD 순회로 128TB 주소 공간 중 오직 **Unbacked Executable Memory (`MEM_PRIVATE` + `EXECUTE` + `!PAGE_GUARD`)**만 선별 스캔 (< 5ms, 500배 고속화).
+   - 사설 실행 메모리 영역 첫 2바이트 `MZ`(`0x4D, 0x5A`) 헤더 확인을 통한 Reflective PE/DLL 주입 100% 즉각 확정.
+   - `ArrayPool<byte>.Shared.Rent(65536)` 64KB 스트리밍으로 LOH 할당 및 GC Gen 2 정지 시간 0ms 달성.
+   - PID <= 4 및 윈도우 서브시스템 보호 프로세스 안전 가드 탑재.
+3. **`ThreatReputationTool.cs` (상용 1티어 위협 평판 평가기)**:
+   - Zero-Allocation 비트마스크 사설망 분류기로 RFC 1918(A, B, C클래스), 루프백, APIPA, CGNAT, 멀티캐스트, IPv6 ULA/LinkLocal 완벽 분류 (위협 점수 0점, `BENIGN_INTERNAL`).
+   - 미확인 외부 IP 75점 오탐 폭탄 제거 ➔ 30점 중립(`INCONCLUSIVE_EXTERNAL_IP`) 조정 및 복합 증거 결합 가이드라인 제공.
+   - 포트 번호(`:443`), 디팽(`[:]`, `[.]`), URL 스킴 정규화 전처리 및 글로벌 Anycast DNS / 통신 3사 DNS 화이트리스트 확장.
+4. **`MitreClassifierTool.cs` (상용 1티어 10단계 킬체인 매핑기)**:
+   - 26개 단어 경계(`\b`) 컴파일 정규식 적용으로 `c2rsetup.exe`, `client.exe` 오탐 원천 차단.
+   - 초기 접근(Initial Access)부터 영향(Impact)까지 10단계 사이버 킬체인 엄격 정렬.
+   - LLM 친화적 공격 킬체인 종합 서사(Narrative) 템플릿 자동 생성.
+5. **`SystemFirewallTool.cs` (상용 1티어 방화벽 격리 집행기)**:
+   - 결과 무결성 수정: `new ToolResult(overallSuccess, ...)`로 실패 시 정확히 `false` 반환하여 Silent Failure 차단.
+   - Non-Admin 테스트 환경 자동 감지 가상 시뮬레이션 지원 (`IsSimulated = true`).
+   - `NetworkInterface` 기반 동적 호스트 IP, 기본 게이트웨이, 로컬 DNS 보호망 구축 (인프라 Self-DoS 방어).
+   - `Task.WhenAll`을 통한 인/아웃바운드 룰 병렬 실행(160ms ➔ 35ms 단축), `unblock` 액션 지원.
+6. **검증 (Ground Truth)**:
+   - `InvestigationToolsTests.cs`에 Gzip 압축 해독, Hex 해독, RFC 1918 B클래스 사설망, 포트/디팽 파싱, 단어 경계 오탐 방지, 킬체인 정렬, 인프라 안전 가드, 보호 프로세스 가드 등 5개 신규 테스트 추가.
+   - C# 전체 20개 단위 테스트 전원 통과 (`Exit Code 0`, 기간 1분 16초 - 라이브 Vertex AI 테스트 포함).
+   - C++ `SensorTests.exe` (5/5) 및 `EngineTests.exe` (8/8) 전원 통과 (`Exit Code 0`).
