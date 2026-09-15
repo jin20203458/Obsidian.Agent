@@ -272,5 +272,29 @@ related:
    - `AutonomousHunterAgentTests.cs`에 `TestGeminiLiveModeWithMockHttp` 및 `TestGeminiFallbackToOfflineOnNetworkFailure` 추가.
    - 단위 테스트 11종 전원 통과 (`Exit Code 0`), C++ 4대 테스트 스위트 전원 통과 확인.
 
+---
+
+## 2026-09-15: [Resolved] Google Cloud Vertex AI (MundusVivens 서비스 계정) 연동 및 실시간 위협 수사 라이브 검증
+
+### [현상 (Symptom)]
+* Google AI Studio의 단순 API 키(`generativelanguage.googleapis.com`) 방식 외에, MundusVivens 엔터프라이즈 환경에서 사용하는 Google Cloud Vertex AI 서비스 어카운트(`Config/google-credentials.json`, `grc0-494913`)를 통한 실서비스 환경 호출 지원 필요.
+* LLM이 반환한 `ActionArgs` JSON을 `System.Text.Json`으로 역직렬화할 때 딕셔너리 값들이 `JsonElement`로 파싱되어 `DecodePayloadTool` 등의 하위 도구에서 `raw is string` 타입 검사가 실패하고 매개변수 누락 오류가 발생하는 현상.
+
+### [원인 (Root Cause)]
+* Vertex AI는 HTTP 헤더에 `x-goog-api-key`가 아닌 OAuth2 Bearer Token(`Google.Apis.Auth.OAuth2`) 인증을 요구하며, 엔드포인트 URL 구조(`aiplatform.googleapis.com/v1beta1/...`)가 다름.
+* C# `System.Text.Json`의 `Dictionary<string, object>` 역직렬화 특성상 원시 타입이 네이티브 `string`, `int`가 아닌 `JsonElement` 박싱 객체로 적재됨.
+
+### [해결책 (Resolution)]
+1. **`GeminiRestClient.cs` Vertex AI 라우팅 및 OAuth2 지원 확장**:
+   - `Google.Apis.Auth.OAuth2`의 `ServiceAccountCredential`을 통해 `https://www.googleapis.com/auth/cloud-platform` 스코프의 Bearer Token을 동적 발급받아 헤더에 주입.
+   - `TryCreateFromMundusVivensConfigAsync` 팩토리를 통해 MV의 `AppSettings.json` 및 `Config/google-credentials.json`을 자동 감지하여 인스턴스화.
+   - 클라우드 TLS 핸드셰이크 및 토큰 교환 지연을 고려하여 내부 타임아웃을 10초로 최적화.
+2. **`AutonomousHunterAgent.cs` 및 도구 매개변수 언래핑 강화**:
+   - 도구 인자 전달 전 `JsonElement`를 네이티브 C# 타입(`string`, `int`, `double`, `bool`)으로 일괄 언래핑 처리.
+   - `DecodePayloadTool.cs`에서 `JsonElement` 및 다양한 대소문자/별칭(`encodedCommand`, `command`, `payload` 등)을 지원하도록 유연화.
+3. **실제 Google Cloud 라이브 수사 검증 (Ground Truth)**:
+   - `TestLiveAutonomousInvestigationWithMvCredentials`: 실제 Google Cloud Vertex AI로 실시간 요청 전송 ➔ Gemini가 한국어로 악성 매크로 오피스 문서 및 Base64 난독화 의심 가설(`Thought`) 생성 ➔ `DecodePayloadTool`이 `185.220.101.5` C2 IP 및 페이로드 스크립트 해독 ➔ `SystemFirewallTool`이 방화벽 차단 집행 ➔ 최종 `ACTION_KILL` 및 침해 서사 도출 전 과정 6.4초 만에 통과 (`Exit Code 0`).
+   - 전체 13개 단위/통합 테스트 전원 통과 확인.
+
 
 
