@@ -398,12 +398,14 @@ related:
    * **초기 워치독(10초)**: C# 에이전트 생존 확인용 하트비트 역할 수행. C# 에이전트가 정상 작동 중이라면 수사 개시 즉시(~5ms) C++로 `ACTION_EXTEND_TIMEOUT` 연장 티켓을 전송하므로 실질적인 AI 수사 시간(총 60초)에는 아무런 제약이 없음. 반면 C#이 크래시된 고아 상태라면 기존 30초 대비 1/3인 10초 만에 신속하게 자동 복구(`AutoResume`)되어 데드락 노출 창을 67% 감축.
    * **1회성 연장 티켓(50초)**: AI 에이전트가 5대 수사 도구와 멀티턴 ReAct 루프를 안전하게 완결할 수 있는 충분한 수사 예산(50초)을 제공.
    * **C# CTS 상위 제한(50,000ms)**: C++ 워치독 마감 시한(누적 60초) 만료 10초 전 안전 마진을 두어 통신 레이스 컨디션을 완벽 차단.
-2. **코드 반영**:
+2. **코드 반영 및 LLM 모드 전용 조건부 발송 최적화**:
    * C++ `SafetyWatchdog.h`: `default_timeout = 10000ms`, `extend_by = 50000ms`.
    * C++ `ProcessActuator.h`: `extend_by = 50000ms`.
    * C++ `main.cpp`: 워치독 기본 인자 10000ms 명시.
-   * C# `AutonomousHunterAgent.cs`: 1회성 연장 사유 메시지 `(50초)` 갱신 및 주석 동기화.
-   * C# `AutonomousHunterAgentTests.cs`: 연장 검증 주석 갱신.
+   * C# `AutonomousHunterAgent.cs`: 연장 티켓(`ACTION_EXTEND_TIMEOUT`) 전송을 `[Step 0]` 전역에서 **`InvestigateWithGeminiAsync()` 진입부로 조건부 이동**.
+     - **오프라인 로컬 엔진(23ms)**: 연장 티켓 발송 생략 (C# 비정상 크래시 시 10초 만에 완벽 복구, gRPC 트래픽 절감).
+     - **Gemini LLM 모드(수 초~수십 초)**: LLM 네트워크 호출 직전에 50초 연장 티켓 선제 전송 (누적 60초 수사 예산 확보).
+   * C# `AutonomousHunterAgentTests.cs`: 오프라인 모드 단일 사살 명령(`Assert.Single`, 연장 미발송) 및 Gemini Mock/Live 모드 연장 티켓 발송 검증.
 3. **검증 (Ground Truth)**:
    * C++ `build.ps1` 빌드 성공 (`Exit Code 0`).
    * C++ `SensorTests.exe` (5/5 단위테스트 통과, `Exit Code 0`).
