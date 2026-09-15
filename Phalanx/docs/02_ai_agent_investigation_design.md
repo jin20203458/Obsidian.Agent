@@ -20,11 +20,11 @@ Phalanx의 AI 에이전트는 단순한 텍스트 챗봇이 아니라, **운영�
 flowchart TD
     Trigger["C++ 선제 동결 인입 (LIFECYCLE_SUSPENDED)"] --> Ingest["Working Memory 활성화 (Incident Context)"]
     
-    subgraph REACT_LOOP ["ReAct 자율 조사 루프 (최대 5회 반복)"]
+    subgraph REACT_LOOP ["ReAct 자율 조사 루프 (최대 3턴 반복, MaxSteps=3)"]
         Ingest --> Thought["(1) 추론 (Thought): 가설 수립 및 액션 결정"]
         Thought --> ToolAction["(2) 행동 (Action): OS 조사 도구 자율 호출"]
-        ToolAction --> Observation["(3) 관찰 (Observation): 도구 실행 결과 분석"]
-        Decision{"위협 확신도 90% 이상 또는 조사 한계"}
+        ToolAction --> Observation["(3) 관찰 (Observation): 도구 실행 결과 피드백"]
+        Decision{"위협 확신도 90% 이상 또는 3턴 한계"}
         Observation --> Decision
         Decision -->|"미충족 (추가 조사 필요)"| Thought
     end
@@ -45,11 +45,22 @@ flowchart TD
    * 입력된 프로세스 트리 및 명령줄 인자를 분석하여 잠재적 공격 기법(TTP)을 추론합니다.
    * *예: "winword.exe가 powershell.exe를 기동했으며 인자에 `-enc` 플래그가 포함됨. 인자 난독화 해독 및 메모리 조사가 필요함."*
 2. **Action (도구 호출)**:
-   * 정의된 `InvestigationTools` 중 가장 적합한 도구를 선정하여 인자(Argument)와 함께 호출합니다.
+   * 정의된 `InvestigationTools` 중 가장 적합한 도구를 선정하여 인자(Argument)와 함께 호출합니다 (`is_final_verdict: false`).
 3. **Observation (결과 관찰)**:
-   * 도구의 반환 결과(디코딩된 스크립트, 메모리 내 URL, C2 평판 정보)를 수집하여 컨텍스트 윈도우에 피드백합니다.
+   * 도구의 반환 결과(디코딩된 스크립트, 메모리 내 URL, C2 평판 정보)를 수집하여 `[Observation]` 메시지로 LLM 대화 히스토리에 피드백합니다.
 4. **Final Verdict (최종 판정)**:
-   * 확신도(0.0 ~ 1.0)를 계산하여 0.9 이상이면 악성 침해로 최종 확정하고 대응 파이프라인으로 전환합니다.
+   * 피드백된 관찰 결과를 평가하여 확신도가 충족되면 `is_final_verdict: true`와 함께 최종 판결(ACTION_KILL/ACTION_RESUME), 침해 서사, MITRE 매핑을 확정합니다.
+
+### B. 멀티턴 에이전트 루프 및 SLA 보장 메커니즘
+* **진짜 멀티턴 상호작용 (True Multi-Turn ReAct)**:
+  * 1턴 조기 판결(One-Shot Guess) 숏컷을 원천 차단하고, LLM이 도구 실행 결과를 실제로 관찰(Observation)한 후 결론을 내리도록 대화 히스토리(`List<Content>`) 핑퐁을 유지합니다.
+* **30초 워치독 SLA 확장 및 레이스 컨디션 방어**:
+  * 다중 왕복 통신 지연을 수용하기 위해 C++ `SafetyWatchdog` 타임아웃을 **30초(30,000ms)**로 확장하고, 수사 진입 시 `ACTION_EXTEND_TIMEOUT`(+30초) 티켓을 확보합니다.
+  * C++ 워치독 자동 동결 해제(Auto-Resume)와의 데드락/좀비 프로세스 레이스 컨디션을 원천 차단하기 위해 C# 상위 타임아웃 CTS는 **25초(25,000ms)**로 설정하여 5초의 안전 마진을 보장합니다.
+* **루프 한계 도달 시 Fail-Secure 정책**:
+  * 최대 3턴(`MaxSteps = 3`) 소진 시까지 결론이 도출되지 않을 경우, 선제 동결된 회색지대 타깃을 방치하지 않고 즉시 사살(`ACTION_KILL`) 격리를 집행하여 시스템 안전을 최우선 보장합니다.
+* **도구 예외 방어 및 자가 치유(Self-Correction)**:
+  * 미등록 도구 요청이나 예외 발생 시 크래시 없이 `[도구 실행 오류]` Observation을 피드백하여 모델이 스스로 도구를 정정할 수 있도록 보호합니다.
 
 ---
 

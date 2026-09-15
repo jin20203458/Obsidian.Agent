@@ -121,7 +121,7 @@ private:
   * **실측 성능**: 50,000회 연속 평가 시 **평균 0.354μs (초당 257만 건 처리, P99 0.7μs)**로 기준(100μs) 대비 280배 고속 판정 달성 ([04_performance_benchmarks.md](./04_performance_benchmarks.md) 참조).
 * **이원화 즉각 조치 (Dual Mitigation Actuator)**:
   1. **고신뢰도 악성 사살 (Immediate Kill, 0.1ms)**: `TerminateProcess`를 호출하여 현장 즉시 사살 집행 (`is_terminated = true`).
-  2. **회색지대 선제 동결 (Atomic Suspend, 24μs)**: `ntdll!NtSuspendProcess`를 동적 호출하여 **24~27μs** 만에 프로세스 원자적 동결 집행(Toolhelp32 스레드 순회 대비 1,170배 고속) 및 타깃 RAM 보존 ➔ 10초 `SafetyWatchdog` 가동 ➔ C# AI 에이전트에 수사 의뢰 (`is_suspended = true`).
+  2. **회색지대 선제 동결 (Atomic Suspend, 24μs)**: `ntdll!NtSuspendProcess`를 동적 호출하여 **24~27μs** 만에 프로세스 원자적 동결 집행(Toolhelp32 스레드 순회 대비 1,170배 고속) 및 타깃 RAM 보존 ➔ 30초 `SafetyWatchdog` 가동 ➔ C# AI 에이전트에 수사 의뢰 (`is_suspended = true`).
 
 ---
 
@@ -214,7 +214,7 @@ message MitigationCommand {
         ACTION_KILL = 0;
         ACTION_RESUME = 1;          // 스레드 동결 해제 (Unfreeze)
         ACTION_BLOCK_IP = 2;        // 네트워크 격리
-        ACTION_EXTEND_TIMEOUT = 3;  // AI 심층 수사 진입 시 1회성 타임아웃 연장 (+10초, 최대 1회 엄격 제한)
+        ACTION_EXTEND_TIMEOUT = 3;  // AI 심층 수사 진입 시 1회성 타임아웃 연장 (+30초, 최대 1회 엄격 제한)
         ACTION_SUSPEND = 4;         // AI 심층 수사를 위한 타깃 프로세스 원자적 동결 (메모리 보존)
     }
     ActionType action = 1;
