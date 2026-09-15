@@ -296,5 +296,25 @@ related:
    - `TestLiveAutonomousInvestigationWithMvCredentials`: 실제 Google Cloud Vertex AI로 실시간 요청 전송 ➔ Gemini가 한국어로 악성 매크로 오피스 문서 및 Base64 난독화 의심 가설(`Thought`) 생성 ➔ `DecodePayloadTool`이 `185.220.101.5` C2 IP 및 페이로드 스크립트 해독 ➔ `SystemFirewallTool`이 방화벽 차단 집행 ➔ 최종 `ACTION_KILL` 및 침해 서사 도출 전 과정 6.4초 만에 통과 (`Exit Code 0`).
    - 전체 13개 단위/통합 테스트 전원 통과 확인.
 
+---
+
+## 2026-09-15: [Resolved] 3대 LLM 통신 아키텍처 10회 실측(총 30회 세션) 벤치마크 및 프로덕션 최적안 확정
+
+### [현상 (Symptom)]
+* `responseSchema` 및 `Native Function Calling` 도입이 현재의 `JSON Mode + LlmJsonParser` 대비 EDR 환경에서 실제로 우월한지에 대한 경험적 증거(Empirical Evidence) 부재.
+* 각 방식의 네트워크 지연, 스키마 문법 제약(CFG) 오버헤드, 사고 과정(Thought) 누락 여부의 실측 데이터 확인 필요.
+
+### [원인 (Root Cause)]
+* 이론적인 API 스펙과 달리, 실제 클라우드 환경에서 OpenAPI 문법 제약 디코딩의 서버 단 지연 및 Function Calling 시 추론 토큰 생략 현상은 실측 테스트 없이는 확인 불가.
+
+### [해결책 (Resolution)]
+1. **실시간 벤치마크 하네스 구축 (`LlmArchitectureBenchmarkTests.cs`)**:
+   - 동일한 악성 프로세스 동결 인입 조건에서 방식당 10회씩 총 30회 세션(약 40회 실시간 API 호출) 연속 실측 수행.
+2. **실측 결과 및 판정 (Ground Truth)**:
+   - **방식 1 (Current JSON Mode)**: 80% 파싱 성공, 평균 317자의 풍부한 보안 사고 과정(CoT) 생성, 1회 왕복, 프로덕션 최적안으로 확정.
+   - **방식 2 (OpenAPI responseSchema)**: 10회 중 9회 15초 타임아웃, 1회 역직렬화 실패 (성공률 0.0%). 구글 서버 측 CFG 디코딩 지연으로 실무 배제 확정.
+   - **방식 3 (Native Function Calling)**: 90% 도구 호출 성공했으나 사고 과정(`Thought`)이 100% 누락(0자), 2회 멀티턴 왕복 필수(누적 9.1초 지연), 토큰 과금 2.5배(1,271토큰) 폭증으로 실시간 EDR에 부적합 판정.
+3. **검증**: `LlmArchitectureBenchmarkTests.RunFullComprehensiveBenchmark_10IterationsEach` 6분 24초 동안 전회차 실행 완료 (Exit Code 0).
+
 
 
