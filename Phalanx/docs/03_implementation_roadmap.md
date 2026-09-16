@@ -49,7 +49,7 @@ related:
   * **1순위 (Primary)**: `NtSuspendProcess`를 통한 프로세스 레벨 원자적 동결 집행 (동결 도중 신규 스레드 생성 탈출 불가).
   * **2순위 (Fallback)**: API 로드 실패 또는 특정 OS 환경 비호환 시 기존 `CreateToolhelp32Snapshot` + `SuspendThread` 순회 루프로 즉각 자동 폴백(Graceful Degradation).
   * 복구(Resume) 시에도 동일하게 `NtResumeProcess` 1순위 시도 후 실패 시 스레드별 `ResumeThread` 2순위 폴백.
-  * 데드락 방지용 30초 `SafetyWatchdog` (1회 한정 +30초 연장 가드, 자동 Resume) 연동.
+  * 데드락 방지용 세이프티 워치독(`SafetyWatchdog`, 기본 10초, 1회 한정 +50초 연장 가드, 만료 시 자동 Resume) 연동.
   * `phalanx.proto` 및 `GrpcStreamClient`에 `ACTION_SUSPEND = 4` 핸들러 추가로 프로토콜 대칭성 확립 (`89768b4`).
 * **완료 정의 (DoD)**:
   * `NtSuspendProcess` 성공 시 프로세스 동결 소요 시간이 50μs 미만(실측 24~27μs)으로 단축됨을 단위 테스트에서 확인 (완료).
@@ -73,7 +73,7 @@ related:
       * 조치: 현장에서 `ProcessActuator::TerminateTargetProcess` 즉시 호출 (0.1ms 이내 사살, `is_terminated = true`).
     * **경로 2 (회색지대 위협 ➔ 선제 동결)**:
       * 규칙: `winword.exe` ➔ `powershell.exe`, `certutil.exe` (LOLBAS 다운로더/스폰) 행위.
-      * 조치: 현장에서 `ProcessActuator::SuspendProcess` 호출 (24μs 원자적 동결) ➔ 30초 `SafetyWatchdog` 등록 ➔ gRPC 스트림으로 `is_suspended = true` 보고하여 C# AI 에이전트에 수사 의뢰.
+      * 조치: 현장에서 `ProcessActuator::SuspendProcess` 호출 (24μs 원자적 동결) ➔ 세이프티 워치독(기본 10초) 등록 ➔ gRPC 스트림으로 `is_suspended = true` 보고하여 C# AI 에이전트에 수사 의뢰.
     * **경로 3 (정상 작업 ➔ 무간섭 패스스루)**:
       * 신뢰된 개발/시스템 도구 체인 통과 (`PASS_DEFAULT`).
 * **완료 정의 (DoD)**:
@@ -112,7 +112,7 @@ related:
     * C# `ProcessTreeProjectionManager`: 수신된 스냅샷과 델타 이벤트를 바탕으로 로컬 메모리에 완전한 `ObservableCollection` 기반 프로세스 트리 DAG 구축 (C++ 역질의 없이 로컬 0초 족보 탐색).
   * **[Step 2] .NET 9 기반 `Phalanx.Cockpit` 내부 AI 에이전트 서브시스템 구축**:
     * Gemini 2.0 Flash 기반의 ReAct 추론 루프 (`Thought ➔ Tool Action ➔ Observation ➔ Final Verdict`) 구현.
-    * 수사 개시 시 C++ 워치독 데드락 방지 1회성 타임아웃 연장 티켓(`ACTION_EXTEND_TIMEOUT`, +30초) 자동 발송.
+    * 수사 개시 시 C++ 워치독 데드락 방지 1회성 타임아웃 연장 티켓(`ACTION_EXTEND_TIMEOUT`, +50초) 자동 발송.
     * 로컬 프로세스 트리를 기반으로 부모-자식-조부모 족보 문맥을 프롬프트에 무지연 주입.
   * **[Step 3] 5대 OS 수사 도구(Tool) 구현**:
     1. `DecodePayloadTool`: Base64 다단계 난독화 스크립트 해독.

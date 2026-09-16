@@ -13,10 +13,10 @@ related:
 
 ## 1. 프로젝트 현황 및 리포지토리 매핑
 
-* **메인 리포지토리**: `C:\Users\user\Documents\GitHub\Phalanx`
+* **메인 리포지토리**: `../Phalanx` (로컬 워크스페이스: `C:\Users\adg01\Documents\GitHub\Phalanx`)
   * 활성 작업 브랜치: `feature/phase3-ai-hunter`
   * 원격 저장소: `https://github.com/jin20203458/phalanx` (최신 커밋 푸시 완료)
-* **지식베이스 리포지토리**: `C:\Users\user\Documents\GitHub\Obsidian.Agent`
+* **지식베이스 리포지토리**: `../Obsidian.Agent` (로컬 워크스페이스: `C:\Users\adg01\Documents\GitHub\Obsidian.Agent`)
   * 공식 스펙: `Phalanx/docs/`
   * 트러블슈팅 런북: `troubleshooting/phalanx.md` (12개 핵심 기술 문제 해결 내역 보존)
 * **솔루션 파일**: `Phalanx.sln` (Visual Studio 2022 v17.x 호환 표준 솔루션)
@@ -31,9 +31,11 @@ related:
    * ReAct 루프가 정상 종결(`reachedFinal == true && hasValidAction`)된 경우, Gemini 모델의 `VerdictAction`(`ACTION_KILL` vs `ACTION_RESUME`)은 절대적 최상위 결정권을 가집니다.
    * `CommandLine.Contains("-enc")` 등 단순 정적 문자열 검사로 LLM의 정상 판결을 사살로 강제 오버라이드하거나 사내 IP를 임의 차단하는 하드코딩 if문을 절대 추가하지 마십시오.
    * 시스템 가드는 **최대 턴(5턴) 초과 타임아웃** 또는 **API 완전 단절/예외** 시의 Fail-Secure 방어에만 국한되어야 합니다.
-2. **세이프티 워치독 SLA 계약 (30초 기본 / 50초 연장 티켓)**:
-   * C++ 센서는 프로세스를 동결할 때 기본 30초 안전 마진을 적용합니다.
-   * C# AI 헌터가 심층 조사를 시작하면 즉시 `ACTION_EXTEND_TIMEOUT` 티켓을 선제 발송하여 마감 기한을 누적 연장(+30초 ➔ 총 60초 예산)합니다. C# 최상위 타임아웃 CTS는 25초 단위 안전 마진을 유지해야 합니다.
+2. **세이프티 워치독 SLA 계약 (10초 기본 / 50초 연장 티켓)**:
+   * C++ 센서는 프로세스를 동결할 때 데드락 및 고아 동결(Orphan Freeze) 방지를 위해 기본 10초(10,000ms) 안전 타임아웃을 적용합니다 (`SafetyWatchdog.h:37`).
+   * 오프라인 로컬 규칙 엔진(평균 23ms 완결)은 연장을 요청하지 않으므로, 비정상 크래시 시 10초 데드락 자가 회복(Auto-Resume)이 보장됩니다.
+   * C# AI 헌터가 외부 LLM 심층 수사에 진입할 경우 즉시 `ACTION_EXTEND_TIMEOUT` 티켓을 선제 발송하여 마감 기한을 1회에 한해 50초 누적 연장(+50,000ms ➔ 총 60초 예산 확보)합니다 (`SafetyWatchdog.h:55`, `AutonomousHunterAgent.cs:120-125`).
+   * C# 최상위 타임아웃 CTS는 네트워크 통신 레이스를 차단하고 워치독 만료 10초 전 안전 마진을 두기 위해 50초(50,000ms)로 엄격 제한합니다 (`AutonomousHunterAgent.cs:131`, `troubleshooting/phalanx.md:43`).
 3. **UI 스레드 안전 마샬링 및 Headless 호환성**:
    * Kestrel gRPC 및 비동기 작업 스레드는 `ObservableCollection`을 직접 조작할 수 없습니다. 반드시 `CockpitUiBridge.Instance`를 거쳐 `Dispatcher.InvokeAsync`로 마샬링하십시오.
    * 비GUI 환경(단위 테스트 및 `--headless` CI 러너)을 위해 `Application.Current`가 null이어도 예외 없이 안전 통과하는 Null-Safety 방어를 유지해야 합니다.
@@ -92,6 +94,7 @@ Phalanx Root
 dotnet build Phalanx.sln
 
 # 2. C# 순수 단위 테스트 실행 (25개 전원 통과 확인, ~300ms)
+# (주의: net9.0-windows 타깃이므로 호스트 머신에 .NET 9.0 Desktop Runtime이 설치되어 있어야 테스트 호스트 프로세스가 기동됩니다)
 dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"
 
 # 3. C++ 네이티브 프로젝트 빌드

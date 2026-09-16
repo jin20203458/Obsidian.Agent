@@ -54,9 +54,10 @@ flowchart TD
 ### B. 멀티턴 에이전트 루프 및 SLA 보장 메커니즘
 * **진짜 멀티턴 상호작용 (True Multi-Turn ReAct)**:
   * 1턴 조기 판결(One-Shot Guess) 숏컷을 원천 차단하고, LLM이 도구 실행 결과를 실제로 관찰(Observation)한 후 결론을 내리도록 대화 히스토리(`List<Content>`) 핑퐁을 유지합니다.
-* **30초 워치독 SLA 확장 및 레이스 컨디션 방어**:
-  * 다중 왕복 통신 지연을 수용하기 위해 C++ `SafetyWatchdog` 타임아웃을 **30초(30,000ms)**로 확장하고, 수사 진입 시 `ACTION_EXTEND_TIMEOUT`(+30초) 티켓을 확보합니다.
-  * C++ 워치독 자동 동결 해제(Auto-Resume)와의 데드락/좀비 프로세스 레이스 컨디션을 원천 차단하기 위해 C# 상위 타임아웃 CTS는 **25초(25,000ms)**로 설정하여 5초의 안전 마진을 보장합니다.
+* **세이프티 워치독 SLA 계약 및 레이스 컨디션 방어**:
+  * C++ `SafetyWatchdog`는 기본 10초(10,000ms) 안전 타임아웃을 적용하며, 로컬 규칙 엔진 판정(평균 23ms) 시에는 연장 없이 크래시 대비 10초 복구를 보장합니다.
+  * 외부 LLM(Gemini) 심층 수사 진입 시 다중 왕복 통신 지연을 수용하기 위해 즉시 1회성 `ACTION_EXTEND_TIMEOUT`(+50,000ms) 티켓을 선제 발송하여 총 60초 예산을 확보합니다 (`SafetyWatchdog.h:55`, `AutonomousHunterAgent.cs:120-125`).
+  * C++ 워치독 자동 동결 해제(Auto-Resume)와의 데드락/좀비 프로세스 레이스 컨디션을 원천 차단하기 위해 C# 상위 타임아웃 CTS는 **50초(50,000ms)**로 설정하여 워치독 만료 10초 전 안전 마진을 보장합니다 (`troubleshooting/phalanx.md:43`).
 * **루프 한계 도달 시 Fail-Secure 정책**:
   * 최대 5턴(`MaxSteps = 5`) 소진 시까지 결론이 도출되지 않을 경우, 선제 동결된 회색지대 타깃을 방치하지 않고 즉시 사살(`ACTION_KILL`) 격리를 집행하여 시스템 안전을 최우선 보장합니다.
 * **도구 예외 방어 및 자가 치유(Self-Correction)**:
