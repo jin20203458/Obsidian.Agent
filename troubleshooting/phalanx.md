@@ -411,3 +411,33 @@ related:
    * C++ `SensorTests.exe` (5/5 단위테스트 통과, `Exit Code 0`).
    * C++ `EngineTests.exe` (8/8 단위 및 벤치마크 테스트 통과, `Exit Code 0`).
    * C# `dotnet test tests/Phalanx.Agent.Tests/` 전체 20개 테스트 무결성 통과 (`Exit Code 0`).
+
+---
+
+## 2026-09-16: [Refactor] Phalanx C# 테스트 스위트 레거시 정리 및 3계층(Unit, Live, Benchmark) 카테고리화
+
+### [현상 (Symptom)]
+* C# 테스트 프로젝트(`Phalanx.Agent.Tests`) 빌드/실행 시, 순수 인메모리 단위 테스트와 외부 구글 클라우드 연동 테스트가 혼재되어 매번 `dotnet test` 실행 시 45~76초의 과도한 지연 발생.
+* 특히 개발 초기 Gemini 프롬프트/응답 가시화를 위해 작성된 `TestPrintLiveMultiTurnPromptsAndResponses`가 매 실행마다 3회 실시간 API를 호출하며 혼자서 약 25초를 소모하고 API 쿼터를 낭비함.
+
+### [원인 (Root Cause)]
+* xUnit `[Trait]` 기반의 테스트 분류 체계가 부재하여 CI/CD 및 오프라인 로컬 환경에서 외부 네트워크 의존성 없는 순수 단위 테스트만 선별 실행할 수 있는 필터가 없었음.
+
+### [해결책 (Resolution)]
+1. **레거시/중복 탐색 테스트 삭제**:
+   * `TestPrintLiveMultiTurnPromptsAndResponses` (약 184줄) 완전 삭제 (`TestLiveAutonomousInvestigationWithMvCredentials` 및 `TestGeminiLiveModeWithMockHttp`가 이미 상위 호환으로 완벽히 검증).
+2. **xUnit 3계층 카테고리(`Trait`) 적용**:
+   * **`Category=Unit` (17개)**:
+     - `ProcessTreeProjectionTests` (3개): CQRS 스냅샷, 델타 라이프사이클, PID 재사용/ProcessGuid 세대 분리.
+     - `InvestigationToolsTests` (10개): 5대 도구 1티어 회귀 방지 테스트.
+     - `AutonomousHunterAgentTests` (4개): 오프라인 자율 수사, Mock HTTP 2턴 ReAct, 네트워크 실패 폴백, 중첩 JSON 파서.
+     - **실측 실행 속도: 448ms (< 0.5초)**.
+   * **`Category=Live` (2개)**:
+     - `TestLiveGoogleVertexAiFromMvConfig`: 경량 클라우드 연결 스모크 테스트.
+     - `TestLiveAutonomousInvestigationWithMvCredentials`: 실제 구글 클라우드 Vertex AI 기반 자율 수사 E2E.
+   * **`Category=Benchmark` (1개)**:
+     - `LlmArchitectureBenchmarkTests`: 30회 반복 LLM 3-Way 아키텍처 비교 벤치마크.
+3. **검증 (Ground Truth)**:
+   * `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"`: 17/17 통과 (448ms, Exit Code 0).
+   * `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Live"`: 2/2 통과 (23s, Exit Code 0).
+   * C++ `SensorTests.exe` (5/5) & `EngineTests.exe` (8/8) 통과 (Exit Code 0).
