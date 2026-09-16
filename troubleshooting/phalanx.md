@@ -204,7 +204,7 @@ related:
 * 의존성 주입 또는 인스턴스 초기화 시점에서 비동기 초기화 팩토리 패턴을 사용하지 않고 생성자에서 동기 대기함.
 
 ### [해결책 (Resolution)]
-* `AutonomousHunterAgent.cs` 생성자에서 블로킹 호출을 제거하고, `GeminiRestClient.TryCreateFromMundusVivensConfig()` 동기 팩토리 메서드를 신설하여 로컬 JSON 설정을 안전하게 파싱하도록 리팩토링.
+* `AutonomousHunterAgent.cs` 생성자에서 블로킹 호출을 제거하고, `GeminiRestClient.TryCreateFromLocalConfig()` 동기 팩토리 메서드를 신설하여 Phalanx 로컬 JSON 설정을 안전하게 파싱하도록 리팩토링.
 
 ---
 
