@@ -8,13 +8,13 @@ related:
 ---
 # Phalanx System Architecture & Pipeline Specification
 
-본 문서는 `Phalanx` EDR 시스템을 구성하는 **C++20 네이티브 실시간 탐지 엔진(`Phalanx.Engine`)**, **gRPC 비동기 통신 계층**, 그리고 **C# .NET 9 AI 관제 콘솔(`Phalanx.Cockpit`)**의 기술적 결합 구조와 세부 구현 명세를 정의합니다.
+본 문서는 `Phalanx` EDR 시스템을 구성하는 **C++20 네이티브 실시간 탐지/방어 센서(`Phalanx.Sensor`)**, **gRPC 비동기 통신 계층**, 그리고 **C# .NET 9 AI 관제 콘솔(`Phalanx.Cockpit`)**의 기술적 결합 구조와 세부 구현 명세를 정의합니다.
 
 ---
 
 ## 1. 2계층 시스템 토폴로지 (Two-Tier Architecture)
 
-Phalanx는 인위적인 다계층 복잡성을 배제하고, **C++ 네이티브 실시간 탐지/방어 엔진(Layer 1)**과 **C# AI 오케스트레이션 및 관제 콘솔(Layer 2)**의 명확한 2계층 구조로 동작합니다.
+Phalanx는 인위적인 다계층 복잡성을 배제하고, **C++ 네이티브 실시간 탐지/방어 센서(Layer 1)**과 **C# AI 오케스트레이션 및 관제 콘솔(Layer 2)**의 명확한 2계층 구조로 동작합니다.
 
 ```mermaid
 flowchart TD
@@ -24,7 +24,7 @@ flowchart TD
         ETW_Img["Microsoft-Windows-Kernel-Image"]
     end
 
-    subgraph CPP_ENGINE ["Layer 1: C++20 Native EDR Engine (Phalanx.Engine)"]
+    subgraph CPP_ENGINE ["Layer 1: C++20 Native EDR Sensor (Phalanx.Sensor)"]
         ETW_Proc --> Krabs["krabs-etw Session Manager"]
         ETW_Net --> Krabs
         ETW_Img --> Krabs
@@ -61,7 +61,7 @@ flowchart TD
 
 ---
 
-## 2. C++ 네이티브 엔진 상세 설계 (`Phalanx.Engine`)
+## 2. C++ 네이티브 센서 상세 설계 (`Phalanx.Sensor`)
 
 ### A. ETW 텔레메트리 세션 관리 (`krabs-etw`)
 * 순수 Win32 `OpenTrace` / `ProcessTrace` API의 복잡한 C 포인터 캐스팅 오버헤드를 배제하고, 마이크로소프트의 모던 C++ 라이브러리인 `krabs-etw`를 사용하여 안정적인 유저모드 트레이스 세션을 구동합니다.

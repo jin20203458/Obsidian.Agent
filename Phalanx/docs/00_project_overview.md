@@ -17,7 +17,7 @@ related:
 
 Phalanx 프로젝트의 코드 및 아키텍처 구현체는 아래 링크에서 확인할 수 있습니다.
 
-- [C++ 네이티브 엔진 및 C# 관제 솔루션 (Phalanx)](https://github.com/jin20203458/phalanx) - C++20 EDR 엔진(`Phalanx.Engine`), gRPC 보고 스트림, C# WPF 관제 콘솔 및 AI 에이전트(`Phalanx.Cockpit`) 통합 저장소
+- [C++ 네이티브 센서 및 C# 관제 솔루션 (Phalanx)](https://github.com/jin20203458/phalanx) - C++20 EDR 센서(`Phalanx.Sensor`), gRPC 보고 스트림, C# WPF 관제 콘솔 및 AI 에이전트(`Phalanx.Cockpit`) 통합 저장소
 - [지식베이스 (Obsidian.Agent)](https://github.com/jin20203458/Obsidian.Agent) - 본 문서를 포함한 프로젝트 공식 기술 명세서 및 아키텍처 문서 모음
 
 ---

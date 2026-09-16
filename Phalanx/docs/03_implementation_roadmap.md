@@ -20,7 +20,7 @@ related:
 [ Phase 1: Kernel Sensor & Telemetry ] ──▶ [ Phase 1.5: Atomic Freeze ] ──▶ [ Phase 2: In-Memory DAG & Rules ] ──▶ [ Phase 2.5: Defense Profiling Benchmark ] ──▶ [ Phase 3: AI Agent & Forensic Tools ] ──▶ [ Phase 3.5: Full-Chain E2E & Local FSM ] ──▶ [ Phase 4: Cockpit & Presentation ]
   • ETW 커널 수집 루프 (완료)   • NtSuspendProcess 동결 (완료)  • C++ 인메모리 프로세스 트리 (완료)   • 스크립트 150ms 웜업 vs 0.1ms 차단 (완료)    • Gemini ReAct 루프 (완료)                • C++ ➔ C# ➔ C++ 폐루프 E2E 실증          • ModernWpfUI 다크 대시보드
   • 락-스왑 무손실 버퍼 (완료)  • Toolhelp32 폴백 (완료)        • 로컬 룰 판정 (< 100μs) (완료)       • 네이티브 바이너리 2ms 실행 누수 계측 (완료) • 상용 1티어 5대 OS 도구 (완료)          • 로컬 FSM & 위험도 가중치 스코어링       • 인터랙티브 프로세스 트리 Canvas
-  • ACTION_SUSPEND 대칭 (완료)  • 30초 세이프티 워치독 (완료)   • 0.1ms 현장 사살 & 24μs 동결 (완료)  • Canary 누수 0 Bytes 실증 (완료)          • 10s/50s SLA 연장 안전망 (완료)         • 정상 관리 족보 화이트리스트 가드        • QuestPDF 포렌식 리포트 출력
+  • ACTION_SUSPEND 대칭 (완료)  • 10초 세이프티 워치독 (완료)   • 0.1ms 현장 사살 & 24μs 동결 (완료)  • Canary 누수 0 Bytes 실증 (완료)          • 10s/50s SLA 연장 안전망 (완료)         • 정상 관리 족보 화이트리스트 가드        • QuestPDF 포렌식 리포트 출력
 ```
 
 ---
@@ -111,7 +111,7 @@ related:
     * C++ `GrpcStreamClient`: C# 관제 콘솔 최초 접속 시 `ProcessTree::InitializeFromSnapshot()` 데이터를 `LIFECYCLE_SNAPSHOT`으로 1회 일괄 덤프 전송.
     * C# `ProcessTreeProjectionManager`: 수신된 스냅샷과 델타 이벤트를 바탕으로 로컬 메모리에 완전한 `ObservableCollection` 기반 프로세스 트리 DAG 구축 (C++ 역질의 없이 로컬 0초 족보 탐색).
   * **[Step 2] .NET 9 기반 `Phalanx.Cockpit` 내부 AI 에이전트 서브시스템 구축**:
-    * Gemini 2.0 Flash 기반의 ReAct 추론 루프 (`Thought ➔ Tool Action ➔ Observation ➔ Final Verdict`) 구현.
+    * Gemini 3.7 Flash 기반의 ReAct 추론 루프 (`Thought ➔ Tool Action ➔ Observation ➔ Final Verdict`) 구현.
     * 수사 개시 시 C++ 워치독 데드락 방지 1회성 타임아웃 연장 티켓(`ACTION_EXTEND_TIMEOUT`, +50초) 자동 발송.
     * 로컬 프로세스 트리를 기반으로 부모-자식-조부모 족보 문맥을 프롬프트에 무지연 주입.
   * **[Step 3] 5대 OS 수사 도구(Tool) 구현**:
@@ -210,5 +210,5 @@ related:
    * 저장소 경로: `../GRC` (로컬 워크스페이스: `C:\Users\adg01\Documents\GitHub\GRC`)
    * **참조 범위 (Tokens Only)**: `GRC/Themes/ModernStyles.xaml`의 폰트 크기, 행간, 이탤릭 슬레이트 블루(`#A2B9D8`) 등 **순수 텍스트 스타일 정의** (롤플레잉 시나리오/뷰모델 복제 금지).
 4. **엔터프라이즈 대시보드 레이아웃 & 캡슐 버튼 스타일**:
-   * 저장소 경로: `C:\clang-lab\UI_WPF\ArqaStatic`
-   * **참조 범위 (Tokens Only)**: `ArqaStatic/Themes/DarkTheme.xaml`의 캡슐형 플랫 버튼(`CornerRadius="24"`), 다크 타이틀바, 다크 팔레트 브러시 **키값** (정적분석 진단 로직 및 다국어 번역 복제 금지).
+    * 참조 에셋: `ArqaStatic/Themes/DarkTheme.xaml` (엔터프라이즈 WPF UI 디자인 에셋)
+    * **참조 범위 (Tokens Only)**: `ArqaStatic/Themes/DarkTheme.xaml`의 캡슐형 플랫 버튼(`CornerRadius="24"`), 다크 타이틀바, 다크 팔레트 브러시 **키값** (정적분석 진단 로직 및 다국어 번역 복제 금지).
