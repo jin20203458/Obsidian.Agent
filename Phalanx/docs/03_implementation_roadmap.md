@@ -154,10 +154,12 @@ related:
     * `<target_context>`에 실행 경로(Temp 폴더 여부), 디지털 서명 유무, 프로세스 무결성 레벨(Integrity Level) 메타데이터 추가 주입.
     * 프롬프트에 정상 관리 스크립트 방면(`ACTION_RESUME`) Few-shot 예시 1건 추가로 사살 편향(Confirmation Bias) 방지.
     * `AiInvestigationDecision` DTO에 `remediation_steps?: string[]` (전사 방화벽 차단, 계정 리셋 등 후속 조치 처방전) 필드 신설.
-* **완료 정의 (DoD)**:
-  * 외부 공격 프로세스 기동 시, C++ 동결 ➔ gRPC ➔ C# AI 수사 ➔ gRPC ➔ C++ 사살 전체 루프가 자동화 스크립트를 통해 성공적으로 완주되고 프로세스가 강제 종료됨을 실측 확인 (Exit Code 0).
-  * 로컬 수사에서 정상 사내 스크립트(`*.internal`) 입력 시 `ACTION_RESUME` 조기 탈출, 악성 인라인 다운로더 입력 시 `ACTION_KILL` 사살 판결이 정상 도출됨을 단위 테스트에서 확인.
-  * 모든 단위/통합 테스트 통과 및 빌드 무결성 유지.
+* **완료 정의 (DoD) - [2026-09-16 검증 완료]**:
+  * 실제 OS 공격 프로세스 기동 시, 24μs 원자적 동결(`NtSuspendProcess`) ➔ Kestrel HTTP/2 gRPC 소켓 ➔ C# AI/FSM 수사 ➔ gRPC `ACTION_KILL` ➔ Win32 `TerminateProcess` 현장 사살 ➔ `targetProc.HasExited == true` 완전 닫힌 루프(Closed-Loop) 실측 자동화 완주 (`LiveFullChainE2ETests`, 555ms, Exit Code 0).
+  * 로컬 오프라인 수사에서 정상 사내 스크립트(`*.internal`, `*.corp.local`) 인입 시 1ms 조기 탈출(`ACTION_RESUME`), 악성 인라인 다운로더 인입 시 누적 위험도 105점(> 80점)으로 `ACTION_KILL` 및 방화벽 C2 차단, 볼륨 섀도 복사본 삭제(`vssadmin delete shadows`) 파괴 명령 시 +80점 즉각 사살 판결 확인 (`AutonomousHunterAgentTests`).
+  * 취약 부모 프로세스 감시망(`AcroRd32.exe`, `Acrobat.exe`, `hwp.exe`) 확장 및 C++ 회귀 단위 테스트 통과 (`EngineTests.exe`).
+  * LLM 2-Shot 균형 프롬프트(`<example type="verdict_resume">`), `<target_context>` 3대 메타데이터 주입 및 사후 조치 처방전(`remediation_steps`) DTO / LiteDB 아카이브 완비.
+  * 통합 테스트 러너(`run_fullchain_test.ps1`) 4대 전 단계(C# 순서 실측, C++ 센서/엔진 벤치, C++ gRPC 루프백, 실제 OS Live E2E) 100% Exit Code 0 통과 확인.
 
 ---
 
