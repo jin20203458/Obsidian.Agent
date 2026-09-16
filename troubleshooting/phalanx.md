@@ -534,3 +534,30 @@ related:
    * **평균 소요 턴 수**: **2.20 턴** (최대 5턴 예산 대비 56.0% 최적화율).
    * **평균 완결 시간**: **19,109 ms (19.11 초)** (C# 50초 SLA 및 C++ 60초 워치독 대비 30.89초 안전 마진 확보).
    * **테스트 소요 시간 및 결과**: 총 10개 시나리오 3분 27초 만에 전원 통과 (`Exit Code 0`).
+
+---
+
+## 2026-09-16: [Resolved] Phase 3.5: C++ 네이티브 바이너리 ➔ C# Cockpit ➔ C++ 네이티브 바이너리 크로스 랭귀지 풀체인 E2E 통합 검증
+
+### [현상 (Symptom)]
+* Phase 3.5의 종단간(E2E) 테스트에서 C# P/Invoke(`LiveFullChainE2ETests.cs`)를 통한 모의 테스트만으로는, 실제 C++ 네이티브 컴파일 바이너리(`FullChainCrossE2ETest.exe`), asio-grpc C++20 클라이언트, `DoubleBufferedSwapQueue`, `ProcessActuator` 및 실제 C# Kestrel Cockpit 프로세스 간의 크로스 랭귀지 및 크로스 프로세스 양방향 통신 무결성을 실측 입증하기 어려움.
+
+### [원인 (Root Cause)]
+* C# P/Invoke 테스트는 C# 런타임 내부에서 OS API를 호출하므로 C++의 `GrpcStreamClient.cpp`와 Boost.Asio/asio-grpc 이벤트 루프, Win32 `TerminateProcess` 디스패치가 C# Kestrel 서버와 결합하여 닫힌 루프(Closed-Loop)를 형성하는 실전 경로가 누락되어 있었음.
+
+### [해결책 (Resolution)]
+1. **C++ 네이티브 E2E 실행 파일 신설 (`tests/FullChainCrossE2ETest/main.cpp`)**:
+   * 실제 Win32 `CreateProcessW`로 독립 타깃 프로세스(`powershell.exe`) 기동.
+   * C++ `ProcessActuator::SuspendProcess`를 호출하여 24μs급 원자적 동결(`NtSuspendProcess`, 실측 38~40μs) 집행.
+   * `DoubleBufferedSwapQueue`에 텔레메트리 적재 후 C++ `GrpcStreamClient`로 Kestrel(50051 포트)에 스트리밍 송신.
+   * C# Cockpit으로부터 타임아웃 연장 티켓(`ACTION_EXTEND_TIMEOUT`, 50초) 수신 및 대기.
+   * C# 자율 AI 위협 헌터의 수사 판결 후 발행된 `MitigationCommand(ACTION_KILL)`를 수신하여 C++ `ProcessActuator::TerminateTargetProcess` 즉각 집행.
+   * Win32 `WaitForSingleObject`를 통해 타깃 프로세스의 실제 OS 소멸(Exit Code 1)을 완벽 실측.
+2. **크로스 랭귀지 자동화 오케스트레이터 구축 (`scripts/run_cross_e2e_test.ps1` & `scripts/run_fullchain_test.ps1`)**:
+   * C# Cockpit Kestrel 서버를 백그라운드 기동하고 포트 50051 준비 상태를 감지한 후 C++ 바이너리를 실행, 테스트 완료 후 백그라운드 프로세스를 안전하게 정리.
+   * `run_fullchain_test.ps1`에 5번째 최종 관문으로 연계 통합.
+3. **검증 (Ground Truth)**:
+   * `powershell -ExecutionPolicy Bypass -File .\build.ps1`: `FullChainCrossE2ETest.exe` 빌드 성공 (Exit Code 0).
+   * `powershell -ExecutionPolicy Bypass -File .\scripts\run_cross_e2e_test.ps1`: C++ ➔ C# Cockpit ➔ C++ 전 단계 완주 및 프로세스 사살 소멸 확인 (Exit Code 0).
+   * `powershell -ExecutionPolicy Bypass -File .\scripts\run_fullchain_test.ps1`: 5대 풀체인 테스트 전원 통과 (Exit Code 0).
+   * `dotnet test tests/Phalanx.Agent.Tests/ --filter "FullyQualifiedName!~Benchmark"`: 28개 전체 단위/통합 테스트 전원 통과 (Exit Code 0).
