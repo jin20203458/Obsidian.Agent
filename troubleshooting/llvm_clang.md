@@ -220,3 +220,54 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 4. **공식 1:1 실측 완료**:
    * Cppcheck 3/4 (75.0%) vs ARQA 4/4 (100.0%) [ARQA 우세].
 
+---
+
+## 2026-09-16: MultiStatementPerLineCheck (`ast-multi-statement-per-line`) 매크로 전개 누수, typedef struct 및 파일 간 라인 충돌 오탐 474건 전수 해결
+
+### 1. 현상 (Symptom)
+* DAPA 스타일 규칙 Rule 11 (카. 한 줄에 하나의 명령문을 사용한다) 및 MISRA C:2012 Rule 5.9 정적 검증 시, `mbedtls` 프로젝트 96개 소스 파일 대상 전수 분석에서 총 1,016건 중 **474건(46.7%)의 대규모 엔진 오탐(False Positive)** 발생:
+  1. `sha1.c`, `md5.c`, `ripemd160.c`, `psa_crypto.c` 등 단일 라인 매크로 호출(`P(...)`, `LOCAL_INPUT_FREE(...)`)에 대해 414건의 오탐 발생.
+  2. `oid.c`, `asn1parse.c` 등 `typedef struct { ... } name_t;` 선언에 대해 59건의 다중 전역 선언 오탐 발생.
+  3. `psa_crypto_aead.c:25`의 `union { ... } ctx;` 인라인 공용체 필드 선언에 대해 1건의 다중 멤버 선언 오탐 발생.
+  4. 복수 헤더 파일과 메인 파일 간 동일 라인 번호 충돌로 인한 허위 다중 전역 선언 오탐 발생.
+
+### 2. 원인 (Root Cause)
+1. **매크로 인자 확장 위치(`SM.isMacroArgExpansion`)와 본문 위치 불일치**:
+   * 블록 없는 다중 문장 매크로(예: `LOCAL_INPUT_FREE(input, copy)`)에서 첫 문장이 인자 토큰으로 시작하면 `SM.getExpansionLoc`가 호출부 인자 위치(Col 37)를, 본문 시작 문장은 매크로 이름 위치(Col 5)를 반환함.
+   * `ExpLoc.getRawEncoding()`이 달라 `macroExpansionSeen` 중복 필터를 우회하여 동일 라인에 복수 문장으로 등록됨.
+2. **매크로 정의부 `CompoundStmt` 진입**:
+   * `compoundStmt(unless(hasParent(functionDecl())))` 매처가 `do { ... } while(0)` 매크로 내부의 중괄호 블록까지 매칭하여, 매크로 본문의 다중 문장을 호출부 단일 라인의 다중 문장으로 오인함.
+3. **`typedef struct` AST 듀얼 노드 생성**:
+   * Clang AST는 `typedef struct { ... } name_t;` 구문에 대해 `RecordDecl`과 `TypedefDecl` 2개 노드를 동일 시작 위치에 생성함. 쉼표가 없다는 이유로 2개 선언으로 오인함.
+4. **인라인 태그 멤버 중복 등록**:
+   * `union { ... } ctx;` 선언 시 공용체 타입 정의 `RecordDecl`과 멤버 `FieldDecl`이 동일 좌표에 생성되어 별개 멤버 2건으로 계산됨.
+5. **파일 간 라인 번호 충돌 (`FileID` 누락)**:
+   * `declLineMap`과 `memberLineMap`의 키가 `unsigned line` 단일 값으로 되어 있어, 헤더 파일(`rsa.h:240`)과 메인 소스(`oid.c:240`)의 서로 다른 파일 선언이 단일 엔트리로 병합되어 오탐을 유발함.
+
+### 3. 해결책 (Resolution)
+1. **최상위 매크로 호출 위치 정규화 헬퍼(`getTopMacroInvocationLoc`) 구현**:
+   * `SM.getTopMacroCallerLoc(Loc)` 및 `SM.getExpansionRange(TopLoc).getBegin()`을 적용하여, 매크로 인자든 본문이든 항상 호출부 시작점(Col 5)의 단일 좌표로 정규화.
+   * `macroExpansionSeen`에 의해 단일 매크로 호출에서 파생된 후속 문장은 100% 차단(`continue`).
+2. **매크로 내부 `CompoundStmt` 조기 탈출 가드**:
+   * `checkCompoundStmt` 시작부에 `if (CS->getBeginLoc().isMacroID()) return;` 가드를 추가하여 매크로 래퍼 루프 내부 블록의 진입을 원천 차단.
+3. **`typedef struct/enum/union` 연계 선언 필터링**:
+   * `TagDecl::getTypedefNameForAnonDecl()` 또는 `TypedefNameDecl::getUnderlyingType()->getAsTagDecl()`과 일치하는 `TagDecl`은 `TypedefDecl`에 종속된 부속 노드로 판정하여 선언 카운트에서 제외.
+4. **인라인 태그 멤버 필터링**:
+   * 동일 레코드 내 `FieldDecl->getType()->getAsTagDecl()`과 일치하는 `RecordDecl`은 독립 멤버 카운트에서 제외.
+5. **맵 키 `std::pair<FileID, unsigned>` 정밀화**:
+   * `declLineMap`, `lineStmtMap`, `memberLineMap`의 키를 `std::pair<FileID, unsigned>`로 전면 교체하여 서로 다른 파일 간 라인 번호 충돌을 원천 차단.
+
+### 4. 검증 결과 (Ground Truth)
+* **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 무결점 성공.
+* **오탐 파일 실사**:
+  - `sha1.c`: 80건 오탐 $\rightarrow$ **0건 전수 소멸 (100% 해결)**
+  - `md5.c`: 64건 오탐 $\rightarrow$ **0건 전수 소멸 (100% 해결)**
+  - `ripemd160.c`: 80건 오탐 $\rightarrow$ **0건 전수 소멸 (100% 해결)**
+  - `psa_crypto.c`: 82건 오탐 $\rightarrow$ **0건 전수 소멸 (100% 해결)**
+  - `oid.c`: 43건 오탐 $\rightarrow$ **0건 전수 소멸 (100% 해결)**
+  - `psa_crypto_aead.c`: 3건 오탐 $\rightarrow$ **0건 전수 소멸 (100% 해결)**
+* **정탐 보존 실사**:
+  - `aes.c`: 한 줄 다중 대입(`415`), `case break`(`599`) 등 **30건 진성 규격 정탐 100% 보존**.
+  - `ecp_curves.c`: 루프 내 다중 연산(`ADD; NEXT;` 등) **진성 규격 정탐 100% 보존**.
+
+
