@@ -505,4 +505,32 @@ related:
    * `dotnet test --filter "Category=Unit"`: 20/20 통과 (273ms, Exit Code 0).
    * `Agent_Collaboration_Workflow_Guidelines` 이중 계쇄 프로토콜(Gate 1 Pass, Gate 2 Pass) 준수 완료.
 
+---
 
+## 2026-09-16: [Resolved] 10대 엔터프라이즈 시나리오 라이브 벤치마크 및 AI 수사관 판정 정밀도(100%) 실사
+
+### [현상 (Symptom)]
+* 기존 4개 시나리오 라이브 실측 결과만으로는 다양한 침투 기법(Office 매크로, LOLBin, HTA, WScript, 랜섬웨어) 및 정상 관리 작업(백업, 개발 감사, 인증서 검증, OS 인벤토리) 전반에 대한 AI 수사관의 일반화 성능과 판정 정확도를 충분히 통계적으로 입증하기 어려움.
+
+### [원인 (Root Cause)]
+* 라이브 테스트 시나리오 풀이 제한적이어서 다양한 명령줄 난독화 및 회색지대 유발 행위에 대한 Gemini 3.8 Flash의 다중 턴 수렴성 검증 표본이 부족했음.
+
+### [해결책 (Resolution)]
+1. **10대 엔터프라이즈 시나리오 구축 (`AutonomousHunterAgentTests.cs`)**:
+   * **악성 시나리오 6종 (기대값: ActionKill)**:
+     1. 파일리스 C2 인라인 다운로더 (`winword.exe ➔ powershell.exe -enc <WebClient C2>`)
+     2. LOLBAS CertUtil 원격 다운로드 (`excel.exe ➔ certutil.exe -urlcache -split`)
+     3. 피싱 이메일 반사형 C2 비콘 다운로드 (`outlook.exe ➔ cmd.exe ➔ powershell.exe`)
+     4. 브라우저 드라이브바이 HTA (`msedge.exe ➔ mshta.exe`)
+     5. PDF 익스플로잇 연계 WScript 2차 드로퍼 (`AcroRd32.exe ➔ wscript.exe`)
+     6. 랜섬웨어 볼륨 섀도 복사본 삭제 (`excel.exe ➔ cmd.exe ➔ vssadmin.exe delete shadows`)
+   * **정상 시나리오 4종 (기대값: ActionResume)**:
+     7. 정상 관리자 백업 서비스 점검 (`explorer.exe ➔ powershell.exe -enc <Get-Service ... *.corp.local>`)
+     8. 개발자 빌드 폴더 대용량 파일 감사 (`cmd.exe ➔ powershell.exe "Get-ChildItem ... > 100MB"`)
+     9. 사내 루트 CA 인증서 신뢰 체인 검증 (`explorer.exe ➔ certutil.exe -verify C:\Certs\corp_ca.cer`)
+     10. IT 시스템 자산 정보 수집 인벤토리 (`services.exe ➔ powershell.exe "Get-CimInstance Win32_OS"`)
+2. **실제 Google Vertex AI (Gemini 3.8 Flash) 라이브 실측 결과 (Ground Truth)**:
+   * **판결 일치율(정확도)**: **10 / 10 (100.0%)** (악성 사살 6/6 100%, 정상 복구 4/4 100%).
+   * **평균 소요 턴 수**: **2.20 턴** (최대 5턴 예산 대비 56.0% 최적화율).
+   * **평균 완결 시간**: **19,109 ms (19.11 초)** (C# 50초 SLA 및 C++ 60초 워치독 대비 30.89초 안전 마진 확보).
+   * **테스트 소요 시간 및 결과**: 총 10개 시나리오 3분 27초 만에 전원 통과 (`Exit Code 0`).
