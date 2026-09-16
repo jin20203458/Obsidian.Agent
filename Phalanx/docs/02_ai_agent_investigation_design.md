@@ -20,11 +20,11 @@ Phalanx의 AI 에이전트는 단순한 텍스트 챗봇이 아니라, **운영�
 flowchart TD
     Trigger["C++ 선제 동결 인입 (LIFECYCLE_SUSPENDED)"] --> Ingest["Working Memory 활성화 (Incident Context)"]
     
-    subgraph REACT_LOOP ["ReAct 자율 조사 루프 (최대 3턴 반복, MaxSteps=3)"]
+    subgraph REACT_LOOP ["ReAct 자율 조사 루프 (최대 5턴 반복, MaxSteps=5)"]
         Ingest --> Thought["(1) 추론 (Thought): 가설 수립 및 액션 결정"]
         Thought --> ToolAction["(2) 행동 (Action): OS 조사 도구 자율 호출"]
         ToolAction --> Observation["(3) 관찰 (Observation): 도구 실행 결과 피드백"]
-        Decision{"위협 확신도 90% 이상 또는 3턴 한계"}
+        Decision{"위협 확신도 90% 이상 또는 5턴 한계"}
         Observation --> Decision
         Decision -->|"미충족 (추가 조사 필요)"| Thought
     end
@@ -58,7 +58,7 @@ flowchart TD
   * 다중 왕복 통신 지연을 수용하기 위해 C++ `SafetyWatchdog` 타임아웃을 **30초(30,000ms)**로 확장하고, 수사 진입 시 `ACTION_EXTEND_TIMEOUT`(+30초) 티켓을 확보합니다.
   * C++ 워치독 자동 동결 해제(Auto-Resume)와의 데드락/좀비 프로세스 레이스 컨디션을 원천 차단하기 위해 C# 상위 타임아웃 CTS는 **25초(25,000ms)**로 설정하여 5초의 안전 마진을 보장합니다.
 * **루프 한계 도달 시 Fail-Secure 정책**:
-  * 최대 3턴(`MaxSteps = 3`) 소진 시까지 결론이 도출되지 않을 경우, 선제 동결된 회색지대 타깃을 방치하지 않고 즉시 사살(`ACTION_KILL`) 격리를 집행하여 시스템 안전을 최우선 보장합니다.
+  * 최대 5턴(`MaxSteps = 5`) 소진 시까지 결론이 도출되지 않을 경우, 선제 동결된 회색지대 타깃을 방치하지 않고 즉시 사살(`ACTION_KILL`) 격리를 집행하여 시스템 안전을 최우선 보장합니다.
 * **도구 예외 방어 및 자가 치유(Self-Correction)**:
   * 미등록 도구 요청이나 예외 발생 시 크래시 없이 `[도구 실행 오류]` Observation을 피드백하여 모델이 스스로 도구를 정정할 수 있도록 보호합니다.
 
