@@ -19,7 +19,7 @@ related:
 * **지식베이스 리포지토리**: `../Obsidian.Agent` (로컬 워크스페이스: `C:\Users\adg01\Documents\GitHub\Obsidian.Agent`)
   * 공식 스펙: `Phalanx/docs/`
   * 트러블슈팅 런북: `troubleshooting/phalanx.md` (12개 핵심 기술 문제 해결 내역 보존)
-* **솔루션 파일**: `Phalanx.sln` (Visual Studio 2022 v17.x 호환 표준 솔루션)
+* **솔루션 파일**: `Phalanx.sln` (Visual Studio 2026 / Dev18 및 VS 2022 v17.x 호환 표준 솔루션)
 
 ---
 
@@ -60,7 +60,7 @@ Phalanx Root
 │   │   ├── Actuator/SafetyWatchdog.cpp      # 데드라인 기반 동결 해제 워치독
 │   │   ├── Rules/LocalRuleEngine.cpp        # 100μs 오프라인 로컬 규칙 엔진 (PDF/HWP/Office 자식 프로세스)
 │   │   └── Ipc/GrpcStreamClient.cpp         # asio-grpc C++20 코루틴 클라이언트 (종료 명령 바이패스 포함)
-│   └── Phalanx.Cockpit/ (C# .NET 9 WPF)     # 엔터프라이즈 관제 허브 & 자율 AI 헌터
+│   └── Phalanx.Cockpit/ (C# .NET 9/10 WPF)  # 엔터프라이즈 관제 허브 & 자율 AI 헌터
 │       ├── Program.cs                       # STA 진입점, 백그라운드 Kestrel gRPC, 순차 동기 정리, --headless 지원
 │       ├── App.xaml / App.xaml.cs           # WPF App 정의 및 테마 머지
 │       ├── Themes/EnterpriseTheme.xaml      # Obsidian 다크 토큰, 벡터 지오메트리, 버튼/카드 스타일
@@ -68,7 +68,7 @@ Phalanx Root
 │       ├── ViewModels/MainViewModel.cs      # 카운터, 필터/검색, 토글 커맨드, 사건 뷰모델 관리
 │       ├── Services/CockpitUiBridge.cs      # UI 스레드 디스패처 마샬링 싱글톤 브리지
 │       ├── Services/SensorProcessController.cs # 바이너리 탐색, UAC runas 기동, Win32 로컬 이벤트 종료
-│       ├── Agent/AutonomousHunterAgent.cs   # Gemini 3.8 Flash 자율 ReAct 수사관 & 다차원 FSM 엔진
+│       ├── Agent/AutonomousHunterAgent.cs   # Gemini 3.7 Flash 자율 ReAct 수사관 & 다차원 FSM 엔진
 │       ├── Agent/Gemini/GeminiRestClient.cs # Vertex AI OAuth2 / Gemini API JSON Mode REST 통신
 │       ├── CQRS/ProcessTreeProjectionManager.cs # 인메모리 프로세스 트리 투영 및 족보 추적
 │       ├── Storage/ForensicArchiveManager.cs# LiteDB 기반 침해사고 영속 스토리지

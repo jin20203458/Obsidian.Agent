@@ -30,7 +30,7 @@ related:
 ### Phase 1: 고성능 커널 센서 및 텔레메트리 파이프라인 (Kernel Sensor & Telemetry) [완료]
 * **목표**: Windows 커널 프로세스 이벤트를 유실 없이 수집하고 gRPC로 고속 송신하는 네이티브 C++ 파이프라인 구축.
 * **주요 개발 내용**:
-  * Visual Studio 2022 기반 C++20 `Phalanx.Sensor` 프로젝트 스캐폴딩.
+  * Visual Studio 2026 (MSVC v14.51, C++20) 및 Visual Studio 2022 기반 `Phalanx.Sensor` 프로젝트 스캐폴딩.
   * `krabs-etw` 라이브러리 연동 및 `Microsoft-Windows-Kernel-Process` ETW 프로바이더 리스너 구현.
   * `DoubleBufferedSwapQueue` 락-스왑 템플릿 구현 및 주기적 스왑 플러시 루프 계측.
   * Win32 `OpenThread` ➔ `SuspendThread` 및 `TerminateProcess` 안전 래퍼 함수 구현.
@@ -182,12 +182,12 @@ related:
 
 | 구분 | 기술 스택 및 라이브러리 | 용도 및 비고 |
 | :--- | :--- | :--- |
-| **IDE / 컴파일러** | Visual Studio 2022 (MSVC v143, C++20) | 윈도우 네이티브 개발 표준 |
+| **IDE / 컴파일러** | Visual Studio 2026 (MSVC v14.51, C++20) / VS 2022 | 윈도우 네이티브 개발 표준 |
 | **C++ 라이브러리** | `Microsoft.krabs-etw`, `asio-grpc`, `Boost.Asio` | 커널 수집, 인메모리 트리, 비동기 gRPC |
-| **C# 런타임** | .NET 9.0 SDK | 관제 콘솔 및 AI 에이전트 스튜디오 |
+| **C# 런타임** | .NET 10.0 SDK (.NET 9.0 / 10.0 호환) | 관제 콘솔 및 AI 에이전트 스튜디오 |
 | **C# 패키지** | `Grpc.Net.Client`, `LiteDB 5.0.21`, `QuestPDF` | 통신, 포렌식 아카이브, 리포팅 |
 | **WPF UI** | `CommunityToolkit.Mvvm`, `ModernWpfUI` | MVVM 다크 테마 관제 인터페이스 |
-| **AI LLM** | `Google.Apis.Auth` / Gemini 2.0 Flash / Ollama | 구조화 JSON 모드 및 Tool Calling |
+| **AI LLM** | `Google.Apis.Auth` / Gemini 3.7 Flash / Ollama | 구조화 JSON 모드 및 Tool Calling |
 
 ---
 
@@ -199,15 +199,15 @@ related:
 > * 모든 코드는 Phalanx의 보안/EDR 도메인(`ProcessEvent`, `ProcessTree`, `MitigationCommand`)에 맞추어 **새롭게 독립 구현(Clean-Room)**되어야 합니다.
 
 1. **C++ 락-스왑 큐 & 비동기 gRPC 클라이언트**:
-   * 저장소 경로: `C:\Users\user\Documents\GitHub\MundusVivens.GameServer.Cpp`
+   * 저장소 경로: `../MundusVivens.GameServer.Cpp` (로컬 워크스페이스: `C:\Users\adg01\Documents\GitHub\MundusVivens.GameServer.Cpp`)
    * **참조 범위 (Pattern Only)**: `AsyncGrpcClient.cpp`의 `agrpc::ClientRPC` + `boost::asio::co_spawn` 비동기 호출 **패턴 구조** 및 락-스왑 템플릿 알고리즘 (게임 로직 복제 금지).
 2. **C# Gemini API 호출, gRPC 수신 서비스 & 계층형 메모리**:
-   * 저장소 경로: `C:\Users\user\Documents\GitHub\MundusVivens`
+   * 저장소 경로: `../MundusVivens` (로컬 워크스페이스: `C:\Users\adg01\Documents\GitHub\MundusVivens`)
    * **참조 범위 (Pattern Only)**:
      - `GeminiApiService.cs`: Google Gemini REST API 호출, JSON 모드 강제, 토큰 로깅 및 오류 핸들링 **통신 패턴**.
      - `Grpc.AspNetCore` 양방향 스트리밍 수신 파이프라인 및 `Channel<T>` 기반 백그라운드 LiteDB 비동기 쓰기(Write-Behind) **패턴** (게임 세이브/에이전트 모델 복제 금지).
 3. **AI 실시간 사고(Thinking) 스트리밍 타이포그래피**:
-   * 저장소 경로: `C:\Users\user\Documents\GitHub\GRC`
+   * 저장소 경로: `../GRC` (로컬 워크스페이스: `C:\Users\adg01\Documents\GitHub\GRC`)
    * **참조 범위 (Tokens Only)**: `GRC/Themes/ModernStyles.xaml`의 폰트 크기, 행간, 이탤릭 슬레이트 블루(`#A2B9D8`) 등 **순수 텍스트 스타일 정의** (롤플레잉 시나리오/뷰모델 복제 금지).
 4. **엔터프라이즈 대시보드 레이아웃 & 캡슐 버튼 스타일**:
    * 저장소 경로: `C:\clang-lab\UI_WPF\ArqaStatic`
