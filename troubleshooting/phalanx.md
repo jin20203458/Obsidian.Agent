@@ -7,7 +7,7 @@ related:
 ---
 # Phalanx Troubleshooting Runbook
 
-본 문서는 `Phalanx` EDR 솔루션(C++ 센서, gRPC 스트리밍, C# 코어 및 AI 에이전트) 개발 및 실전 모의 침투 테스트 중 발생하는 시스템 예외 현상과 해결 방안을 상세히 기록하는 중앙 런북입니다.
+본 문서는 Phalanx EDR 솔루션(C++ 센서, gRPC 스트리밍, C# 코어 및 AI 에이전트) 개발 및 실전 운영 중 발생하는 시스템 예외 현상과 해결 방안을 기록하는 중앙 기술 런북입니다.
 
 ---
 
@@ -28,19 +28,19 @@ related:
 
 ---
 
-## 사전 주의사항 및 알려진 기술적 고려점 (Known Constraints)
+## 사전 주의사항 및 알려진 기술적 제약 (Known Constraints)
 
 ### 1. ETW 커널 세션 생성 권한 (Administrator Elevation)
 * **현상**: 관리자 권한이 없는 일반 사용자 권한으로 센서 실행 시 `krabs-etw` 세션 생성 단계에서 `ACCESS_DENIED (0x5)` 예외 발생.
-* **대응책**: `Phalanx.Sensor.exe`의 매니페스트 파일(`app.manifest`)에 `requireAdministrator` 실행 수준을 필수 명시할 것.
+* **대응책**: `Phalanx.Sensor.exe`의 매니페스트 파일(`app.manifest`)에 `requireAdministrator` 실행 수준을 필수 명시.
 
-### 2. 프로세스 원자적 동결 데드락 예외 및 안전 복구 (Safety Watchdog)
+### 2. 프로세스 원자적 동결 데드락 방어 및 세이프티 워치독 (Safety Watchdog)
 * **현상**: 타깃 프로세스가 크리티컬 섹션이나 ntdll 로더 락(`LdrpLoaderLock`)을 쥐고 있는 상태에서 비동기 동결 호출 시 시스템 전역 리소스 경합 또는 데드락 발생 가능성.
 * **대응책**:
-  * 동결 API(`ntdll!NtSuspendProcess` 및 폴백 `SuspendThread`)는 자체 타임아웃 파라미터가 없으므로, 센서 내부에 **비동기 안전 타이머(Safety Watchdog, 기본 10,000ms)**를 운영하여 C# 대뇌가 크래시되거나 네트워크가 두절되어 응답이 없는 비정상 상태(Orphan Freeze) 감지 시 자동으로 `NtResumeProcess`(폴백 시 `ResumeThread`)를 호출하여 시스템 프리징을 해제하는 안전 폴백 메커니즘을 구비할 것.
-  * **AI 수사 1회성 타임아웃 연장 티켓 (One-shot Extension Ticket: `ACTION_EXTEND_TIMEOUT`)**: 100μs(실측 0.354μs) 초고속 로컬 룰 엔진으로 즉각 판정되지 않고 AI 심층 조사(멀티턴 ReAct 툴링 루프)로 넘어갈 경우, C# 코어는 조사 개시 시점에 단 1회 타임아웃 연장 티켓(`ACTION_EXTEND_TIMEOUT`)을 발송하여 워치독 마감 시한을 50,000ms(50초) 연장할 수 있다.
-  * **절대 상한선 (Hard Ceiling / Fail-Safe)**: C++ 워치독은 시스템 데드락(로더 락 등)을 원천 차단하기 위해 **타임아웃 연장을 최대 1회로 엄격히 제한**한다. 1회를 초과하는 추가 연장 요청은 즉시 거부되며, 최초 동결 시점으로부터 최대 60초(기본 10초 + 1회 연장 50초)를 초과하면 워치독이 자동으로 `NtResumeProcess`(폴백 시 `ResumeThread`)를 강제 집행하여 OS 안정성을 보장한다.
-  * 타깃 프로세스가 완전히 안전하거나 정상으로 판정된 경우 즉시 `MitigationCommand(ACTION_RESUME)`를 하달하여 프로세스를 정상 복구할 것.
+  * 동결 API(`ntdll!NtSuspendProcess` 및 폴백 `SuspendThread`)는 자체 타임아웃 파라미터가 없으므로, 센서 내부에 비동기 안전 타이머(Safety Watchdog)를 운영하여 고아 동결(Orphan Freeze) 감지 시 자동 복구(`NtResumeProcess`).
+  * **타임아웃 분할 구조**: 기본 10,000ms(10초, C# 코어 하트비트 확인용) + AI 수사 개시 시 단 1회 50,000ms(50초) 연장 티켓(`ACTION_EXTEND_TIMEOUT`) 발송으로 총 60초 수사 예산 확보.
+  * **절대 상한선 (Hard Ceiling)**: 데드락 방지를 위해 연장은 최대 1회로 엄격 제한되며, 최대 60초 초과 시 자동으로 `NtResumeProcess`(폴백 시 `ResumeThread`)를 강제 집행.
+  * C# 상위 타임아웃 CTS는 통신 레이스 차단을 위해 50,000ms(50초)로 설정.
 
 ---
 
@@ -59,11 +59,11 @@ related:
 ### [해결책 (Resolution)]
 1. 루트 `CMakeLists.txt`에 전역 컴파일 정의 `add_compile_definitions(UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00)` 적용.
 2. 모든 C++ 헤더에서 `<windows.h>` 호출 전 `<winsock2.h>`와 `<ws2tcpip.h>`를 선행 인클루드하도록 구조화.
-3. CMake 링크 플래그에 MSVC 네이티브 UAC 임베딩 지시어 `/MANIFEST:EMBED /MANIFESTUAC:"level='requireAdministrator' uiAccess='false'"` 적용하여 `mt.exe` 충돌 없이 PE 바이너리에 권한 임베딩 완료 (Ninja 빌드 및 `IpcE2ETest.exe` Exit Code 0 통과).
+3. CMake 링크 플래그에 MSVC 네이티브 UAC 임베딩 지시어 `/MANIFEST:EMBED /MANIFESTUAC:"level='requireAdministrator' uiAccess='false'"` 적용하여 `mt.exe` 충돌 없이 PE 바이너리에 권한 임베딩 완료.
 
 ---
 
-## 2026-09-10: [Resolved] Phase 1.5 원자적 프로세스 동결 엔진(NtSuspendProcess) 및 2중 안전 폴백 체계 구축
+## 2026-09-10: [Resolved] 원자적 프로세스 동결 엔진(NtSuspendProcess) 24μs 집행 및 폴백 체계
 
 ### [현상 (Symptom)]
 * 기존 Win32 `CreateToolhelp32Snapshot` + `SuspendThread` 스레드 순회 방식은 스냅샷 생성 및 스레드 오픈 순회 과정에서 수십 ms의 지연이 발생(약 35ms 계측).
@@ -74,9 +74,8 @@ related:
 
 ### [해결책 (Resolution)]
 1. `ProcessActuator`에 `ntdll.dll`의 미공개 커널 네이티브 API `NtSuspendProcess` 및 `NtResumeProcess`를 동적으로 바인딩하여 1순위 원자적(Atomic) 동결 파이프라인 구축.
-2. 단위 테스트 계측 결과, 동결 소요 시간이 기존 35,281μs(~35ms)에서 **23μs(마이크로초, 1000배 이상 단축)**로 극적으로 단축되었으며 스레드 탈출 레이스 윈도우 원천 차단 확인.
-3. 권한 부족, 특정 OS 비호환 환경 또는 결함 발생 시 즉시 기존 `Toolhelp32` 방식으로 우아하게 자동 후퇴(Graceful Fallback)하는 2중 방어선 구현.
-4. `SensorTests`에 결함 주입(`force_fallback = true`) 테스트 케이스를 포함하여 2순위 폴백 경로에서도 정상 동결/복구됨을 완전 검증 (Exit Code 0).
+2. 동결 소요 시간이 기존 35,281μs(~35ms)에서 23μs(마이크로초, 1000배 이상 단축)로 단축되어 스레드 탈출 레이스 윈도우 원천 차단.
+3. 권한 부족, 특정 OS 비호환 환경 또는 결함 발생 시 즉시 기존 `Toolhelp32` 방식으로 자동 후퇴(Graceful Fallback)하는 2중 방어선 구현.
 
 ---
 
@@ -87,77 +86,11 @@ related:
 * 스레드 기동 중 시스템 자원 부족 예외(`std::system_error` 등) 발생 시 상태 플래그 롤백 로직이 부재하여 `running`이 `true`로 고착되는 상태 불일치 발생.
 
 ### [원인 (Root Cause)]
-* 기존 코드가 `running.load()`를 확인하고 `running.store(true)`를 호출하는 전형적인 **Check-Then-Act (TOCTOU) 비원자적 상태 전이** 구조로 작성되어 있었음.
+* 기존 코드가 `running.load()`를 확인하고 `running.store(true)`를 호출하는 전형적인 Check-Then-Act (TOCTOU) 비원자적 상태 전이 구조로 작성되어 있었음.
 
 ### [해결책 (Resolution)]
 1. `impl_->running.compare_exchange_strong(expected, true, std::memory_order_acq_rel)`을 적용하여 복수의 스레드가 동시 진입하더라도 오직 하나의 스레드만 `false -> true` 전이에 성공하도록 원자적 상태 전이 보장.
 2. 스레드 생성부를 `try-catch`로 감싸 `std::thread` 생성 실패 시 `impl_->running.store(false, std::memory_order_release)`로 원자적 롤백 수행 및 `false` 반환하도록 예외 안전성 확보.
-3. `build.ps1` 재빌드, `SensorTests.exe` 및 `IpcE2ETest.exe`를 실행하여 정상 동작 및 Exit Code 0 통과 확인.
-
----
-
-## 2026-09-10: [Resolved] MitigationCommand 프로토콜 비대칭 해소 및 ACTION_SUSPEND 동결 핸들러 연동
-
-### [현상 (Symptom)]
-* C# 코어에서 모호한 위협을 감지했을 때 AI 심층 수사를 위해 프로세스를 선제 동결(`NtSuspendProcess`)하려 해도, gRPC 프로토콜 `MitigationCommand`에 `ACTION_SUSPEND` 명령이 누락되어 있어 원격 동결 명령을 하달할 수 없는 비대칭성 존재.
-* C++ 센서 수신 루프(`GrpcStreamClient`)에 `ACTION_SUSPEND` 분기 핸들러가 부재하여 프로세스 동결 액추에이터를 원격 트리거할 수 없었음.
-
-### [원인 (Root Cause)]
-* 기획 초기 "C++ 센서가 모든 프로세스를 선제 동결하고 C#은 해제/사살만 판단한다"는 단방향 가정으로 인해 `ACTION_RESUME`과 `ACTION_KILL`만 정의되었음.
-
-### [해결책 (Resolution)]
-1. `proto/phalanx.proto`의 `MitigationCommand::ActionType`에 `ACTION_SUSPEND = 4` 추가.
-2. `GrpcStreamClient.cpp`의 수신 루프에 `case phalanx::MitigationCommand::ACTION_SUSPEND:`를 추가하고 `impl_->actuator->SuspendProcess(cmd.target_pid())` 연동.
-3. `build.ps1`을 통해 Protobuf 코드 생성 및 빌드 성공(Exit Code 0), `SensorTests.exe` 및 `IpcE2ETest.exe` 통과 확인 (커밋 `89768b4`).
-
----
-
-## 2026-09-10: [Resolved] Phase 2 C++ 인메모리 프로세스 트리(DAG) 및 100μs 초고속 로컬 규칙 엔진 구축
-
-### [현상 (Symptom)]
-* 센서 기동 전 이미 실행 중이던 Office/브라우저 프로세스에 대한 정보가 부재할 경우, 후속 LOLBAS 스폰 시 부모 PID를 찾지 못해 동결 규칙이 미탐(False Negative)될 수 있는 콜드 스타트 취약점 존재.
-* 장시간 운영 시 종료된 프로세스 노드가 메모리에 무한 누적되거나 Windows PID 재사용(PID Reuse) 시 이전 부모-자식 관계가 왜곡될 위험.
-* 표준 정규식(`std::regex`) 사용 시 수십~수백 μs가 소모되어 EDR 반사신경 요구 예산(100μs)을 초과할 수 있는 지연 병목 위험.
-
-### [원인 (Root Cause)]
-* ETW 커널 프로세스 이벤트는 센서 세션이 기동된 이후의 이벤트만 인입되므로 기존 OS 활성 프로세스에 대한 인메모리 스냅샷 부재.
-* Windows 커널의 PID 고속 재할당 메커니즘 및 힙 파편화를 유발하는 동적 할당/정규식 평가 구조.
-
-### [해결책 (Resolution)]
-1. **스냅샷 웜업(Snapshot Warm-up)**: `ProcessTree::InitializeFromSnapshot()`을 기동 시 1회 호출(`CreateToolhelp32Snapshot`)하여 수 ms 만에 OS 상의 수백 개 활성 프로세스를 트리에 사전 탑재.
-2. **PID 재사용 & Tombstone 메모리 바운딩**: `OnProcessStart` 시 동일 PID 노드 즉시 덮어쓰기 및 부모 링크 갱신, 종료 노드는 최대 10,000개로 상한선(FIFO Eviction)을 엄격히 제한하여 메모리 30MB 이하 보장.
-3. **비할당 고속 문자열 정규화**: `std::string_view` 기반 파일명 추출 및 ASCII 대소문자 무시 비교(< 20ns)를 적용하여 정규식 오버헤드 원천 배제.
-4. **0.1ms 현장 사살 & 24μs 선제 동결 파이프라인 연동**:
-   - 볼륨 섀도 복사본 파괴 명령(`vssadmin.exe delete shadows`, `bcdedit`, `wbadmin`): 0.1ms 즉각 사살(`TerminateProcess`) 및 `is_terminated = true` 설정.
-   - Office/Browser ➔ LOLBAS 스폰: 24μs 원자적 동결(`NtSuspendProcess`), 10초 세이프티 워치독 등록 및 `is_suspended = true` 설정.
-5. **실측 벤치마크 결과 (`EngineTests.exe`)**:
-   - 족보 역추적(`GetAncestry`) 10,000회 실측: **평균 0.436μs** (요구 기준 < 10μs 대비 22배 고속).
-   - 로컬 규칙 평가 50,000회 실측: **평균 0.354μs, P99 0.7μs, 처리량 2,578,183 evals/sec** (요구 기준 < 100μs 대비 280배 여유).
-   - `build.ps1`, `EngineTests.exe`, `SensorTests.exe`, `IpcE2ETest.exe` 전원 통과 (Exit Code 0).
-
----
-
-## 2026-09-10: [Resolved] Phase 2.5 방어 파이프라인 E2E 실측 벤치마크 및 카나리 누수 제로(Zero Leak) 증빙
-
-### [현상 (Symptom)]
-* 이론적인 룰 엔진 마이크로초 지연시간(< 100μs)이 실제 OS 환경에서 PowerShell 스크립트 실행 또는 컴파일된 C/C++ 네이티브 랜섬웨어 공격을 마주했을 때, 디스크 쓰기(Canary File Write) 이전에 프로세스를 선제 차단할 수 있는지에 대한 실증 데이터 부재.
-* 공격 윈도우(공격자가 디스크에 최초 바이트를 기록하기까지의 시간) 대비 EDR 파이프라인의 실질 안전 마진(Safety Margin) 불명확.
-
-### [원인 (Root Cause)]
-* 관리형 런타임(PowerShell/.NET CLR)의 웜업 지연과 초경량 네이티브 바이너리의 실행 진입점 속도는 수백 배 차이가 나므로, 단일 룰 엔진으로 양극단의 위협 윈도우를 모두 방어할 수 있음을 입증하는 E2E 통합 테스트 하네스 부재.
-
-### [해결책 (Resolution)]
-1. **초경량 모의 공격 바이너리 구축 (`MockNativeRansomware.exe`)**:
-   - Release 최적화 빌드로 0.8ms 이내에 카나리 파일 생성을 시도하는 고속 공격 윈도우 시뮬레이터 구현.
-2. **E2E 방어 벤치마크 하네스 구축 (`DefenseProfilingTest.exe`)**:
-   - **실험 0 (무방비 대조군)**: PowerShell 카나리 생성 시간 **646.41 ms**, MockRansomware 카나리 생성 시간 **88.62 ms** 실측.
-   - **실험 1 (스크립트 선제 동결)**: Office(`winword.exe`) 하위의 `powershell.exe` 스폰 감지 즉시 **53.2 μs** 만에 `NtSuspendProcess` 원자적 동결 집행 ➔ **카나리 파일 미생성 (Zero Payload Execution, +646.36 ms 안전 마진)**.
-   - **실험 2 (네이티브 현장 사살)**: `MockNativeRansomware.exe vssadmin delete shadows` 감지 즉시 **95.9 μs** 만에 `TerminateProcess` 즉각 사살 집행 ➔ **카나리 파일 미생성 (Zero Leak Defense, +88.53 ms 골든타임 사살)**.
-3. **종합 결과**:
-   - 총 2회 실전 모의 공격 시도 중 2회 완벽 선제 차단 (방어율 100.0%).
-   - 디스크 누수 용량: **0 Bytes (Zero Leak 공인)**.
-   - `DefenseProfilingTest.exe`, `EngineTests.exe`, `SensorTests.exe`, `IpcE2ETest.exe` 전원 통과 (Exit Code 0).
-   - 통합 벤치마크 레지스트리 `04_performance_benchmarks.md` Section 6 업데이트 완료.
 
 ---
 
@@ -165,399 +98,127 @@ related:
 
 ### [현상 (Symptom)]
 * 윈도우 OS는 종료된 프로세스의 PID를 빠른 속도로 재할당함.
-* 부모 프로세스 A(PID: 1000)가 자식 B(PID: 2000, `ppid = 1000`)를 생성한 후 A가 먼저 종료되고 자식 B는 계속 실행 중인 상태에서, OS가 동일한 PID 1000을 전혀 무관한 새 프로세스 C에 재할당하는 경우.
-* 이때 C++ `ProcessTree`가 PID 1000 노드를 새 프로세스 C로 덮어쓰면, 기존 자식 B의 `ppid`가 여전히 1000을 가리키고 있어 B가 엉뚱한 새 프로세스 C를 자기 부모로 오인하고 족보를 거슬러 올라가는 **유령 부모(Ghost Parent) 족보 왜곡** 취약점 발견.
+* 부모 프로세스 A(PID: 1000)가 자식 B(PID: 2000, `ppid = 1000`)를 생성한 후 A가 먼저 종료되고 자식 B는 계속 실행 중인 상태에서, OS가 동일한 PID 1000을 전혀 무관한 새 프로세스 C에 재할당하는 경우 발생.
+* 이때 C++ `ProcessTree`가 PID 1000 노드를 새 프로세스 C로 덮어쓰면, 기존 자식 B의 `ppid`가 여전히 1000을 가리키고 있어 B가 엉뚱한 새 프로세스 C를 자기 부모로 오인하고 족보를 거슬러 올라가는 유령 부모(Ghost Parent) 족보 왜곡 발생.
 
 ### [원인 (Root Cause)]
 * 윈도우 OS 커널은 부모 프로세스가 종료되어도 고아 자식 프로세스의 `ParentProcessId`를 0으로 재설정해주지 않음 (죽은 부모 PPID 영구 보존).
-* 기존 `ProcessTree::InsertOrOverwriteNodeInternal`은 PID 재사용 시 이전 노드의 부모(`old_ppid`)와의 링크만 절단하고, **이전 노드가 낳았던 자식들(`it->second.children_pids`)의 부모 링크(`child.ppid = 0`) 절단 처리가 누락**되어 있었음.
+* 기존 `ProcessTree::InsertOrOverwriteNodeInternal`은 PID 재사용 시 이전 노드의 부모(`old_ppid`)와의 링크만 절단하고, 이전 노드가 낳았던 자식들(`it->second.children_pids`)의 부모 링크(`child.ppid = 0`) 절단 처리가 누락되어 있었음.
 
 ### [해결책 (Resolution)]
-1. **자식 노드 고아 처리 및 부모 링크 원자적 절단 (`ProcessTree.cpp`)**:
-   * **[경로 1: 즉각 재사용 덮어쓰기 (`InsertOrOverwriteNodeInternal`)]**: PID 덮어쓰기 직전, 이전 프로세스의 자식 노드들을 순회하여 `child.ppid == pid`인 경우 `ppid = 0`으로 재설정하여 엉뚱한 새 프로세스로의 유령 입양 원천 차단 (`8161881`).
-   * **[경로 2: 10,000개 상한선 영구 퇴출 (`EvictOldestTombstoneInternal`)]**: 톰스톤 노드가 메모리에서 완전히 삭제(Evict)될 때도, 상향 링크(부모의 `children_pids`에서 나를 제거)뿐만 아니라 하향 링크(자식 노드들의 `ppid = 0` 고아 처리)를 양방향으로 원자적 절단 (`7cb4554`).
-2. **검증 및 회귀 테스트 통과**:
-   * `build.ps1`, `EngineTests.exe`, `DefenseProfilingTest.exe`, `SensorTests.exe`, `IpcE2ETest.exe` 4대 테스트 스위트 전원 통과 (Exit Code 0).
+1. **즉각 재사용 덮어쓰기 (`InsertOrOverwriteNodeInternal`)**: PID 덮어쓰기 직전, 이전 프로세스의 자식 노드들을 순회하여 `child.ppid == pid`인 경우 `ppid = 0`으로 재설정하여 엉뚱한 새 프로세스로의 유령 입양 원천 차단.
+2. **10,000개 상한선 영구 퇴출 (`EvictOldestTombstoneInternal`)**: 톰스톤 노드가 메모리에서 완전히 삭제(Evict)될 때도, 상향 링크(부모의 `children_pids`에서 나를 제거)뿐만 아니라 하향 링크(자식 노드들의 `ppid = 0` 고아 처리)를 양방향으로 원자적 절단.
+3. **C# ProcessTreeProjectionManager 연동**: C# 측에서도 `LIFECYCLE_START` 수신 시 동일 PID의 활성 노드가 존재하면 이전 노드를 즉시 Tombstone 처리하고 신규 GUID 노드로 대체.
 
 ---
 
-## 2026-09-14: [Verified] 실제 OS 프로세스 계층 반복 생성/삭제 & ProcessTree vs OS 실시간 동기화 검증
-
-### [현상 및 검증 목적 (Objective)]
-* ProcessTree가 인메모리에서 관리하는 증분(Incremental) 상태와 실제 Windows OS 커널의 `EPROCESS` 테이블(`CreateToolhelp32Snapshot`) 간에 프로세스가 동적으로 생성되고 종료되는 동안 상태 불일치(State Drift)가 발생하는지 여부를 실제 OS 레벨에서 검증할 필요성 대두.
-
-### [검증 설계 (Verification Design)]
-1. **실제 OS 프로세스 계층(부모-자식) 동적 기동 (`EngineTests` - Test 8)**:
-   - `CreateProcessA`로 실제 `cmd.exe /c timeout /t 10 > nul` 자식 프로세스 2개를 OS에 동적 스폰 (`UniqueHandle` RAII 보호).
-2. **실시간 OS 스냅샷 vs 증분 트리 상호 비교 (State Reconciliation)**:
-   - 증분 트리(`incremental_tree`)에 시작 이벤트 반영 후, OS 커널 전체 스냅샷(`os_snapshot_tree.InitializeFromSnapshot()`)을 동시 채취하여 대조.
-   - PID 존재 여부, 부모 PPID 일치성, 부모의 `children_pids` 목록, 직계 족보 체인(`GetAncestry`)의 100% 완전 일치 확인.
-3. **종료 후 사망자 격리 검증**:
-   - `TerminateProcess`로 자식 1을 사살한 뒤 OS 스냅샷 채취.
-   - OS 테이블에서는 자식 1이 완전히 소멸했음을 확인하고, 증분 트리에서는 사후 포렌식을 위한 Tombstone(`is_alive = false`)으로 안전하게 격리 보존됨을 확인.
-   - 아직 살아있는 자식 2는 OS와 증분 트리 모두에서 `is_alive = true`로 유지됨을 확인.
-4. **반복 사이클 신뢰성**:
-   - 총 3회 반복 사이클 동안 누적 생성 6건, 종료 6건을 수행하며 단 1건의 메모리 누수나 링크 왜곡 없이 100% 동기화 유지 입증.
-
-### [해결 및 증빙 (Resolution & Verification)]
-* `EngineTests.exe`에 `TestRealOSProcessTreeSynchronization` (Test 8) 구현 및 커밋 (`020101a`).
-* `build.ps1`, `EngineTests.exe`, `DefenseProfilingTest.exe`, `SensorTests.exe`, `IpcE2ETest.exe` 전원 Exit Code 0 통과 완료.
-
----
-
-## 2026-09-14: [Resolved] Phase 3 CQRS 프로젝션 파이프라인 개통 및 초기 스냅샷 핸드셰이크 구축
+## 2026-09-14: [Resolved] CQRS 프로젝션 파이프라인 콜드 스타트 및 초기 스냅샷 핸드셰이크
 
 ### [현상 (Symptom)]
 * C# Cockpit이 가동되었을 때 C++ 센서로부터 실시간 증분 이벤트만 수신할 경우, 센서 기동 전이나 Cockpit 기동 전부터 실행 중이던 프로세스(약 300여 개)의 계층 관계를 알지 못해 자식 프로세스 인입 시 족보 추적(`GetAncestry`)이 루트에서 단절되는 콜드 스타트 문제 발생.
-* C++ `EtwKernelCollector`에서 프로세스 종료 이벤트(`ProcessStop`) 발생 시 내부 옵저버(`observer_->OnProcessStop`)에게만 통지하고 gRPC 락-스왑 큐 푸시가 누락되어, C# 프로젝션 트리가 종료된 프로세스를 인지하지 못하고 영구 활성 상태로 방치하는 메모리/상태 누수 존재.
+* C++ `EtwKernelCollector`에서 프로세스 종료 이벤트(`ProcessStop`) 발생 시 내부 옵저버에게만 통지하고 gRPC 큐 푸시가 누락되어, C# 프로젝션 트리가 종료된 프로세스를 인지하지 못하고 영구 활성 상태로 방치하는 메모리 누수 존재.
 
 ### [원인 (Root Cause)]
-* 1단계 프로토콜 설계 시 `ProcessEvent`에 프로세스 생명주기 구분이 없었고, 센서-클라이언트 간 gRPC 스트림 연결 시 초기 상태 동기화(Initial State Synchronization) 프로토콜 규약이 부재했음.
+* 1단계 프로토콜 설계 시 `ProcessEvent`에 프로세스 생명주기 구분이 없었고, 센서-클라이언트 간 gRPC 스트림 연결 시 초기 상태 동기화 프로토콜 규약이 부재했음.
 
 ### [해결책 (Resolution)]
-1. **`phalanx.proto` 생명주기 및 GUID 확장**:
-   - `ProcessLifecycle` enum 추가: `LIFECYCLE_UNKNOWN(0)`, `LIFECYCLE_SNAPSHOT(1)`, `LIFECYCLE_START(2)`, `LIFECYCLE_STOP(3)`, `LIFECYCLE_SUSPENDED(4)`, `LIFECYCLE_TERMINATED(5)`.
-   - `ProcessEvent`에 `lifecycle`, `process_guid`, `parent_process_guid`, `exit_code` 필드 확장.
-2. **C++ `EtwKernelCollector`의 `ProcessStop` 큐 푸시 연동**:
-   - 커널 `ProcessStop` 이벤트 수신 시 `ProcessTree::OnProcessStop`을 통해 종료 노드의 메타데이터를 획득하고, `LIFECYCLE_STOP` 태깅 및 종료 코드(`exit_code`)를 포함하여 락-스왑 큐에 원자적 푸시.
-3. **`GrpcStreamClient` 초기 300여 개 스냅샷 일괄 덤프 핸드셰이크**:
-   - `ProcessTree::GetActiveSnapshotEvents()` 메서드를 구축하여 활성 노드들의 스냅샷 이벤트를 생성.
-   - gRPC 스트림 연결 직후 1회 한정으로 활성 프로세스 스냅샷 배치(`LIFECYCLE_SNAPSHOT`)를 C# Cockpit으로 일괄 전송하는 핸드셰이크 구현.
-4. **`tests/IpcE2ETest/CMakeLists.txt` 빌드 종속성 보완**:
-   - `GrpcStreamClient`의 `ProcessTree` 참조에 따라 `E2E_SOURCES`에 `ProcessTree.cpp` 추가하여 링크 에러 방지.
-5. **검증**:
-   - `build.ps1`, `EngineTests.exe`, `SensorTests.exe`, `IpcE2ETest.exe`, `DefenseProfilingTest.exe` 전원 Exit Code 0 통과 확인.
+1. **`phalanx.proto` 생명주기 및 GUID 확장**: `ProcessLifecycle` enum 추가(`LIFECYCLE_SNAPSHOT`, `LIFECYCLE_START`, `LIFECYCLE_STOP`, `LIFECYCLE_SUSPENDED`, `LIFECYCLE_TERMINATED`).
+2. **C++ `EtwKernelCollector`의 `ProcessStop` 큐 푸시 연동**: 커널 `ProcessStop` 수신 시 `LIFECYCLE_STOP` 및 종료 코드(`exit_code`)를 포함하여 락-스왑 큐에 푸시.
+3. **초기 스냅샷 핸드셰이크**: `ProcessTree::GetActiveSnapshotEvents()`를 구축하여 gRPC 스트림 연결 직후 활성 프로세스 스냅샷 배치(`LIFECYCLE_SNAPSHOT`)를 C# Cockpit으로 일괄 전송.
 
 ---
 
-## 2026-09-14: [Resolved] C# ProcessTreeProjectionManager의 PID 재사용 및 선제 조치 상태 전이 안전성 확보
+## 2026-09-15: [Resolved] Google Cloud Vertex AI OAuth2 인증 및 JsonElement 매개변수 언래핑 결함
 
 ### [현상 (Symptom)]
-* C++ 센서에서 선제 동결(`LIFECYCLE_SUSPENDED`) 또는 즉각 사살(`LIFECYCLE_TERMINATED`) 이벤트를 수신했을 때, 신규 GUID가 생성되거나 활성 PID 매핑이 갱신되면서 기존 프로세스 노드와 분리되어 상태가 전이되지 않는 현상.
-* Windows OS의 빈번한 PID 재사용 환경에서 종료된 이전 프로세스의 잔존 포인터로 인해 직계 족보 체인이 왜곡될 위험.
-
-### [원인 (Root Cause)]
-* 이벤트 처리기가 들어오는 모든 이벤트를 단순히 PID 기준으로 신규 등록하거나, 생명주기 전이(Start ➔ Suspend/Resume ➔ Stop/Terminate)의 원자적 상태 머신 검증 없이 처리함.
-
-### [해결책 (Resolution)]
-1. **상태 전이 라우팅 분기 구현 (`ProcessTreeProjectionManager.cs`)**:
-   - `LIFECYCLE_SUSPENDED`, `LIFECYCLE_TERMINATED` 수신 시 `_activePidToGuid`를 우선 조회하여 기존 활성 노드의 `IsSuspended`, `IsTerminated` 플래그를 원자적으로 갱신.
-   - `LIFECYCLE_STOP` 수신 시 활성 노드를 Tombstone화(`IsAlive = false`, `ExitCode` 반영)하고 `_activePidToGuid`에서 안전하게 퇴출.
-   - `LIFECYCLE_START` 수신 시 동일 PID의 활성 노드가 존재하면 이전 노드를 즉시 Tombstone 처리하고 신규 GUID 노드로 덮어씌워 유령 족보 연결 원천 차단.
-2. **0초 인메모리 족보 탐색 보장**:
-   - `_nodesByGuid` 딕셔너리를 활용한 O(Depth) 고속 상향 순회로 C++ 센서에 대한 IPC 왕복 지연 없이 즉각적으로 직계 선조 체인(`GetAncestry`) 획득 가능.
-3. **단위 테스트 검증**:
-   - `ProcessTreeProjectionTests.cs`를 구축하여 350개 노드 스냅샷 일괄 인입, 족보 상향 추적, 델타 생명주기 이벤트(Start/Suspend/Stop), PID 재사용 시 유령 부모 절단 등 4대 핵심 시나리오 100% 통과 (Exit Code 0).
-
----
-
-## 2026-09-15: [Resolved] Gemini 2.0 Flash REST API 실제 연동 및 하이브리드 ReAct 무중단 폴백(Fallback) 엔진 구축
-
-### [현상 (Symptom)]
-* `AutonomousHunterAgent.cs`에 `_geminiApiKey` 필드는 선언되어 있었으나, 실제 외부 Google Gemini REST API(`generativelanguage.googleapis.com`) 호출 통신 클라이언트가 부재하여 하드코딩된 규칙 기반 5단계 시뮬레이터(더미 스크립트)로만 동작하는 한계 존재.
-* 외부 네트워크 API 호출을 단순 추가할 경우, API Key가 없는 환경이나 네트워크 단절 환경에서 단위 테스트가 실패하거나 C++ 센서 워치독 SLA(3초)를 초과하여 타임아웃이 발생할 수 있는 잠재적 취약점 존재.
-
-### [원인 (Root Cause)]
-* Phase 3 초기 구현 시 로드맵 문서의 참조 자산 링크 누락으로 인해 MundusVivens의 `GeminiApiService.cs` 통신 패턴이 이식되지 않았고, 단위 테스트 고속 통과만을 위해 로컬 오프라인 시뮬레이터로만 작성되었음.
-
-### [해결책 (Resolution)]
-1. **Gemini REST API 클라이언트 및 DTO 신설 (`Agent/Gemini/`)**:
-   - `GeminiApiDto.cs`: Gemini 2.0 Flash REST 표준 스키마 및 구조화 출력(`AiInvestigationDecision`) 선언.
-   - `LlmJsonParser.cs`: 마크다운 코드블록 정제 및 중첩 중괄호 균형 탐색을 통한 안전한 JSON 파서 구현.
-   - `GeminiRestClient.cs`: 2.5초 내부 SLA Linked CTS가 결합된 비동기 HTTP 통신 클라이언트 구축.
-2. **하이브리드 ReAct 아키텍처 구축 (`AutonomousHunterAgent.cs`)**:
-   - `GEMINI_API_KEY` 존재 시: 실제 Gemini 2.0 Flash 호출을 통해 프로세스 족보 및 5대 도구 동적 실행, 실시간 서사 도출 (`InvestigateWithGeminiAsync`).
-   - `GEMINI_API_KEY` 부재 또는 네트워크 장애/타임아웃 시: 기존 23ms 오프라인 결정론적 엔진(`InvestigateOfflineDeterministicAsync`)으로 무중단 자동 폴백(Graceful Degradation).
-3. **검증 및 무결성 확인 (Ground Truth)**:
-   - `AutonomousHunterAgentTests.cs`에 `TestGeminiLiveModeWithMockHttp` 및 `TestGeminiFallbackToOfflineOnNetworkFailure` 추가.
-   - 단위 테스트 11종 전원 통과 (`Exit Code 0`), C++ 4대 테스트 스위트 전원 통과 확인.
-
----
-
-## 2026-09-15: [Resolved] Google Cloud Vertex AI (MundusVivens 서비스 계정) 연동 및 실시간 위협 수사 라이브 검증
-
-### [현상 (Symptom)]
-* Google AI Studio의 단순 API 키(`generativelanguage.googleapis.com`) 방식 외에, MundusVivens 엔터프라이즈 환경에서 사용하는 Google Cloud Vertex AI 서비스 어카운트(`Config/google-credentials.json`, `grc0-494913`)를 통한 실서비스 환경 호출 지원 필요.
+* Google AI Studio의 단순 API 키 방식 외에, Google Cloud Vertex AI 서비스 어카운트(`Config/google-credentials.json`)를 연동할 때 인증 실패 발생.
 * LLM이 반환한 `ActionArgs` JSON을 `System.Text.Json`으로 역직렬화할 때 딕셔너리 값들이 `JsonElement`로 파싱되어 `DecodePayloadTool` 등의 하위 도구에서 `raw is string` 타입 검사가 실패하고 매개변수 누락 오류가 발생하는 현상.
 
 ### [원인 (Root Cause)]
-* Vertex AI는 HTTP 헤더에 `x-goog-api-key`가 아닌 OAuth2 Bearer Token(`Google.Apis.Auth.OAuth2`) 인증을 요구하며, 엔드포인트 URL 구조(`aiplatform.googleapis.com/v1beta1/...`)가 다름.
+* Vertex AI는 HTTP 헤더에 `x-goog-api-key`가 아닌 OAuth2 Bearer Token(`Google.Apis.Auth.OAuth2`) 인증을 요구하며 엔드포인트 URL 구조가 다름.
 * C# `System.Text.Json`의 `Dictionary<string, object>` 역직렬화 특성상 원시 타입이 네이티브 `string`, `int`가 아닌 `JsonElement` 박싱 객체로 적재됨.
 
 ### [해결책 (Resolution)]
-1. **`GeminiRestClient.cs` Vertex AI 라우팅 및 OAuth2 지원 확장**:
-   - `Google.Apis.Auth.OAuth2`의 `ServiceAccountCredential`을 통해 `https://www.googleapis.com/auth/cloud-platform` 스코프의 Bearer Token을 동적 발급받아 헤더에 주입.
-   - `TryCreateFromMundusVivensConfigAsync` 팩토리를 통해 MV의 `AppSettings.json` 및 `Config/google-credentials.json`을 자동 감지하여 인스턴스화.
-   - 클라우드 TLS 핸드셰이크 및 토큰 교환 지연을 고려하여 내부 타임아웃을 10초로 최적화.
-2. **`AutonomousHunterAgent.cs` 및 도구 매개변수 언래핑 강화**:
-   - 도구 인자 전달 전 `JsonElement`를 네이티브 C# 타입(`string`, `int`, `double`, `bool`)으로 일괄 언래핑 처리.
-   - `DecodePayloadTool.cs`에서 `JsonElement` 및 다양한 대소문자/별칭(`encodedCommand`, `command`, `payload` 등)을 지원하도록 유연화.
-3. **실제 Google Cloud 라이브 수사 검증 (Ground Truth)**:
-   - `TestLiveAutonomousInvestigationWithMvCredentials`: 실제 Google Cloud Vertex AI로 실시간 요청 전송 ➔ Gemini가 한국어로 악성 매크로 오피스 문서 및 Base64 난독화 의심 가설(`Thought`) 생성 ➔ `DecodePayloadTool`이 `185.220.101.5` C2 IP 및 페이로드 스크립트 해독 ➔ `SystemFirewallTool`이 방화벽 차단 집행 ➔ 최종 `ACTION_KILL` 및 침해 서사 도출 전 과정 6.4초 만에 통과 (`Exit Code 0`).
-   - 전체 13개 단위/통합 테스트 전원 통과 확인.
+1. **`GeminiRestClient.cs` OAuth2 지원**: `ServiceAccountCredential`을 통해 `cloud-platform` 스코프의 Bearer Token을 동적 발급받아 헤더에 주입.
+2. **도구 매개변수 언래핑**: `AutonomousHunterAgent.cs`에서 도구 인자 전달 전 `JsonElement`를 네이티브 C# 타입(`string`, `int`, `double`, `bool`)으로 일괄 언래핑 처리.
+3. `DecodePayloadTool.cs`에서 `JsonElement` 및 다양한 대소문자/별칭(`encodedCommand`, `command`, `payload` 등)을 지원하도록 정규화.
 
 ---
 
-## 2026-09-15: [Resolved] 3대 LLM 통신 아키텍처 10회 실측(총 30회 세션) 벤치마크 및 프로덕션 최적안 확정
+## 2026-09-15: [Resolved] Gemini responseSchema CFG 루프/토큰 고갈 결함 및 JSON Mode 최적화
 
 ### [현상 (Symptom)]
-* `responseSchema` 및 `Native Function Calling` 도입이 현재의 `JSON Mode + LlmJsonParser` 대비 EDR 환경에서 실제로 우월한지에 대한 경험적 증거(Empirical Evidence) 부재.
-* 각 방식의 네트워크 지연, 스키마 문법 제약(CFG) 오버헤드, 사고 과정(Thought) 누락 여부의 실측 데이터 확인 필요.
+* EDR 환경에서 Gemini API 호출 시 `responseSchema`를 적용했을 때, 간헐적으로 15초 타임아웃에 도달하며 응답이 실패하거나 도구 선택 정확도가 40%로 급락하는 현상 발생.
 
 ### [원인 (Root Cause)]
-* 이론적인 API 스펙과 달리, 실제 클라우드 환경에서 OpenAPI 문법 제약 디코딩의 서버 단 지연 및 Function Calling 시 추론 토큰 생략 현상은 실측 테스트 없이는 확인 불가.
+* Gemini 내부 추론 토큰(`thoughtsTokenCount`)이 `MaxOutputTokens`(4096)의 예산을 잠식하고, 필드 설명이 불명확한 필드에서 CFG(Context-Free Grammar) 문법 제약 퇴행 무한 반복 루프가 발생하여 타임아웃 유발.
+* Native Function Calling은 보안 사고 과정(`Thought`)이 90% 이상 누락되어 EDR 포렌식 요구사항에 부적합.
 
 ### [해결책 (Resolution)]
-1. **실시간 벤치마크 하네스 구축 (`LlmArchitectureBenchmarkTests.cs`)**:
-   - 동일한 악성 프로세스 동결 인입 조건에서 방식당 10회씩 총 30회 세션(약 40회 실시간 API 호출) 연속 실측 수행.
-2. **실측 결과 및 판정 (Ground Truth - 2차 튜닝 재측정 완료)**:
-   - **1차 responseSchema 0% 실패 원인 규명**: Gemini 2.5 Flash 내부 `thoughtsTokenCount`(770~979토큰)가 `MaxOutputTokens`(4096)의 예산을 잠식하고, 필드 설명이 없는 `summary_title`에서 CFG 문법 제약 퇴행 무한 반복 루프(1,832토큰 도달)가 발생하여 15초 타임아웃에 도달했던 구조적 원인 발견.
-   - **2차 튜닝 후 10회 연속 재측정 (MaxOutputTokens=8192, 필드 설명 주입, 25초 타임아웃)**:
-     - **방식 1 (Current JSON Mode)**: **10/10 (100.0% 만점 성공)**, 도구 선택 100%, 필수 인자 100%, **평균 444자의 완벽한 보안 사고 과정(CoT)** 생성, 단일 왕복 완결 ➔ 프로덕션 최적안으로 확정.
-     - **방식 2 (Tuned responseSchema)**: **7/10 (70.0% 성공)**으로 개선되었으나, 스키마로 인한 과도한 제약으로 모델이 도구 호출을 건너뛰는 현상(Miss 60%)이 발생하여 도구 선택 정확도가 40%로 급락.
-     - **방식 3 (Native Function Calling)**: 9/10 (90.0% 도구 호출 성공)했으나 사고 과정(`Thought`)이 10회 중 9회에서 100% 누락(평균 18자), 2회 멀티턴 필수(누적 9.3초 지연), 토큰 과금 2.05배(1,313토큰) 폭증 및 2턴 응답 비정형화로 EDR 부적합 재확인.
-3. **검증**: `LlmArchitectureBenchmarkTests.RunFullComprehensiveBenchmark_10IterationsEach` 6분 20초 동안 전회차 100% 통과 (Exit Code 0).
+* **JSON Mode + 정밀 파서 채택**: 순수 JSON Mode와 견고한 중첩 괄호 균형 탐색 파서(`LlmJsonParser`) 조합을 프로덕션 표준으로 확정.
+* 도구 선택 정확도 100%, 필수 인자 100%, 보안 사고 과정(CoT) 보존 및 단일 왕복 완결 달성.
 
 ---
 
-## 2026-09-15: [Resolved] SafetyWatchdog 타임아웃 연장 시 마감시간 누적 가산 공식 불일치 버그
+## 2026-09-15: [Resolved] SafetyWatchdog 타임아웃 연장 마감시간 누적 가산 수식 불일치 버그
 
 ### [현상 (Symptom)]
-* C# AI 에이전트가 수사 개시 즉시 1회성 타임아웃 연장 패킷(`ACTION_EXTEND_TIMEOUT`)을 발송했을 때, C++ 센서 내부에서 기존 마감 기한(30초)에 30초가 추가되어 60초가 되는 것이 아니라, 호출 시점(`steady_clock::now()`)으로부터 30초로 리셋되어 총 동결 시간이 약 30.1초에 머무는 잠재적 SLA 레이스 위험 존재.
-* C#의 전체 수사 타임아웃 CTS(50초)와 C++ 워치독의 실질 마감 시한(30.1초) 간에 약 20초의 괴리가 발생하여, LLM 지연 발생 시 워치독이 수사 완료 전 프로세스를 강제 자동 재개(Auto-Resume)할 위험성 발견.
+* C# AI 에이전트가 수사 개시 즉시 1회성 타임아웃 연장 패킷(`ACTION_EXTEND_TIMEOUT`)을 발송했을 때, C++ 센서 내부에서 기존 마감 기한(30초)에 30초가 가산되어 60초가 되는 것이 아니라, 호출 시점(`steady_clock::now()`)으로부터 30초로 리셋되어 총 동결 시간이 약 30.1초에 머무는 SLA 레이스 위험 발생.
 
 ### [원인 (Root Cause)]
-* `SafetyWatchdog.cpp`의 `ExtendTimeout` 메서드 내부에서 `it->second.deadline = std::chrono::steady_clock::now() + extend_by;`로 작성되어, 기존 `deadline`에 연장 시간을 가산하는 것이 아니라 현재 시각을 기준으로 재설정(Overwrite)되고 있었음.
+* `SafetyWatchdog.cpp`의 `ExtendTimeout` 메서드 내부에서 `it->second.deadline = std::chrono::steady_clock::now() + extend_by;`로 작성되어, 기존 `deadline`에 가산하지 않고 현재 시각을 기준으로 덮어쓰고 있었음.
 
 ### [해결책 (Resolution)]
-1. **누적 가산 수식으로 정합 (`SafetyWatchdog.cpp`)**:
-   - `it->second.deadline = (std::max)(it->second.deadline, std::chrono::steady_clock::now()) + extend_by;`로 수정하여, 수사 개시 직후 패킷이 도착하더라도 기존 마감시간(30초)에 30초가 정확히 가산되어 총 60초로 확장되도록 교정.
-2. **단위 테스트 슬립 정합 (`tests/SensorTests/main.cpp`)**:
-   - 초기 200ms + 연장 300ms = 총 500ms 만료 대기 시, 워치독 루프 틱(200ms)을 고려하여 슬립을 750ms로 설정.
-3. **검증 (Ground Truth)**:
-   - C++ `SensorTests.exe` 및 `EngineTests.exe` 빌드 및 실행 완료 (Exit Code 0).
-   - C# `dotnet test tests/Phalanx.Agent.Tests/` 15개 단위 테스트 전원 통과 확인 (Exit Code 0).
+* `it->second.deadline = (std::max)(it->second.deadline, std::chrono::steady_clock::now()) + extend_by;`로 수정하여, 수사 개시 직후 패킷이 도착하더라도 기존 마감시간에 연장 시간이 정확히 누적 가산되도록 교정.
 
 ---
 
-## 2026-09-15: [Resolved] 5대 자율 수사 도구 상용 1티어(Commercial Tier-1) EDR 고도화 및 치명적 맹점 해결
+## 2026-09-15: [Resolved] EDR 수사 도구 5대 실무 맹점 해결
 
 ### [현상 (Symptom)]
-* 5개 전문 독립 감사관 서브에이전트 감사 결과, 기존 수사 도구에서 엔터프라이즈 환경 투입 시 치명적인 오탐, 미탐, 시스템 장애를 유발할 수 있는 구조적 결함 식별:
-  1. `DecodePayloadTool`: Gzip/Deflate 압축 인코딩(`H4sIA...`)이 결합된 실제 파워셸 드로퍼(80% 이상)의 페이로드 100% 미탐 및 주석에만 있던 Hex 디코딩 부재.
-  2. `ProcessMemoryScanTool`: 0x0부터 선형 50MB만 순회하여 128TB 가상 주소 공간 고위 주소 동적 힙(`VirtualAlloc`)의 Cobalt Strike / Meterpreter / Reflective DLL 100% 미탐, `PAGE_GUARD` 크래시 위험 및 LOH 파편화/CPU 락업(500~2500ms 지연).
-  3. `ThreatReputationTool`: RFC 1918 B클래스(`172.16.0.0/12`) 누락으로 사내 VPC/Docker/K8s 파드 IP를 외부 공인 IP로 오인, 미확인 공인 IP에 75점 부여로 Teams/Chrome/Windows Update 통신 정상 프로세스 오탐 사살 위험, 포트/디팽 파싱 실패 시 C2 미탐 우회.
-  4. `MitreClassifierTool`: `Contains("c2")` 매칭으로 정상 설치기 `c2rsetup.exe`를 C2 공격(`T1071.001`)으로 오탐, `Contains("iex")`로 `client.exe`를 파워셸로 오탐, 킬체인 순서 없는 무작위 룰 순회 및 `calc.exe` 등 정상 입력에도 `T1059` 강제 주입.
-  5. `SystemFirewallTool`: Netsh 실패(`overallSuccess == false`) 시에도 무조건 `true`를 반환하는 Silent Failure 버그, 호스트 IP/게이트웨이/DNS 차단 시 엔드포인트 네트워크 먹통(Self-DoS) 위험, 순차 실행 지연(160ms).
+* 실전 환경 검증 시 식별된 핵심 수사 도구 결함:
+  1. `DecodePayloadTool`: Gzip/Deflate 압축 인코딩(`H4sIA...`)이 결합된 파워셸 드로퍼 미탐.
+  2. `ProcessMemoryScanTool`: 0x0부터 선형 50MB만 순회하여 고위 주소 동적 힙(`VirtualAlloc`)의 Cobalt Strike/Reflective DLL 미탐, `PAGE_GUARD` 크래시 위험 및 LOH 파편화.
+  3. `ThreatReputationTool`: RFC 1918 B클래스(`172.16.0.0/12`) 누락으로 사내 사설망을 외부 IP로 오인, 미확인 IP에 75점 부여로 정상 통신 프로세스 오탐 사살 위험.
+  4. `MitreClassifierTool`: 단순 `Contains("c2")` 매칭으로 정상 설치기 `c2rsetup.exe`를 C2 공격으로 오탐.
+  5. `SystemFirewallTool`: Netsh 실패 시에도 `true`를 반환하는 Silent Failure 버그, 게이트웨이/DNS 차단 시 엔드포인트 네트워크 먹통(Self-DoS) 위험.
 
 ### [원인 (Root Cause)]
-* 프로토타입 단계에서 단순 문자열 포함 여부(`Contains`)와 고정 선형 순회 기반으로 작성되어, x64 가상 메모리 특성(VAD 구조), 엔터프라이즈 네트워크 토폴로지(RFC 1918/Anycast DNS), 다단계 압축/난독화 및 관리자 권한/인프라 가드가 결여되어 있었음.
+* VAD 구조, 엔터프라이즈 사설망 토폴로지, 다단계 압축/난독화 및 인프라 보호 가드가 프로토타입 단계에서 결여되었음.
 
 ### [해결책 (Resolution)]
-1. **`DecodePayloadTool.cs` (상용 1티어 난독화 해독기)**:
-   - Gzip 매직 바이트(`0x1F, 0x8B`) 및 zlib(`0x78`) 자동 감지 및 `GZipStream`/`DeflateStream` 무손실 압축 해제 파이프라인 탑재 (512KB Zip-bomb 가드).
-   - 구분자(`0x`, `\x`, 공백) 및 연속형 Hex 디코더 추가, Base64 최소 길이 8자 완화 및 URL-Safe Base64 지원.
-   - ReDoS 타임아웃(250ms) 및 최대 128KB 입력 클램핑, 엄격한 스크립트 인쇄 가능 문자(ASCII/Hangul) 검증 파이프라인 구축.
-2. **`ProcessMemoryScanTool.cs` (상용 1티어 VAD 타깃 스캐너)**:
-   - `VirtualQueryEx` 기반 VAD 순회로 128TB 주소 공간 중 오직 **Unbacked Executable Memory (`MEM_PRIVATE` + `EXECUTE` + `!PAGE_GUARD`)**만 선별 스캔 (< 5ms, 500배 고속화).
-   - 사설 실행 메모리 영역 첫 2바이트 `MZ`(`0x4D, 0x5A`) 헤더 확인을 통한 Reflective PE/DLL 주입 100% 즉각 확정.
-   - `ArrayPool<byte>.Shared.Rent(65536)` 64KB 스트리밍으로 LOH 할당 및 GC Gen 2 정지 시간 0ms 달성.
-   - PID <= 4 및 윈도우 서브시스템 보호 프로세스 안전 가드 탑재.
-3. **`ThreatReputationTool.cs` (상용 1티어 위협 평판 평가기)**:
-   - Zero-Allocation 비트마스크 사설망 분류기로 RFC 1918(A, B, C클래스), 루프백, APIPA, CGNAT, 멀티캐스트, IPv6 ULA/LinkLocal 완벽 분류 (위협 점수 0점, `BENIGN_INTERNAL`).
-   - 미확인 외부 IP 75점 오탐 폭탄 제거 ➔ 30점 중립(`INCONCLUSIVE_EXTERNAL_IP`) 조정 및 복합 증거 결합 가이드라인 제공.
-   - 포트 번호(`:443`), 디팽(`[:]`, `[.]`), URL 스킴 정규화 전처리 및 글로벌 Anycast DNS / 통신 3사 DNS 화이트리스트 확장.
-4. **`MitreClassifierTool.cs` (상용 1티어 10단계 킬체인 매핑기)**:
-   - 26개 단어 경계(`\b`) 컴파일 정규식 적용으로 `c2rsetup.exe`, `client.exe` 오탐 원천 차단.
-   - 초기 접근(Initial Access)부터 영향(Impact)까지 10단계 사이버 킬체인 엄격 정렬.
-   - LLM 친화적 공격 킬체인 종합 서사(Narrative) 템플릿 자동 생성.
-5. **`SystemFirewallTool.cs` (상용 1티어 방화벽 격리 집행기)**:
-   - 결과 무결성 수정: `new ToolResult(overallSuccess, ...)`로 실패 시 정확히 `false` 반환하여 Silent Failure 차단.
-   - Non-Admin 테스트 환경 자동 감지 가상 시뮬레이션 지원 (`IsSimulated = true`).
-   - `NetworkInterface` 기반 동적 호스트 IP, 기본 게이트웨이, 로컬 DNS 보호망 구축 (인프라 Self-DoS 방어).
-   - `Task.WhenAll`을 통한 인/아웃바운드 룰 병렬 실행(160ms ➔ 35ms 단축), `unblock` 액션 지원.
-6. **검증 (Ground Truth)**:
-   - `InvestigationToolsTests.cs`에 Gzip 압축 해독, Hex 해독, RFC 1918 B클래스 사설망, 포트/디팽 파싱, 단어 경계 오탐 방지, 킬체인 정렬, 인프라 안전 가드, 보호 프로세스 가드 등 5개 신규 테스트 추가.
-   - C# 전체 20개 단위 테스트 전원 통과 (`Exit Code 0`, 기간 1분 16초 - 라이브 Vertex AI 테스트 포함).
-   - C++ `SensorTests.exe` (5/5) 및 `EngineTests.exe` (8/8) 전원 통과 (`Exit Code 0`).
+1. **`DecodePayloadTool`**: Gzip 매직 바이트(`0x1F, 0x8B`) 자동 감지 및 `GZipStream`/`DeflateStream` 무손실 압축 해제, Hex 디코더 추가, ReDoS 가드(250ms).
+2. **`ProcessMemoryScanTool`**: `VirtualQueryEx` 기반 VAD 순회로 Unbacked Executable Memory (`MEM_PRIVATE` + `EXECUTE` + `!PAGE_GUARD`)만 선별 스캔, 사설 메모리 첫 2바이트 `MZ` 헤더 감지, `ArrayPool<byte>.Shared` 활용.
+3. **`ThreatReputationTool`**: 비트마스크 사설망 분류기(RFC 1918 A/B/C, 루프백, APIPA, CGNAT 등 0점 처리), 미확인 외부 IP는 30점 중립(`INCONCLUSIVE`) 처리, 포트/디팽 파싱 전처리.
+4. **`MitreClassifierTool`**: 단어 경계(`\b`) 컴파일 정규식 26종 적용으로 파일명 오탐 차단, 10단계 사이버 킬체인 순서 정렬.
+5. **`SystemFirewallTool`**: `new ToolResult(overallSuccess, ...)` 반환으로 Silent Failure 방지, 로컬 IP/기본 게이트웨이/DNS 화이트리스트 보호망 구축.
 
 ---
 
-## 2026-09-15: [Optimized] 프로세스 동결 세이프티 워치독 타임아웃 분할 최적화 (10초 기본 + 50초 연장 = 총 60초)
+## 2026-09-16: [Resolved] C# 생성자 내 Sync-over-Async(GetAwaiter().GetResult()) 스레드풀 데드락 제거
 
 ### [현상 (Symptom)]
-* 기존 멀티턴 AI 수사 지원을 위해 C++ 센서 세이프티 워치독 기본 타임아웃을 30초, 연장 티켓을 30초(총 60초)로 설정한 구조에서 잠재적 리스크 분석:
-  * 만약 C# 상위 AI 계층이 네트워크 단절, 프로세스 OOM, 비정상 크래시 등으로 인해 살아있지 않은 상태(Orphan Freeze)일 때, 최초 동결된 타깃 프로세스가 30초 동안 불필요하게 멈춰 있게 됨.
-  * 타깃 프로세스가 OS 로더 락(`LdrpLoaderLock`)이나 크리티컬 섹션을 쥔 상태라면 30초 동안 시스템 전역 지연 및 데드락 윈도우가 과도하게 길어지는 부작용 발생.
+* `AutonomousHunterAgent` 클래스 생성자 내부에서 Vertex AI 서비스 계정 토큰 발급 및 설정 로딩 시 `.GetAwaiter().GetResult()`를 호출하는 동기 블로킹 코드가 잔존하여, 스레드풀 고갈(Thread Pool Starvation) 시 데드락 발생 위험 존재.
 
 ### [원인 (Root Cause)]
-* 타임아웃 분할 비율이 1:1(`30s + 30s`)로 균등 배분되어 있어, C# 에이전트의 생존 여부(Heartbeat)를 확인하는 초기 유예 시간이 과도하게 길었음.
+* 의존성 주입 또는 인스턴스 초기화 시점에서 비동기 초기화 팩토리 패턴을 사용하지 않고 생성자에서 동기 대기함.
 
 ### [해결책 (Resolution)]
-1. **타임아웃 분할 비율 재설계 (`10s 기본 + 50s 연장 = 누적 60초`)**:
-   * **초기 워치독(10초)**: C# 에이전트 생존 확인용 하트비트 역할 수행. C# 에이전트가 정상 작동 중이라면 수사 개시 즉시(~5ms) C++로 `ACTION_EXTEND_TIMEOUT` 연장 티켓을 전송하므로 실질적인 AI 수사 시간(총 60초)에는 아무런 제약이 없음. 반면 C#이 크래시된 고아 상태라면 기존 30초 대비 1/3인 10초 만에 신속하게 자동 복구(`AutoResume`)되어 데드락 노출 창을 67% 감축.
-   * **1회성 연장 티켓(50초)**: AI 에이전트가 5대 수사 도구와 멀티턴 ReAct 루프를 안전하게 완결할 수 있는 충분한 수사 예산(50초)을 제공.
-   * **C# CTS 상위 제한(50,000ms)**: C++ 워치독 마감 시한(누적 60초) 만료 10초 전 안전 마진을 두어 통신 레이스 컨디션을 완벽 차단.
-2. **코드 반영 및 LLM 모드 전용 조건부 발송 최적화**:
-   * C++ `SafetyWatchdog.h`: `default_timeout = 10000ms`, `extend_by = 50000ms`.
-   * C++ `ProcessActuator.h`: `extend_by = 50000ms`.
-   * C++ `main.cpp`: 워치독 기본 인자 10000ms 명시.
-   * C# `AutonomousHunterAgent.cs`: 연장 티켓(`ACTION_EXTEND_TIMEOUT`) 전송을 `[Step 0]` 전역에서 **`InvestigateWithGeminiAsync()` 진입부로 조건부 이동**.
-     - **오프라인 로컬 엔진(23ms)**: 연장 티켓 발송 생략 (C# 비정상 크래시 시 10초 만에 완벽 복구, gRPC 트래픽 절감).
-     - **Gemini LLM 모드(수 초~수십 초)**: LLM 네트워크 호출 직전에 50초 연장 티켓 선제 전송 (누적 60초 수사 예산 확보).
-   * C# `AutonomousHunterAgentTests.cs`: 오프라인 모드 단일 사살 명령(`Assert.Single`, 연장 미발송) 및 Gemini Mock/Live 모드 연장 티켓 발송 검증.
-3. **검증 (Ground Truth)**:
-   * C++ `build.ps1` 빌드 성공 (`Exit Code 0`).
-   * C++ `SensorTests.exe` (5/5 단위테스트 통과, `Exit Code 0`).
-   * C++ `EngineTests.exe` (8/8 단위 및 벤치마크 테스트 통과, `Exit Code 0`).
-   * C# `dotnet test tests/Phalanx.Agent.Tests/` 전체 20개 테스트 무결성 통과 (`Exit Code 0`).
-
----
-
-## 2026-09-16: [Refactor] Phalanx C# 테스트 스위트 레거시 정리 및 3계층(Unit, Live, Benchmark) 카테고리화
-
-### [현상 (Symptom)]
-* C# 테스트 프로젝트(`Phalanx.Agent.Tests`) 빌드/실행 시, 순수 인메모리 단위 테스트와 외부 구글 클라우드 연동 테스트가 혼재되어 매번 `dotnet test` 실행 시 45~76초의 과도한 지연 발생.
-* 특히 개발 초기 Gemini 프롬프트/응답 가시화를 위해 작성된 `TestPrintLiveMultiTurnPromptsAndResponses`가 매 실행마다 3회 실시간 API를 호출하며 혼자서 약 25초를 소모하고 API 쿼터를 낭비함.
-
-### [원인 (Root Cause)]
-* xUnit `[Trait]` 기반의 테스트 분류 체계가 부재하여 CI/CD 및 오프라인 로컬 환경에서 외부 네트워크 의존성 없는 순수 단위 테스트만 선별 실행할 수 있는 필터가 없었음.
-
-### [해결책 (Resolution)]
-1. **레거시/중복 탐색 테스트 삭제**:
-   * `TestPrintLiveMultiTurnPromptsAndResponses` (약 184줄) 완전 삭제 (`TestLiveAutonomousInvestigationWithMvCredentials` 및 `TestGeminiLiveModeWithMockHttp`가 이미 상위 호환으로 완벽히 검증).
-2. **xUnit 3계층 카테고리(`Trait`) 적용**:
-   * **`Category=Unit` (17개)**:
-     - `ProcessTreeProjectionTests` (3개): CQRS 스냅샷, 델타 라이프사이클, PID 재사용/ProcessGuid 세대 분리.
-     - `InvestigationToolsTests` (10개): 5대 도구 1티어 회귀 방지 테스트.
-     - `AutonomousHunterAgentTests` (4개): 오프라인 자율 수사, Mock HTTP 2턴 ReAct, 네트워크 실패 폴백, 중첩 JSON 파서.
-     - **실측 실행 속도: 448ms (< 0.5초)**.
-   * **`Category=Live` (2개)**:
-     - `TestLiveGoogleVertexAiFromMvConfig`: 경량 클라우드 연결 스모크 테스트.
-     - `TestLiveAutonomousInvestigationWithMvCredentials`: 실제 구글 클라우드 Vertex AI 기반 자율 수사 E2E.
-   * **`Category=Benchmark` (1개)**:
-     - `LlmArchitectureBenchmarkTests`: 30회 반복 LLM 3-Way 아키텍처 비교 벤치마크.
-3. **검증 (Ground Truth)**:
-   * `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"`: 17/17 통과 (448ms, Exit Code 0).
-   * `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Live"`: 2/2 통과 (23s, Exit Code 0).
-   * C++ `SensorTests.exe` (5/5) & `EngineTests.exe` (8/8) 통과 (Exit Code 0).
-
----
-
-## 2026-09-16: [Resolved] Phalanx 풀체인 E2E 통합 시스템 테스트(3대 시나리오) 및 사전 리팩토링 검증
-
-### [현상 (Symptom)]
-* C++ 센서(24μs 동결/0.1ms 사살)와 C# 관제 콕핏(gRPC AI 수사)이 각각 개별 단위/통합 테스트는 통과하였으나, 전체 닫힌 루프(`C++ ➔ C# ➔ C++`)의 3대 시나리오(C++ 즉각 사살, C# LLM 수사 50초 연장 사살, C# 로컬 23ms 즉각 사살)가 단일 E2E 테스트 스위트 상에서 인과적 함수 호출 순서(Call Sequence)와 함께 계측/검증되지 않았음.
-* 사전 정적 코드 감사 결과, `AutonomousHunterAgent.cs` 생성자 내 `GetAwaiter().GetResult()` Sync-over-Async 블로킹 안티패턴 및 미사용 필드 잔존, `EtwKernelCollector.cpp`의 비정상 종료 시 잔여 ETW 세션 정리 부재 식별.
-
-### [원인 (Root Cause)]
-1. 모듈 간 독립성(Clean-Room) 유지를 위해 C++과 C#을 분리 개발하여, 양방향 gRPC 스트림 상에서 C++ 액추에이터와 C# 헌터가 상호작용하는 통합 E2E 테스트 시나리오가 부재했음.
-2. 비동기 팩토리 메서드 대신 생성자에서 동기 블로킹 방식으로 Vertex AI 설정을 읽어들여 스레드풀 데드락 잠재 위험 존재.
-
-### [해결책 (Resolution)]
-1. **사전 정적 리팩토링 (Safe Cleanups)**:
-   * `GeminiRestClient.cs`: 로컬 JSON 설정 동기 파싱 메서드 `TryCreateFromMundusVivensConfig()` 신설.
-   * `AutonomousHunterAgent.cs`: 생성자 내 `GetAwaiter().GetResult()` 제거 및 미사용 필드(`_geminiApiKey`, `_httpClient`) 정리.
-   * `CQRS/ProcessTreeProjectionManager.cs`: `FindNodeByPid(uint pid)` 신설 (사망/사살된 노드 조회 지원).
-   * `Collector/EtwKernelCollector.cpp`: 기동 전 `krabs::user_trace leftover.stop();` 방어적 세션 정리 추가.
-2. **풀체인 3대 시나리오 E2E 통합 시스템 테스트 구축 (`FullChainSystemTests.cs`)**:
-   * **시나리오 1 (C++ 즉각 사살 & C# 바이패스)**:
-     - `vssadmin delete shadows` 수집 ➔ 105μs 사살 ➔ `LIFECYCLE_TERMINATED` 송신 ➔ C# CQRS 트리에 사망(IsAlive = false) 반영 및 AI 수사 0건(완전 바이패스) 확인 (150ms 완결).
-   * **시나리오 2 (C++ 동결 ➔ LLM ReAct 수사 ➔ 50초 연장 ➔ C++ 사살)**:
-     - `winword.exe ➔ powershell.exe -enc` 수집 ➔ 24μs NtSuspendProcess 원자적 동결 ➔ 워치독 10초 등록 ➔ gRPC 송신 ➔ C# 인입 즉시 `ACTION_EXTEND_TIMEOUT` 선제 전송 ➔ C++ 워치독 +50초 연장 (총 60초 예산 확보) ➔ Gemini 2턴 ReAct 도구 수사 ➔ `ACTION_KILL` 회신 ➔ C++ 현장 사살 집행 및 워치독 안전 해제 확인 (85ms 완결).
-   * **시나리오 3 (C++ 동결 ➔ 로컬 23ms 오프라인 수사 ➔ C++ 사살)**:
-     - 동일 위협 ➔ 24μs 동결 ➔ gRPC 송신 ➔ 오프라인 모드 가동 ➔ `ACTION_EXTEND_TIMEOUT` 0건(미발행 확인, 10초 데드락 방어 유지) ➔ 23ms 내 `ACTION_KILL` 회신 ➔ C++ 사살 집행 및 30ms 만에 전 파이프라인 완결 확인.
-3. **통합 자동화 러너 구축 (`scripts/run_fullchain_test.ps1`)**:
-   * C# 풀체인 테스트 + C++ 센서 단위테스트 + C++ 엔진 룰테스트 + C++ gRPC 루프백 테스트를 원클릭으로 검증.
-4. **검증 (Ground Truth)**:
-   * `FullChainSystemTests.cs`: 3/3 시나리오 전원 통과 (307ms, `Exit Code 0`).
-   * `Phalanx.Agent.Tests`: 20/20 단위테스트 전원 통과 (272ms, `Exit Code 0`).
-   * `SensorTests.exe` (5/5), `EngineTests.exe` (8/8), `IpcE2ETest.exe` 통과 (`Exit Code 0`).
-   * `.\scripts\run_fullchain_test.ps1 -Detailed`: 전원 통과 (`Exit Code 0`).
+* `AutonomousHunterAgent.cs` 생성자에서 블로킹 호출을 제거하고, `GeminiRestClient.TryCreateFromMundusVivensConfig()` 동기 팩토리 메서드를 신설하여 로컬 JSON 설정을 안전하게 파싱하도록 리팩토링.
 
 ---
 
 ## 2026-09-16: [Resolved] AI 수사관 판정 왜곡(Decision Hijacking) 및 결정권 침해 결함 해결 (SSOT 아키텍처 확립)
 
 ### [현상 (Symptom)]
-* 다중 시나리오 라이브 실측 벤치마크 중 시나리오 4(사내 정상 백업 스크립트: `explorer.exe ➔ powershell.exe -enc <Get-Service ... *.internal>`) 실행 시:
-  - 실제 Google Gemini 3.8 Flash는 2턴 만에 Base64를 해독하고 내부 백업 도메인을 확인하여 정상 관리 스크립트임을 완벽히 간파, `ACTION_RESUME (정상 확인 및 동결 해제, 확신도 98%)` 판결을 내림.
-  - 그러나 C# 호스트 코드가 이를 가로채 `ActionKill (사살)` 명령을 하달하고, 사건명을 `"Gemini AI: 악성 위협 실시간 탐지 및 사살"`로 날조하며, 피싱 침해 기법(`T1566.001`)을 조작 주입하는 치명적 오탐 및 판정 왜곡 발생.
+* 정상 관리 스크립트(`explorer.exe ➔ powershell.exe -enc <Get-Service ... *.internal>`) 인입 시, Gemini 모델이 정상 판결(`ACTION_RESUME`, 확신도 98%)을 내렸음에도 C# 호스트 코드가 이를 가로채 `ActionKill`로 변조하고 피싱 기법(`T1566.001`)을 조작 주입하는 치명적 오탐 발생.
 
 ### [원인 (Root Cause)]
-1. **의미론적 확신도 역전 (Semantic Inversion)**: `latestDecision.ConfidenceScore`("정상 프로세스에 대한 확신도 98%")를 C# 코드가 `threatScore`("위협 점수 98점")로 오인 바인딩하여 `threatScore >= 0.80` 조건으로 악성 사살 판정.
-2. **정적 시그니처 강제 오버라이드 (Decision Hijacking)**: 회색지대 선제 동결 사유였던 `-enc`를 최종 판결 단계에서 `targetNode.CommandLine.Contains("-enc")`로 무조건 재검사하여 무죄 증명을 짓밟고 사살 강제.
-3. **서사 날조 및 증거 조작**: Gemini가 작성한 '정상' 제목을 사살용 제목으로 강제 치환하고, 미지정 TTP에 피싱 전술(`T1566.001`)을 강제 주입.
-4. **조기 방화벽 차단 오염**: 악성 확정 여부와 무관하게 `extractedIp != null`이면 방화벽 차단 룰을 집행하여 사내 백업 서버 IP 차단 위험 발생.
+1. **의미론적 확신도 역전 (Semantic Inversion)**: `ConfidenceScore`(정상 프로세스 확신도 98%)를 `threatScore`(위협 점수 98점)로 오인 바인딩하여 사살 집행.
+2. **정적 시그니처 강제 오버라이드**: 동결 사유였던 `-enc`를 최종 단계에서 `CommandLine.Contains("-enc")`로 재검사하여 LLM 수사 결론을 무시하고 강제 사살.
+3. **증거 조작 및 조기 차단**: 정상 제목을 사살용 제목으로 치환하고, 미확정 상태에서 사내 백업 서버 IP 방화벽 차단 집행.
 
 ### [해결책 (Resolution)]
-1. **단일 진실 공급원(SSOT) 아키텍처 확립 (`AutonomousHunterAgent.cs`)**:
-   * ReAct 루프가 정상 종결(`reachedFinal == true && hasValidAction`)된 경우, Gemini AI 수사관의 `VerdictAction`(`ACTION_KILL` vs `ACTION_RESUME`)을 100% 단일 진실 공급원으로 수용.
-   * `Contains("-enc")`, `Contains("http")`, `threatScore >= 0.80` 등 낡은 정적 문자열 오버라이드 코드 완전 삭제.
-2. **Fail-Secure 안전 가드 경계 분리**:
-   * C# 시스템 가드는 최대 5턴 초과, API 크래시, 형식 결함 등 '예외 상황'에서만 선제 사살(`ACTION_KILL`)을 집행하도록 관심사 분리(SoC).
-3. **확신도 정규화 및 포렌식 무결성 보장**:
-   * `finalConfidence` 정규화(0~100 스케일 0.0~1.0 대응, `Math.Clamp`).
-   * 정상 프로세스(`!isMalicious`) 판정 시 가짜 TTP 주입 차단 및 `blockedIp = ""` 보장, C++ 센서 명령에도 공백 전달.
-   * 악성 확정 시에만 방화벽 차단 도구(`SystemFirewallTool`) 실행.
-4. **검증 (Ground Truth)**:
-   * `dotnet build`: 경고 0개, 오류 0개 (Exit Code 0).
-   * `dotnet test --filter "Category=Unit"`: 20/20 통과 (273ms, Exit Code 0).
-   * `Agent_Collaboration_Workflow_Guidelines` 이중 계쇄 프로토콜(Gate 1 Pass, Gate 2 Pass) 준수 완료.
-
----
-
-## 2026-09-16: [Resolved] 10대 엔터프라이즈 시나리오 라이브 벤치마크 및 AI 수사관 판정 정밀도(100%) 실사
-
-### [현상 (Symptom)]
-* 기존 4개 시나리오 라이브 실측 결과만으로는 다양한 침투 기법(Office 매크로, LOLBin, HTA, WScript, 랜섬웨어) 및 정상 관리 작업(백업, 개발 감사, 인증서 검증, OS 인벤토리) 전반에 대한 AI 수사관의 일반화 성능과 판정 정확도를 충분히 통계적으로 입증하기 어려움.
-
-### [원인 (Root Cause)]
-* 라이브 테스트 시나리오 풀이 제한적이어서 다양한 명령줄 난독화 및 회색지대 유발 행위에 대한 Gemini 3.8 Flash의 다중 턴 수렴성 검증 표본이 부족했음.
-
-### [해결책 (Resolution)]
-1. **10대 엔터프라이즈 시나리오 구축 (`AutonomousHunterAgentTests.cs`)**:
-   * **악성 시나리오 6종 (기대값: ActionKill)**:
-     1. 파일리스 C2 인라인 다운로더 (`winword.exe ➔ powershell.exe -enc <WebClient C2>`)
-     2. LOLBAS CertUtil 원격 다운로드 (`excel.exe ➔ certutil.exe -urlcache -split`)
-     3. 피싱 이메일 반사형 C2 비콘 다운로드 (`outlook.exe ➔ cmd.exe ➔ powershell.exe`)
-     4. 브라우저 드라이브바이 HTA (`msedge.exe ➔ mshta.exe`)
-     5. PDF 익스플로잇 연계 WScript 2차 드로퍼 (`AcroRd32.exe ➔ wscript.exe`)
-     6. 랜섬웨어 볼륨 섀도 복사본 삭제 (`excel.exe ➔ cmd.exe ➔ vssadmin.exe delete shadows`)
-   * **정상 시나리오 4종 (기대값: ActionResume)**:
-     7. 정상 관리자 백업 서비스 점검 (`explorer.exe ➔ powershell.exe -enc <Get-Service ... *.corp.local>`)
-     8. 개발자 빌드 폴더 대용량 파일 감사 (`cmd.exe ➔ powershell.exe "Get-ChildItem ... > 100MB"`)
-     9. 사내 루트 CA 인증서 신뢰 체인 검증 (`explorer.exe ➔ certutil.exe -verify C:\Certs\corp_ca.cer`)
-     10. IT 시스템 자산 정보 수집 인벤토리 (`services.exe ➔ powershell.exe "Get-CimInstance Win32_OS"`)
-2. **실제 Google Vertex AI (Gemini 3.8 Flash) 라이브 실측 결과 (Ground Truth)**:
-   * **판결 일치율(정확도)**: **10 / 10 (100.0%)** (악성 사살 6/6 100%, 정상 복구 4/4 100%).
-   * **평균 소요 턴 수**: **2.20 턴** (최대 5턴 예산 대비 56.0% 최적화율).
-   * **평균 완결 시간**: **19,109 ms (19.11 초)** (C# 50초 SLA 및 C++ 60초 워치독 대비 30.89초 안전 마진 확보).
-   * **테스트 소요 시간 및 결과**: 총 10개 시나리오 3분 27초 만에 전원 통과 (`Exit Code 0`).
-
----
-
-## 2026-09-16: [Resolved] Phase 3.5: C++ 네이티브 바이너리 ➔ C# Cockpit ➔ C++ 네이티브 바이너리 크로스 랭귀지 풀체인 E2E 통합 검증
-
-### [현상 (Symptom)]
-* Phase 3.5의 종단간(E2E) 테스트에서 C# P/Invoke(`LiveFullChainE2ETests.cs`)를 통한 모의 테스트만으로는, 실제 C++ 네이티브 컴파일 바이너리(`FullChainCrossE2ETest.exe`), asio-grpc C++20 클라이언트, `DoubleBufferedSwapQueue`, `ProcessActuator` 및 실제 C# Kestrel Cockpit 프로세스 간의 크로스 랭귀지 및 크로스 프로세스 양방향 통신 무결성을 실측 입증하기 어려움.
-
-### [원인 (Root Cause)]
-* C# P/Invoke 테스트는 C# 런타임 내부에서 OS API를 호출하므로 C++의 `GrpcStreamClient.cpp`와 Boost.Asio/asio-grpc 이벤트 루프, Win32 `TerminateProcess` 디스패치가 C# Kestrel 서버와 결합하여 닫힌 루프(Closed-Loop)를 형성하는 실전 경로가 누락되어 있었음.
-
-### [해결책 (Resolution)]
-1. **C++ 네이티브 E2E 실행 파일 신설 (`tests/FullChainCrossE2ETest/main.cpp`)**:
-   * 실제 Win32 `CreateProcessW`로 독립 타깃 프로세스(`powershell.exe`) 기동.
-   * C++ `ProcessActuator::SuspendProcess`를 호출하여 24μs급 원자적 동결(`NtSuspendProcess`, 실측 38~40μs) 집행.
-   * `DoubleBufferedSwapQueue`에 텔레메트리 적재 후 C++ `GrpcStreamClient`로 Kestrel(50051 포트)에 스트리밍 송신.
-   * C# Cockpit으로부터 타임아웃 연장 티켓(`ACTION_EXTEND_TIMEOUT`, 50초) 수신 및 대기.
-   * C# 자율 AI 위협 헌터의 수사 판결 후 발행된 `MitigationCommand(ACTION_KILL)`를 수신하여 C++ `ProcessActuator::TerminateTargetProcess` 즉각 집행.
-   * Win32 `WaitForSingleObject`를 통해 타깃 프로세스의 실제 OS 소멸(Exit Code 1)을 완벽 실측.
-2. **크로스 랭귀지 자동화 오케스트레이터 구축 (`scripts/run_cross_e2e_test.ps1` & `scripts/run_fullchain_test.ps1`)**:
-   * C# Cockpit Kestrel 서버를 백그라운드 기동하고 포트 50051 준비 상태를 감지한 후 C++ 바이너리를 실행, 테스트 완료 후 백그라운드 프로세스를 안전하게 정리.
-   * `run_fullchain_test.ps1`에 5번째 최종 관문으로 연계 통합.
-3. **검증 (Ground Truth)**:
-   * `powershell -ExecutionPolicy Bypass -File .\build.ps1`: `FullChainCrossE2ETest.exe` 빌드 성공 (Exit Code 0).
-   * `powershell -ExecutionPolicy Bypass -File .\scripts\run_cross_e2e_test.ps1`: C++ ➔ C# Cockpit ➔ C++ 전 단계 완주 및 프로세스 사살 소멸 확인 (Exit Code 0).
-   * `powershell -ExecutionPolicy Bypass -File .\scripts\run_fullchain_test.ps1`: 5대 풀체인 테스트 전원 통과 (Exit Code 0).
-   * `dotnet test tests/Phalanx.Agent.Tests/ --filter "FullyQualifiedName!~Benchmark"`: 28개 전체 단위/통합 테스트 전원 통과 (Exit Code 0).
+1. **단일 진실 공급원(SSOT) 아키텍처 확립**: ReAct 루프가 정상 종결(`reachedFinal == true && hasValidAction`)된 경우, Gemini AI 수사관의 `VerdictAction`(`ACTION_KILL` vs `ACTION_RESUME`)을 100% 최상위 결정권으로 수용. `Contains("-enc")`, `Contains("http")` 등 정적 오버라이드 코드 완전 삭제.
+2. **Fail-Secure 안전 가드 격리**: C# 시스템 가드는 최대 턴 초과, API 장애 등 '예외 상황'에서만 선제 사살을 집행하도록 관심사 분리(SoC).
+3. **포렌식 무결성 보장**: 정상 프로세스 판정 시 가짜 TTP 주입 차단 및 `blockedIp = ""` 보장, 악성 확정 시에만 `SystemFirewallTool` 집행.

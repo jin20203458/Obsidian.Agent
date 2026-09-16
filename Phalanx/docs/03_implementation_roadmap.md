@@ -159,7 +159,7 @@ related:
   * 로컬 오프라인 수사에서 정상 사내 스크립트(`*.internal`, `*.corp.local`) 인입 시 1ms 조기 탈출(`ACTION_RESUME`), 악성 인라인 다운로더 인입 시 누적 위험도 105점(> 80점)으로 `ACTION_KILL` 및 방화벽 C2 차단, 볼륨 섀도 복사본 삭제(`vssadmin delete shadows`) 파괴 명령 시 +80점 즉각 사살 판결 확인 (`AutonomousHunterAgentTests`).
   * 취약 부모 프로세스 감시망(`AcroRd32.exe`, `Acrobat.exe`, `hwp.exe`) 확장 및 C++ 회귀 단위 테스트 통과 (`EngineTests.exe`).
   * LLM 2-Shot 균형 프롬프트(`<example type="verdict_resume">`), `<target_context>` 3대 메타데이터 주입 및 사후 조치 처방전(`remediation_steps`) DTO / LiteDB 아카이브 완비.
-  * 통합 테스트 러너(`run_fullchain_test.ps1`) 4대 전 단계(C# 순서 실측, C++ 센서/엔진 벤치, C++ gRPC 루프백, 실제 OS Live E2E) 100% Exit Code 0 통과 확인.
+  * 통합 테스트 러너(`run_fullchain_test.ps1`) 5대 전 단계(C# 순서 실측, C++ 센서/엔진 벤치, C++ gRPC 루프백, 실제 OS Live E2E, C++ ➔ C# ➔ C++ 크로스 랭귀지 E2E) 100% Exit Code 0 통과 확인.
 
 ---
 
