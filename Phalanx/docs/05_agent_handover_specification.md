@@ -85,7 +85,14 @@ Phalanx Root
 
 ---
 
-## 4. 빌드 및 검증 명령어 (Mandatory Verification Suite)
+### 4.1 LLM 인증 정보 구성 (Clean-Room Credential Architecture)
+
+Phalanx는 타 저장소(예: MundusVivens)에 대한 런타임 의존성 없이 자체 격리(Clean-Room) 환경에서 동작합니다:
+1. **환경 변수 우선**: `GOOGLE_APPLICATION_CREDENTIALS` 환경 변수가 지정되어 있을 경우 최우선 로드.
+2. **Phalanx 자체 로컬 Config**: 환경 변수 미지정 시 `src/Phalanx.Cockpit/Config/google-credentials.json` 및 `src/Phalanx.Cockpit/AppSettings.json`에서 자체 프로젝트/서비스 계정 정보 탐색.
+3. **보안 규칙**: `google-credentials.json` 및 `AppSettings.json`은 `.gitignore`에 등록되어 엄격히 커밋에서 제외됨.
+
+### 4.2 빌드 및 검증 명령어 (Mandatory Verification Suite)
 
 모든 작업 완료 후 보고 전 반드시 아래 명령을 실행하여 **Exit Code 0**을 실사하십시오:
 
@@ -94,13 +101,15 @@ Phalanx Root
 dotnet build Phalanx.sln
 
 # 2. C# 순수 단위 테스트 실행 (25개 전원 통과 확인, ~300ms)
-# (주의: net9.0-windows 타깃이므로 호스트 머신에 .NET 9.0 Desktop Runtime이 설치되어 있어야 테스트 호스트 프로세스가 기동됩니다)
 dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"
 
-# 3. C++ 네이티브 프로젝트 빌드
+# 3. Google Cloud Vertex AI 실시간 Live 연동 테스트 (선택적: 인증 정보 세팅 시)
+dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Live"
+
+# 4. C++ 네이티브 프로젝트 빌드
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 
-# 4. 5대 풀체인 E2E 통합 검증 스위트 실행 (전 단계 통과 확인)
+# 5. 5대 풀체인 E2E 통합 검증 스위트 실행 (전 단계 통과 확인)
 powershell -ExecutionPolicy Bypass -File .\scripts\run_fullchain_test.ps1
 ```
 
