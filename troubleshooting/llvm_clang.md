@@ -270,4 +270,56 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - `aes.c`: 한 줄 다중 대입(`415`), `case break`(`599`) 등 **30건 진성 규격 정탐 100% 보존**.
   - `ecp_curves.c`: 루프 내 다중 연산(`ADD; NEXT;` 등) **진성 규격 정탐 100% 보존**.
 
+---
+
+## 2026-09-16: NoMeaninglessExprCheck (`ast-no-meaningless-expr`) switch-case 라벨 상수 평가식 매칭 결함 오탐 247건 전수 해결
+
+### 1. 현상 (Symptom)
+* DAPA 스타일 규칙 Rule 4 (라. 부작용 없는 의미 없는 구문 사용 금지) 및 MISRA C:2012 Rule 2.2 정적 검증 시, `mbedtls` 라이브러리 분석에서 **247건(100.0%)의 대규모 엔진 오탐(False Positive)** 발생:
+  1. `error.c`: `case -(MBEDTLS_ERR_CIPHER_FEATURE_UNAVAILABLE):` 등 단항 음수 연산자(`-`)가 포함된 case 라벨 식 245건 오탐.
+  2. `x509_crt.c`: `case (MBEDTLS_ASN1_CONTEXT_SPECIFIC | MBEDTLS_X509_SAN_OTHER_NAME):` 등 비트 OR 연산자(`|`)가 포함된 case 라벨 식 2건 오탐.
+
+### 2. 원인 (Root Cause)
+* **`CaseStmt` 직계 자식 노드 매칭(`hasParent(caseStmt())`) 설계 결함**:
+  - `NoMeaninglessExprCheck.cpp`의 Strategy C 매처는 라벨 구문 내부의 부작용 없는 실행식을 탐지하기 위해 `expr(TargetExpr, hasParent(stmt(anyOf(labelStmt(), caseStmt(), defaultStmt()))))` 매처를 사용함.
+  - Clang AST 상에서 `CaseStmt`는 하위 실행 명령문(`getSubStmt()`) 뿐만 아니라 분기 라벨 값인 `getLHS()`(라벨 상수식)와 `getRHS()`(GNU range 식)를 직계 자식 노드로 소유함.
+  - 이로 인해 `case -(ERR):`의 단항 음수 연산이나 `case (A | B):`의 비트 연산 표현식이 `hasParent(caseStmt())`에 일치하여 부작용 없는 독립 실행문으로 오인됨.
+
+### 3. 해결책 (Resolution)
+1. **`hasCaseSubStmt`, `hasLabelSubStmt` 커스텀 AST 매처 도입**:
+   - `SwitchCase`(`CaseStmt`, `DefaultStmt`) 및 `LabelStmt`의 오직 실행 본문(`getSubStmt()`)만을 대상으로 타겟 표현식을 검사하는 매처를 구현하여 `getLHS()`와 `getRHS()`는 매처 탐색 대상에서 원천 배제:
+   ```cpp
+   AST_MATCHER_P(SwitchCase, hasCaseSubStmt, ast_matchers::internal::Matcher<Stmt>,
+                 InnerMatcher) {
+     const Stmt *Sub = Node.getSubStmt();
+     return Sub != nullptr && InnerMatcher.matches(*Sub, Finder, Builder);
+   }
+
+   AST_MATCHER_P(LabelStmt, hasLabelSubStmt, ast_matchers::internal::Matcher<Stmt>,
+                 InnerMatcher) {
+     const Stmt *Sub = Node.getSubStmt();
+     return Sub != nullptr && InnerMatcher.matches(*Sub, Finder, Builder);
+   }
+   ```
+2. **Strategy C 매처 교체**:
+   - `switchCase(hasCaseSubStmt(expr(TargetExpr).bind("target")))` 및 `labelStmt(hasLabelSubStmt(expr(TargetExpr).bind("target")))`로 교체.
+3. **`check()` 내 심층 방어 가드 (Defense-in-Depth)**:
+   - AST 조상 탐색(`Result.Context->getParents()`) 루프를 추가하여, 타겟 표현식이 `CaseStmt`의 `getLHS()` 또는 `getRHS()` 트리에 속하는 경우 경고 방출을 즉시 차단.
+
+### 4. 검증 결과 (Ground Truth)
+* **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 무결점 성공.
+* **실제 MbedTLS 오탐 파일 실사**:
+  - `error.c`: 245건 오탐 $\rightarrow$ **0건 전수 소멸 (100% 해결)**
+  - `x509_crt.c`: 2건 오탐 $\rightarrow$ **0건 전수 소멸 (100% 해결)**
+  - 총 247건 중 247건 **100.0% 오탐 박멸**.
+* **진성 규격 정탐(True Positive) 보존 실사 (`test_meaningless.c`)**:
+  - 일반 블록 단독 식 (`a + b;`) $\rightarrow$ 정상 검출 (TP 1)
+  - `if` 본문 단독 식 (`if (a) a - b;`) $\rightarrow$ 정상 검출 (TP 2)
+  - `while` 본문 단독 식 (`while (a) a * b;`) $\rightarrow$ 정상 검출 (TP 3)
+  - `case` 본문 단독 식 (`case 1: a / b; break;`) $\rightarrow$ 정상 검출 (TP 4)
+  - `default` 본문 단독 식 (`default: a % b; break;`) $\rightarrow$ 정상 검출 (TP 5)
+  - `label` 본문 단독 식 (`my_label: a & b;`) $\rightarrow$ 정상 검출 (TP 6)
+  - 대입(`=`), 증감(`++`), 함수호출, `(void)` 캐스팅 등 준수 코드는 오탐 0건 확인.
+
+
 
