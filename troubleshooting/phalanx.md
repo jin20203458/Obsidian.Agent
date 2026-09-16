@@ -475,3 +475,34 @@ related:
    * `SensorTests.exe` (5/5), `EngineTests.exe` (8/8), `IpcE2ETest.exe` 통과 (`Exit Code 0`).
    * `.\scripts\run_fullchain_test.ps1 -Detailed`: 전원 통과 (`Exit Code 0`).
 
+---
+
+## 2026-09-16: [Resolved] AI 수사관 판정 왜곡(Decision Hijacking) 및 결정권 침해 결함 해결 (SSOT 아키텍처 확립)
+
+### [현상 (Symptom)]
+* 다중 시나리오 라이브 실측 벤치마크 중 시나리오 4(사내 정상 백업 스크립트: `explorer.exe ➔ powershell.exe -enc <Get-Service ... *.internal>`) 실행 시:
+  - 실제 Google Gemini 3.8 Flash는 2턴 만에 Base64를 해독하고 내부 백업 도메인을 확인하여 정상 관리 스크립트임을 완벽히 간파, `ACTION_RESUME (정상 확인 및 동결 해제, 확신도 98%)` 판결을 내림.
+  - 그러나 C# 호스트 코드가 이를 가로채 `ActionKill (사살)` 명령을 하달하고, 사건명을 `"Gemini AI: 악성 위협 실시간 탐지 및 사살"`로 날조하며, 피싱 침해 기법(`T1566.001`)을 조작 주입하는 치명적 오탐 및 판정 왜곡 발생.
+
+### [원인 (Root Cause)]
+1. **의미론적 확신도 역전 (Semantic Inversion)**: `latestDecision.ConfidenceScore`("정상 프로세스에 대한 확신도 98%")를 C# 코드가 `threatScore`("위협 점수 98점")로 오인 바인딩하여 `threatScore >= 0.80` 조건으로 악성 사살 판정.
+2. **정적 시그니처 강제 오버라이드 (Decision Hijacking)**: 회색지대 선제 동결 사유였던 `-enc`를 최종 판결 단계에서 `targetNode.CommandLine.Contains("-enc")`로 무조건 재검사하여 무죄 증명을 짓밟고 사살 강제.
+3. **서사 날조 및 증거 조작**: Gemini가 작성한 '정상' 제목을 사살용 제목으로 강제 치환하고, 미지정 TTP에 피싱 전술(`T1566.001`)을 강제 주입.
+4. **조기 방화벽 차단 오염**: 악성 확정 여부와 무관하게 `extractedIp != null`이면 방화벽 차단 룰을 집행하여 사내 백업 서버 IP 차단 위험 발생.
+
+### [해결책 (Resolution)]
+1. **단일 진실 공급원(SSOT) 아키텍처 확립 (`AutonomousHunterAgent.cs`)**:
+   * ReAct 루프가 정상 종결(`reachedFinal == true && hasValidAction`)된 경우, Gemini AI 수사관의 `VerdictAction`(`ACTION_KILL` vs `ACTION_RESUME`)을 100% 단일 진실 공급원으로 수용.
+   * `Contains("-enc")`, `Contains("http")`, `threatScore >= 0.80` 등 낡은 정적 문자열 오버라이드 코드 완전 삭제.
+2. **Fail-Secure 안전 가드 경계 분리**:
+   * C# 시스템 가드는 최대 5턴 초과, API 크래시, 형식 결함 등 '예외 상황'에서만 선제 사살(`ACTION_KILL`)을 집행하도록 관심사 분리(SoC).
+3. **확신도 정규화 및 포렌식 무결성 보장**:
+   * `finalConfidence` 정규화(0~100 스케일 0.0~1.0 대응, `Math.Clamp`).
+   * 정상 프로세스(`!isMalicious`) 판정 시 가짜 TTP 주입 차단 및 `blockedIp = ""` 보장, C++ 센서 명령에도 공백 전달.
+   * 악성 확정 시에만 방화벽 차단 도구(`SystemFirewallTool`) 실행.
+4. **검증 (Ground Truth)**:
+   * `dotnet build`: 경고 0개, 오류 0개 (Exit Code 0).
+   * `dotnet test --filter "Category=Unit"`: 20/20 통과 (273ms, Exit Code 0).
+   * `Agent_Collaboration_Workflow_Guidelines` 이중 계쇄 프로토콜(Gate 1 Pass, Gate 2 Pass) 준수 완료.
+
+
