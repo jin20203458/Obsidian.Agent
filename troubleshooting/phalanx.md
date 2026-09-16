@@ -441,3 +441,37 @@ related:
    * `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"`: 17/17 통과 (448ms, Exit Code 0).
    * `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Live"`: 2/2 통과 (23s, Exit Code 0).
    * C++ `SensorTests.exe` (5/5) & `EngineTests.exe` (8/8) 통과 (Exit Code 0).
+
+---
+
+## 2026-09-16: [Resolved] Phalanx 풀체인 E2E 통합 시스템 테스트(3대 시나리오) 및 사전 리팩토링 검증
+
+### [현상 (Symptom)]
+* C++ 센서(24μs 동결/0.1ms 사살)와 C# 관제 콕핏(gRPC AI 수사)이 각각 개별 단위/통합 테스트는 통과하였으나, 전체 닫힌 루프(`C++ ➔ C# ➔ C++`)의 3대 시나리오(C++ 즉각 사살, C# LLM 수사 50초 연장 사살, C# 로컬 23ms 즉각 사살)가 단일 E2E 테스트 스위트 상에서 인과적 함수 호출 순서(Call Sequence)와 함께 계측/검증되지 않았음.
+* 사전 정적 코드 감사 결과, `AutonomousHunterAgent.cs` 생성자 내 `GetAwaiter().GetResult()` Sync-over-Async 블로킹 안티패턴 및 미사용 필드 잔존, `EtwKernelCollector.cpp`의 비정상 종료 시 잔여 ETW 세션 정리 부재 식별.
+
+### [원인 (Root Cause)]
+1. 모듈 간 독립성(Clean-Room) 유지를 위해 C++과 C#을 분리 개발하여, 양방향 gRPC 스트림 상에서 C++ 액추에이터와 C# 헌터가 상호작용하는 통합 E2E 테스트 시나리오가 부재했음.
+2. 비동기 팩토리 메서드 대신 생성자에서 동기 블로킹 방식으로 Vertex AI 설정을 읽어들여 스레드풀 데드락 잠재 위험 존재.
+
+### [해결책 (Resolution)]
+1. **사전 정적 리팩토링 (Safe Cleanups)**:
+   * `GeminiRestClient.cs`: 로컬 JSON 설정 동기 파싱 메서드 `TryCreateFromMundusVivensConfig()` 신설.
+   * `AutonomousHunterAgent.cs`: 생성자 내 `GetAwaiter().GetResult()` 제거 및 미사용 필드(`_geminiApiKey`, `_httpClient`) 정리.
+   * `CQRS/ProcessTreeProjectionManager.cs`: `FindNodeByPid(uint pid)` 신설 (사망/사살된 노드 조회 지원).
+   * `Collector/EtwKernelCollector.cpp`: 기동 전 `krabs::user_trace leftover.stop();` 방어적 세션 정리 추가.
+2. **풀체인 3대 시나리오 E2E 통합 시스템 테스트 구축 (`FullChainSystemTests.cs`)**:
+   * **시나리오 1 (C++ 즉각 사살 & C# 바이패스)**:
+     - `vssadmin delete shadows` 수집 ➔ 105μs 사살 ➔ `LIFECYCLE_TERMINATED` 송신 ➔ C# CQRS 트리에 사망(IsAlive = false) 반영 및 AI 수사 0건(완전 바이패스) 확인 (150ms 완결).
+   * **시나리오 2 (C++ 동결 ➔ LLM ReAct 수사 ➔ 50초 연장 ➔ C++ 사살)**:
+     - `winword.exe ➔ powershell.exe -enc` 수집 ➔ 24μs NtSuspendProcess 원자적 동결 ➔ 워치독 10초 등록 ➔ gRPC 송신 ➔ C# 인입 즉시 `ACTION_EXTEND_TIMEOUT` 선제 전송 ➔ C++ 워치독 +50초 연장 (총 60초 예산 확보) ➔ Gemini 2턴 ReAct 도구 수사 ➔ `ACTION_KILL` 회신 ➔ C++ 현장 사살 집행 및 워치독 안전 해제 확인 (85ms 완결).
+   * **시나리오 3 (C++ 동결 ➔ 로컬 23ms 오프라인 수사 ➔ C++ 사살)**:
+     - 동일 위협 ➔ 24μs 동결 ➔ gRPC 송신 ➔ 오프라인 모드 가동 ➔ `ACTION_EXTEND_TIMEOUT` 0건(미발행 확인, 10초 데드락 방어 유지) ➔ 23ms 내 `ACTION_KILL` 회신 ➔ C++ 사살 집행 및 30ms 만에 전 파이프라인 완결 확인.
+3. **통합 자동화 러너 구축 (`scripts/run_fullchain_test.ps1`)**:
+   * C# 풀체인 테스트 + C++ 센서 단위테스트 + C++ 엔진 룰테스트 + C++ gRPC 루프백 테스트를 원클릭으로 검증.
+4. **검증 (Ground Truth)**:
+   * `FullChainSystemTests.cs`: 3/3 시나리오 전원 통과 (307ms, `Exit Code 0`).
+   * `Phalanx.Agent.Tests`: 20/20 단위테스트 전원 통과 (272ms, `Exit Code 0`).
+   * `SensorTests.exe` (5/5), `EngineTests.exe` (8/8), `IpcE2ETest.exe` 통과 (`Exit Code 0`).
+   * `.\scripts\run_fullchain_test.ps1 -Detailed`: 전원 통과 (`Exit Code 0`).
+
