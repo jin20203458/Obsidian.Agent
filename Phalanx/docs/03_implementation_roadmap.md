@@ -17,10 +17,10 @@ related:
 ## 1. 단계별 구현 마일스톤 흐름
 
 ```
-[ Phase 1: Kernel Sensor & Telemetry ] ──▶ [ Phase 1.5: Atomic Freeze ] ──▶ [ Phase 2: In-Memory DAG & Rules ] ──▶ [ Phase 2.5: Defense Profiling Benchmark ] ──▶ [ Phase 3: AI Agent & Forensic Tools ] ──▶ [ Phase 4: Cockpit & Presentation ]
-  • ETW 커널 수집 루프 (완료)   • NtSuspendProcess 동결 (완료)  • C++ 인메모리 프로세스 트리 (완료)   • 스크립트 150ms 웜업 vs 0.1ms 차단 (완료)    • Gemini 2.0 Flash ReAct 루프             • ModernWpfUI 다크 대시보드
-  • 락-스왑 무손실 버퍼 (완료)  • Toolhelp32 폴백 (완료)        • 로컬 룰 판정 (< 100μs) (완료)       • 네이티브 바이너리 2ms 실행 누수 계측 (완료) • 5대 OS 수사 도구 (메모리 스캔 등)        • 인터랙티브 프로세스 트리 Canvas
-  • ACTION_SUSPEND 대칭 (완료)  • 30초 세이프티 워치독 (완료)   • 0.1ms 현장 사살 & 24μs 동결 (완료)  • Canary 누수 0 Bytes 실증 (완료)          • 동결 타깃 수사 ➔ 사형/해제 최종 판결    • QuestPDF 포렌식 리포트 출력
+[ Phase 1: Kernel Sensor & Telemetry ] ──▶ [ Phase 1.5: Atomic Freeze ] ──▶ [ Phase 2: In-Memory DAG & Rules ] ──▶ [ Phase 2.5: Defense Profiling Benchmark ] ──▶ [ Phase 3: AI Agent & Forensic Tools ] ──▶ [ Phase 3.5: Full-Chain E2E & Local FSM ] ──▶ [ Phase 4: Cockpit & Presentation ]
+  • ETW 커널 수집 루프 (완료)   • NtSuspendProcess 동결 (완료)  • C++ 인메모리 프로세스 트리 (완료)   • 스크립트 150ms 웜업 vs 0.1ms 차단 (완료)    • Gemini ReAct 루프 (완료)                • C++ ➔ C# ➔ C++ 폐루프 E2E 실증          • ModernWpfUI 다크 대시보드
+  • 락-스왑 무손실 버퍼 (완료)  • Toolhelp32 폴백 (완료)        • 로컬 룰 판정 (< 100μs) (완료)       • 네이티브 바이너리 2ms 실행 누수 계측 (완료) • 상용 1티어 5대 OS 도구 (완료)          • 로컬 FSM & 위험도 가중치 스코어링       • 인터랙티브 프로세스 트리 Canvas
+  • ACTION_SUSPEND 대칭 (완료)  • 30초 세이프티 워치독 (완료)   • 0.1ms 현장 사살 & 24μs 동결 (완료)  • Canary 누수 0 Bytes 실증 (완료)          • 10s/50s SLA 연장 안전망 (완료)         • 정상 관리 족보 화이트리스트 가드        • QuestPDF 포렌식 리포트 출력
 ```
 
 ---
@@ -127,6 +127,37 @@ related:
   * 5대 OS 수사 도구 개별 동작 및 방화벽 안전 루프백 클램핑 검증 완료 (`InvestigationToolsTests` 통과).
   * 가상 동결 프로세스 인입 시, AI 에이전트가 로컬 트리의 족보 문맥을 바탕으로 메모리를 스캔하고 C2 평판을 확인하여 **331ms**(요구 기준 < 3,000ms 대비 9배 빠름) 만에 98% 확신도로 사살 명령(`ACTION_KILL`)과 JSON 서사를 도출하고 LiteDB 아카이브 저장 확인 (`AutonomousHunterAgentTests` 통과, Exit Code 0).
   * C++ 센서/엔진/E2E 테스트(`EngineTests`, `SensorTests`, `IpcE2ETest`, `DefenseProfilingTest`) 및 C# 테스트(`dotnet test`) 전원 100% Exit Code 0 통과 확인.
+
+---
+
+### Phase 3.5: 풀체인 E2E 실증 및 로컬 FSM 의사결정 고도화 (Full-Chain E2E & Local FSM Decision Engine)
+* **목표**: C++ 커널 센서와 C# 관제 콕핏/AI 헌터를 실제 런타임 환경에서 결합하여 C++ ➔ C# ➔ C++ 폐루프(Closed-Loop) 전체 방어 서사를 자동 검증하고, 인터넷/LLM 단절 시 발동되는 로컬 오프라인 수사 엔진을 단순 키워드 매칭에서 상태 머신(FSM) 및 가중치 스코어링 모델로 격상하여 오탐을 원천 차단.
+* **주요 개발 내용**:
+  * **[태스크 1] C++ ➔ C# ➔ C++ 풀체인 라이브 통합 시스템 테스트 구축 (최우선)**:
+    * Kestrel gRPC 서버(`Phalanx.Cockpit`, 포트 50051)와 C++ 센서(`Phalanx.Sensor.exe`)를 동시에 백그라운드 기동하여 양방향 스트리밍 핸드셰이크 수립.
+    * 테스트 러너가 실제 OS에 외부 공격 프로세스(`powershell.exe -enc <C2 다운로더>`)를 독립 스폰.
+    * C++ 센서 24μs 원자적 동결(`NtSuspendProcess`) ➔ gRPC 텔레메트리 전송 ➔ C# AI 에이전트 ReAct 수사 ➔ gRPC 사살 명령(`ACTION_KILL`) 역전송 ➔ C++ 액추에이터 현장 사살(`TerminateProcess`) 및 프로세스 강제 종료까지의 전체 닫힌 루프(Closed-Loop) 자동화 검증.
+    * 각 단계별 타임스탬프 실측 및 종료 코드(Exit Code 0) 검증 스크립트 작성.
+  * **[태스크 2] 로컬 오프라인 수사 '가중치 스코어링 & 상태 머신(FSM)' 고도화**:
+    * `AutonomousHunterAgent.cs`의 `InvestigateOfflineDeterministicAsync` 내부 판정식을 단순 `Contains("-enc")`에서 다차원 누적 위험도(Risk Score) 모델로 전환:
+      * 비정상 부모 프로세스(Office/HWP ➔ cmd/ps): +30점
+      * 인라인 C2 다운로드 패턴: +35점
+      * Unbacked 실행 메모리 주입: +40점
+      * 사내 정상 서명/내부망 도메인: -50점
+      * 총합 80점 초과 시에만 `ACTION_KILL` 집행.
+    * 상태 머신 기반 조기 탈출(Early-Exit): 1단계 디코딩 결과 사내 정상 작업 확인 시 1ms 내 `ACTION_RESUME` 즉시 복구.
+    * LLM 파이프라인(`InvestigateWithGeminiAsync`)은 코드 수정 없이 100% 격리 유지하되, LLM 장애/타임아웃 시 Fallback 안전벨트 품질 극대화.
+  * **[태스크 3] 정상 관리 도구 및 시스템 프로세스 족보 화이트리스트 (Known-Good Baseline)**:
+    * `explorer.exe ➔ powershell.exe` 등 사용자가 직접 기동한 터미널 및 윈도우 정상 관리 도구에 대한 동결 예외 필터링.
+    * 오피스, 브라우저, PDF 등 취약 상위 앱에서 파생된 스크립트 실행기만 선별 동결하도록 로컬 룰 엔진 정밀화.
+  * **[태스크 4] LLM 수사 퀄리티 2차 고도화 (상용 Copilot 수준 마감)**:
+    * `<target_context>`에 실행 경로(Temp 폴더 여부), 디지털 서명 유무, 프로세스 무결성 레벨(Integrity Level) 메타데이터 추가 주입.
+    * 프롬프트에 정상 관리 스크립트 방면(`ACTION_RESUME`) Few-shot 예시 1건 추가로 사살 편향(Confirmation Bias) 방지.
+    * `AiInvestigationDecision` DTO에 `remediation_steps?: string[]` (전사 방화벽 차단, 계정 리셋 등 후속 조치 처방전) 필드 신설.
+* **완료 정의 (DoD)**:
+  * 외부 공격 프로세스 기동 시, C++ 동결 ➔ gRPC ➔ C# AI 수사 ➔ gRPC ➔ C++ 사살 전체 루프가 자동화 스크립트를 통해 성공적으로 완주되고 프로세스가 강제 종료됨을 실측 확인 (Exit Code 0).
+  * 로컬 수사에서 정상 사내 스크립트(`*.internal`) 입력 시 `ACTION_RESUME` 조기 탈출, 악성 인라인 다운로더 입력 시 `ACTION_KILL` 사살 판결이 정상 도출됨을 단위 테스트에서 확인.
+  * 모든 단위/통합 테스트 통과 및 빌드 무결성 유지.
 
 ---
 
