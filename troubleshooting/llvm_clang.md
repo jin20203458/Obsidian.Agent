@@ -527,4 +527,40 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - **총 25건 엔진 오탐 $\rightarrow$ 0건 (100.0% 전수 박멸 달성)**.
 * **이중 계쇄 심사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 2회 연속 **[PASS] 최종 공인**.
 
+---
+
+## 2026-09-17: cfg-null-dereference-guard 순수 방어 가드 래티스 개량 및 CSA NullDereference 중복 경고 차단
+
+### 1. 현상 (Symptom)
+* DAPA Rule 33 ("포인터 사용 전 NULL 검사 수행")을 위한 `cfg-null-dereference-guard` 체커와 CSA 심볼릭 실행 체커 `path-sensitive-core.NullDereference`를 동시 구동 시:
+  * `if (p == NULL) { *p; }` (명시적 NULL 분기 내부) 및 상위 함수에서 NULL을 넘긴 인라인 호출(`helper(NULL)`)에서 동일 파일, 동일 라인에 2개의 중복 경고가 발생하는 문제 발생.
+
+### 2. 원인 (Root Cause)
+1. **CFG 데이터플로우 상태의 이분법적 한계 (2-State Boolean)**:
+   - 기존 구현은 `bool Safe` (Safe/Unsafe) 2개 상태로만 동작하여, `if (p == NULL)`을 만났을 때 `then` 블록 내부를 단순히 `Safe = false (안전하지 않음)`로 처리.
+   - 이로 인해 개발자가 이미 가드를 성실히 작성했음에도 "가드가 누락되었다"며 `cfg-` 경고를 방출하여, CSA의 런타임 널 역참조 경고와 충돌.
+2. **함수 단위(Intra-procedural) vs 함수 간(Inter-procedural) 분석 관점 차이**:
+   - 상위 호출자가 `NULL`을 넘길 때 CSA는 인라인 심볼릭 분석으로 확정 널 역참조를 잡고, CFG 체커는 함수 단독 관점에서 가드 부재를 잡아 동일 라인에 중복 발생.
+
+### 3. 해결책 (Resolution)
+1. **3-상태 가드 래티스 (3-State Guard Lattice) 도입 (`NullDereferenceGuardCheck.cpp`)**:
+   - `enum class GuardState { Unchecked = 0, GuardedNonNull = 1, GuardedNull = 2 };`
+   - `edgeImpliesGuardState`:
+     - `p != NULL`, `p`: TrueEdge ➡️ `GuardedNonNull`, FalseEdge ➡️ `GuardedNull`
+     - `p == NULL`, `!p`: TrueEdge ➡️ `GuardedNull`, FalseEdge ➡️ `GuardedNonNull`
+   - Entry 초기 상태는 `Unchecked`로 시작하고, 오직 역참조 시점의 상태가 `Unchecked`인 경우에만 Rule 33 위반 경고 방출.
+   - `GuardedNull` 상태의 역참조는 가드가 이미 실행된 상태이므로 `cfg-` 체커는 침묵하고 CSA(`path-sensitive-core.NullDereference`)에 100% 위임.
+2. **ArqaStatic 파서 레벨 디듀플리케이션 안전망 구축 (`MainViewModel.cs`, `RangeObservableCollection.cs`)**:
+   - `FinalizeAnalysisAsync`에서 동일 파일/동일 라인에 `path-sensitive-core.NullDereference`와 `cfg-null-dereference-guard`가 동시 수집될 경우, 심볼릭 실행 추적 노트를 보유한 CSA 경고를 단일 유지하고 `cfg-` 경고를 일괄 제거(`RemoveRange`).
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM Clang-Tidy 빌드**: `cmake --build .\build --config Release --target clang-tidy` ➡️ **Exit Code 0** 성공.
+* **ArqaStatic WPF 빌드**: `dotnet build .\ArqaStatic\ArqaStatic.csproj --no-restore` ➡️ **Exit Code 0** 성공.
+* **DAPA 표준 테스트베드 (`Rule_33_Ptr_NullCheckBeforeUse`)**:
+  - `NonCompliant.c`: `cfg-null-dereference-guard` 1건 정확히 탐지.
+  - `Compliant.c`: 0건 무경고 통과.
+* **심층 충돌 테스트베드 (`test_deep_collision.c`)**:
+  - 두 체커 동시 구동 시 모든 라인에서 중복 발생 0건 달성 (Line 5: CFG 단독, Line 18/31/37: CSA 단독).
+
+
 
