@@ -412,7 +412,40 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - MbedTLS 전체 96개 C 소스 파일 전수 스캔: **0건 경고 (원본 157건 100.0% 전수 박멸)**.
 * **독립 감사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 2회 연속 **[PASS] 최종 공인**.
 
+---
 
+## 2026-09-17: ExplicitTypeDeclCheck (`ast-explicit-type-decl`) 소스 정규화 및 C/C++ 공용 명시적 타입 검사 확장 (Implicit Int 미탐 해결)
 
+### 1. 현상 (Symptom)
+* DAPA 국방 규격 `공통(스타일) c. 함수/변수의 선언 시 type을 명시해야 한다 (auto 사용 제한)` 검증 시:
+  * 공식 테스트 케이스 `C:\TestCase_Root_DAPA\Rule_03_Style_TypeDecl\NonCompliant.c`(`extern i;`, `extern foo(void);`) 분석 시 체커 경고가 0건 발생하여 전수 미탐(False Negative).
+  * 기존 체커명 `ast-no-auto-type`이 C++ `auto` 키워드만 연상시켜 C 언어의 `implicit int` 금지 규칙과 명칭 불일치.
 
+### 2. 원인 (Root Cause)
+1. **언어 버전 필터에 의한 C 언어 비활성화**:
+   * `NoAutoTypeCheck.h`의 `isLanguageVersionSupported`가 `LangOpts.CPlusPlus11`로만 제한되어 있어 C 소스코드(`.c`) 분석 시 체커가 아예 로드되지 않음.
+2. **매처(Matcher)의 C++ 편향**:
+   * `autoType()` 매처만을 사용하여 C 언어에서 타입을 명시하지 않고 생략한 암시적 `int`(`implicit int`) 선언 노드를 전혀 감지하지 못함.
 
+### 3. 해결책 (Resolution)
+1. **체커 소스파일 및 클래스명 정규화 (LLVM 1:1 불변식 준수)**:
+   * `NoAutoTypeCheck.h/cpp` $\rightarrow$ `ExplicitTypeDeclCheck.h/cpp` 완전 전환.
+   * 체커 등록명: **`ast-explicit-type-decl`**로 정규화 (`ARQAModule.cpp`, `Checkers.json`, `ComplianceRuleProvider.cs`, 매핑 기준서 일원화).
+2. **C/C++ 공용 검사 로직 구현**:
+   * `isLanguageVersionSupported`: `return true;`로 개방하여 C89~C17 및 C++ 전 언어 버전 지원.
+   * `isAutoType(QualType)`: 복합 포인터/참조 `auto` 타입을 재귀적으로 언래핑하여 C++ `auto` 사용 위반을 전수 감지.
+   * `isMissingTypeSpecifier(const VarDecl*)`: `getTypeSpecStartLoc().isInvalid()`를 판별하여 타입 선언이 생략된 C 암시적 `int` 변수 선언(`extern i;`, `static s;` 등) 정밀 탐지.
+   * `isMissingReturnTypeSpecifier(const FunctionDecl*)`: C++ 생성자/소멸자/변환연산자 및 람다 호출 연산자를 제외하고, `getReturnTypeSourceRange().isInvalid()`를 통해 반환형이 생략된 함수 선언/정의(`extern foo(void);`, `add(a, b) { ... }`) 정밀 탐지.
+   * 명확한 한글 진단 메시지 분기 방출:
+     - `auto` 사용 시: `"변수 선언 시 'auto' 사용을 금지합니다. 타입을 명시하세요"` / `"함수 선언 시 'auto' 반환 타입 사용을 금지합니다. 반환 타입을 명시하세요"`
+     - 타입 누락 시: `"변수 선언 시 타입을 명시해야 합니다"` / `"함수 선언 시 반환 타입을 명시해야 합니다"`
+
+### 4. 검증 결과 (Ground Truth)
+* **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 성공.
+* **DAPA 공식 테스트케이스 (`Rule_03_Style_TypeDecl`)**:
+  - `NonCompliant.c`: 1행 `extern i;`, 2행 `extern foo(void);` **2건 전수 정확 검출 (100% 정탐)**.
+  - `Compliant.c`: **0건 방출 (Clean, 0% 오탐)**.
+* **12종 C/C++ 종합 전수 검증 스위트 (`test_rule_03_suite.py`)**:
+  - TP-1 ~ TP-7 (7건): 8/8건 위반 100% 정탐.
+  - FP-1 ~ FP-5 (5건): 0건 방출 100% 무결점 준수.
+  - **12종 전수 100% 정탐 / 0% 오탐 달성**.
