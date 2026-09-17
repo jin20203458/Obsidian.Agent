@@ -610,3 +610,60 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - TC-11 (조기 리턴 경로 탈출, Line 87): Line 87:14 (`=`) 정확 검출.
   - TC-12 (매개변수 주소 탈출, Line 95): Line 95:10 (`=`) 정확 검출.
   - **총 14개 테스트 케이스 전수 통과 (100.0% 위치 정확도 및 0.0% 오탐 달성)**.
+
+---
+
+## 2026-09-17: cfg-nonzero-divisor-guard 3-상태 래티스 개량 및 CSA DivideZero 중복 경고 차단 (DAPA Rule 39)
+
+### 1. 현상 (Symptom)
+* DAPA Rule 39 ("나누는 값이 변수일 경우 0인지를 반드시 확인하여야 한다") 표준 테스트베드인 `C:\TestCase_Root_DAPA\Rule_39_Op_DivbyZero\NonCompliant.c`(`return x / n;`) 분석 시:
+  * 가드가 누락되었음에도 정적분석 경고가 전혀 발생하지 않는 결함 발생.
+  * 기존 `ComplianceRuleProvider.cs`에서 해당 규칙에 CSA `path-sensitive-core.DivideZero`만 단독 매핑되어 있었으나, CSA는 unconstrained 매개변수 심볼에 대해 0으로 가정하지 않으므로 가드 누락을 탐지하지 못함.
+
+### 2. 원인 (Root Cause)
+1. **정적 가드 검사 vs 런타임 0 나눗셈의 역할 분리 부재**:
+   - CSA `path-sensitive-core.DivideZero`는 구체적으로 0이 되는 실행 경로를 추적하는 버그 체커이며, 명시적 가드 존재 여부를 확인하는 체커가 아님.
+   - 전담 가드 체커인 `cfg-nonzero-divisor-guard`가 레거시 옵션 및 보류 상태로 방치되어 UI 및 규칙 매핑에서 누락됨.
+2. **단순 CFG 체커 투입 시 발생할 수 있는 중복 충돌 (Duplicate Collision)**:
+   - `if (n == 0) { return x / n; }`과 같이 0 분기 내부의 나눗셈에 대해 `cfg-` 체커와 CSA 체커가 동시에 경고를 내는 중복 충돌 위험 존재.
+
+### 3. 해결책 (Resolution)
+1. **3-상태 가드 래티스 (3-State Guard Lattice) 도입 (`NonZeroDivisorGuardCheck.cpp`)**:
+   - `enum class GuardState { Unchecked = 0, GuardedNonZero = 1, GuardedZero = 2 };`
+   - `edgeImpliesGuardState`:
+     - `n != 0`, `n > 0`, `n < 0`, `n`: TrueEdge ➡️ `GuardedNonZero`, FalseEdge ➡️ `GuardedZero`
+     - `n == 0`, `!n`: TrueEdge ➡️ `GuardedZero`, FalseEdge ➡️ `GuardedNonZero`
+   - 진입 시점은 `Unchecked`로 시작하며, 오직 연산 시점 상태가 `Unchecked`인 경우에만 Rule 39 경고 방출.
+   - `GuardedZero` 상태(명시적 0 분기 내부)는 가드가 완료된 상태이므로 `cfg-` 체커는 침묵하고 CSA `DivideZero`에 전담 위임하여 중복 발생을 사전 차단.
+3. **특수 가드 전담화 (`ParmVarDecl` 한정) 및 1차 엔진 레벨 중복 원천 차단 (`NonZeroDivisorGuardCheck.cpp`)**:
+   - `NullDereferenceGuardCheck`와 동일하게, `if (!isa<ParmVarDecl>(VD)) return;` 가드를 적용.
+   - 외부에서 함수로 유입되는 **매개변수(Parameter)의 사전 0 가드 검사 부재만을 순수하게 전담하는 특수 목적 체커**로 역할을 엄격히 제한.
+   - 로컬/전역 변수 및 상수/연산식 나눗셈은 심볼릭 실행을 수행하는 CSA `path-sensitive-core.DivideZero`에 100% 위임하여 엔진 단에서 허위 오탐 및 동일 라인 중복 경고를 원천 차단.
+4. **체커 옵션 현대화 및 표준화**:
+   - 레거시 옵션 7종 전면 제거, 표준 ARQA 상속 옵션 체계로 단순화.
+   - 진단 메시지 표준화: `"나누는 수(분모) 변수 '%0'을(를) 연산하기 전에 0인지 확인(가드 검사)하지 않았습니다."`
+5. **ArqaStatic 파이프라인 및 디듀플리케이션 통합**:
+   - `Checkers.json` 및 `ComplianceRuleProvider.cs`에 `cfg-nonzero-divisor-guard` 정식 등록 ($1:2$ 협업).
+   - `MainViewModel.cs`에 `path-sensitive-core.DivideZero`와의 라인 단위 자동 디듀플리케이션(`RemoveRange`) 2차 안전망 구축.
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM Clang-Tidy 빌드**: `cmake --build .\build --config Release --target clang-tidy` ➡️ **Exit Code 0** 성공.
+* **ArqaStatic C# 컴파일**: `dotnet build .\ArqaStatic\ArqaStatic.csproj -t:CoreCompile` ➡️ **Exit Code 0** 성공.
+* **DAPA 표준 Rule 39 테스트베드**:
+  - `NonCompliant.c`: `cfg-nonzero-divisor-guard` 1건 정확히 탐지 (Line 2:12).
+  - `Compliant.c`: 0건 무경고 클린 통과.
+* **12종 초고강도 복합 가드 및 중복 방지 테스트베드 (`test_divzero_comprehensive.c`)**:
+  - TC-01 (가드 미작성 매개변수 `x / n`): `cfg-nonzero-divisor-guard` 1건 단독 검출 (Line 3).
+  - TC-02 (`if (n != 0)`): 0건 (무경고 통과).
+  - TC-03 (`if (n == 0) return;` 조기 탈출): 0건 (무경고 통과).
+  - TC-04 (`if (n > 0)`): 0건 (무경고 통과).
+  - TC-05 (`if (n < 0)`): 0건 (무경고 통과).
+  - TC-06 (`if (n == 0)` 내부 나눗셈 `x / n`): CSA `path-sensitive-core.DivideZero` 1건 단독 검출 (Line 41, `cfg-` 침묵, 중복 0건).
+  - TC-07 (로컬 변수 상수 0 초기화 `d = 0; x / d`): CSA `path-sensitive-core.DivideZero` 1건 단독 검출 (Line 49, `cfg-` 침묵, 중복 0건).
+  - TC-08 (로컬 변수 상수 42 초기화 `d = 42; x / d`): 0건 (무경고 통과).
+  - TC-09 (로컬 변수 연산 결과 0 `d = a - b; x / d`): CSA `path-sensitive-core.DivideZero` 1건 단독 검출 (Line 63, `cfg-` 침묵, 중복 0건).
+  - TC-10 (`if (n != 0)` 복합 대입 `x /= n`): 0건 (무경고 통과).
+  - TC-11 (가드 미작성 복합 대입 `x /= n`): `cfg-nonzero-divisor-guard` 1건 단독 검출 (Line 77).
+  - TC-12 (가드 미작성 모듈로 연산 `x % n`): `cfg-nonzero-divisor-guard` 1건 단독 검출 (Line 83).
+  - **전체 검증 결과: 총 6건 정확 검출, 동일 라인 중복 경고 0건 (100.0% 상호 배타성 및 0.0% 오탐 달성)**.
+
