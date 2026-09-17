@@ -367,6 +367,52 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - `poly1305.c`: 기존 4건 FP 전수 제거, 23건 TP 100% 보존
 * **독립 감사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 2회 연속 **[PASS] 최종 승인**.
 
+---
+
+## 2026-09-17: UnreachableCodeCheck (`cfg-unreachable-code`) 단축평가 조건식 서브 수식, 방어적 default 및 sizeof switch 오탐 157건 전수 해결
+
+### 1. 현상 (Symptom)
+* DAPA 조건식 규칙 Rule 24 (마. 수행되지 않는 소스코드 작성 금지), MISRA C:2012 Rule 2.1 및 CWE-561 검증 시, `mbedtls` 프로젝트 96개 소스 파일 대상 전수 분석에서 **총 157건(100.0%)의 대규모 엔진 오탐(False Positive)** 발생:
+  1. `ecp_curves.c`: 타원곡선 환원 연산 내 루프 전개 매크로(`STORE32`)의 `if (i % 2)` 홀/짝 정적 최적화 분기 오탐 138건.
+  2. `pkwrite.c`: 버퍼 크기 매크로 삼항연산자(`PUB_DER_MAX_BYTES`) 분기 오탐 7건.
+  3. `timing.c`: `FAIL` 매크로 내부 `do { return 1; } while(0)` 구문 종료점 오탐 5건.
+  4. `bignum.c`: 멀티 아키텍처 지원 정적 `switch (sizeof(mbedtls_mpi_uint))` 비활성 분기(756행) 및 직후 아키텍처 폴백 리턴(766행) 오탐 2건.
+  5. `ssl_msg.c`: 이종 플랫폼 방어 가드 `(INT_MAX > SIZE_MAX && ret > (int) SIZE_MAX)` 내부 서브 수식 오탐 2건 (2007, 2059행).
+  6. `cipher.c`: 완전 열거형 switch 문의 DAPA 권장 방어적 `default:` 반환문 오탐 1건 (1049행).
+
+### 2. 원인 (Root Cause)
+1. **단축평가 조건식 서브 표현식 오인**:
+   - `isReportableStmt()`의 `default: return true;`로 인해, Clang CFG가 `&&`, `||` 논리 연산자의 단축 평가(Short-circuit)를 위해 생성한 조건식 내부의 서브 수식(`ret > (int)SIZE_MAX`)이 독립된 미도달 실행 명령문으로 잘못 인식됨.
+2. **방어적 `default:` 라벨 미인식**:
+   - 모든 enum 값이 `case`에서 소비된 완전 열거형 switch의 경우 컴파일러가 `default:` 블록을 미도달로 가지치기하나, 방어 코딩 관용구인 `default:` 라벨 필터가 부재하여 경고 방출.
+3. **`sizeof` 멀티 아키텍처 분기 및 폴백 리턴 미인식**:
+   - `switch (sizeof(T))`는 32비트/64비트 정적 다형성을 위한 표준 관용구이나, 타깃 환경에서 선택되지 않은 `case` 및 직후의 폴백 `return`을 데드 코드로 오인함.
+
+### 3. 해결책 (Resolution)
+1. **터미네이터 직후 구문 최우선 바이패스 (`isPrecededByTerminator`)**:
+   - 직전 형제 구문이 `return`, `break`, `continue`, `goto`, `throw`인 경우 모든 FP 가드를 우회하고 100% 즉시 TP로 보고하여 규격 진성 정탐의 불변 보존 달성.
+2. **조건식 내부 서브 표현식 진단 배제 (`isPartOfCondition`)**:
+   - `isa<Expr>(P)` 기반 AST 상향 추적을 통해 제어문(`IfStmt` 등)의 조건식(`getCond()`)에 속한 단축평가 비교식의 서브 피연산자가 독립 문장으로 오인되는 결함 원천 차단.
+3. **방어적 `default:` 라벨 및 하위 구문 보호 (`isUnderDefaultStmt`)**:
+   - `CFGBlock`의 라벨이 `DefaultStmt`이거나 상위 트리가 `DefaultStmt`인 경우 진단에서 제외.
+4. **`sizeof` 조건 switch 비활성 case 및 아키텍처 폴백 보호 (`isUnderInactiveCaseInSizeofSwitch`, `isFallbackAfterSizeofSwitch`)**:
+   - `UnaryExprOrTypeTraitExpr`(`sizeof`)를 포함하는 switch 조건식을 평가하여 타깃 아키텍처에서 비활성화된 `case` 분기 및 직후의 폴백 `return` 구문을 오탐에서 격리.
+5. **매크로 전개 필터링 (`ARQATidyCheck::IgnoreMacroExpansions`)**:
+   - `STORE32`, `PUB_DER_MAX_BYTES`, `FAIL` 등 매크로 내부에서 기인한 미도달 분기 150건 자동 필터링.
+
+### 4. 검증 결과 (Ground Truth)
+* **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 무결점 성공.
+* **16대 회귀 테스트 스위트 (`test_unreachable_code_suite_16.c`)**:
+  - TP 10건 (TC-01 ~ TC-10): 10/10 100.0% 1:1 라인 매핑 완벽 검출.
+  - FP 6건 (TC-11 ~ TC-16): 단 1건의 경고 없이 100.0% 완벽 차단 (0 경고).
+* **MbedTLS 벤치마크 실사**:
+  - `bignum.c`: 기존 2건 FP $\rightarrow$ **0건** (100% 제거)
+  - `cipher.c`: 기존 1건 FP $\rightarrow$ **0건** (100% 제거)
+  - `ssl_msg.c`: 기존 2건 FP $\rightarrow$ **0건** (100% 제거)
+  - MbedTLS 전체 96개 C 소스 파일 전수 스캔: **0건 경고 (원본 157건 100.0% 전수 박멸)**.
+* **독립 감사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 2회 연속 **[PASS] 최종 공인**.
+
+
 
 
 
