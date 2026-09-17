@@ -667,3 +667,41 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - TC-12 (가드 미작성 모듈로 연산 `x % n`): `cfg-nonzero-divisor-guard` 1건 단독 검출 (Line 83).
   - **전체 검증 결과: 총 6건 정확 검출, 동일 라인 중복 경고 0건 (100.0% 상호 배타성 및 0.0% 오탐 달성)**.
 
+---
+
+## 2026-09-17: lex-include-charset 진단 위치 정밀화 (열 10 고정 버그) 및 중복 경고 제거 (DAPA Rule 48)
+
+### 1. 현상 (Symptom)
+* DAPA C 전용 2) 규칙 (Rule 48: `#include 구문에서 표준에 맞지 않는 Character set을 사용하지 않아야 한다`) 정적 검증 시:
+  * 모든 경고의 컬럼 위치가 실제 결함 문자의 위치와 무관하게 **열 10(`FilenameRange.getBegin()`, 파일명 시작 따옴표 위치)**으로 무조건 고정되어 캐럿(`^`)이 엉뚱한 곳을 가리킴.
+  * Line 1(`#include "tae min's.h"`)에 대해 3건(공백 2회, 금지 문자 1회), Line 2(`#include "donghyun.h/*temporary*/"`)에 대해 2건(주석 패턴 1회, `*` 문자 1회) 등 동일 라인에 중복 경고가 도배(총 7건)되어 노이즈가 과도하게 발생함.
+
+### 2. 원인 (Root Cause)
+1. **진단 위치 고정**:
+   - `IncludeCharsetCheck.cpp`의 `report()` 호출 시 진단 소스 위치로 항상 파일명 토큰 시작 따옴표 위치인 `FilenameRange.getBegin()`(열 10)만을 넘김.
+2. **독립적인 if 블록 나열로 인한 중복 방출**:
+   - 주석 패턴 검사, 공백 검사, 허용 문자 집합 검사가 상호 배타성 없이 독립적인 `if`문으로 각각 `report()`를 호출하여 하나의 헤더 지시문에 복수의 동일/유사 경고가 중복 발생.
+
+### 3. 해결책 (Resolution)
+1. **정밀 컬럼 오프셋 계산 (`getInnerLoc` / `getSpelledLoc`)**:
+   - 여는 따옴표 이후 실제 위반 문자 인덱스 `idx`에 대한 소스 좌표(`FilenameRange.getBegin().getLocWithOffset(1 + idx)`)를 계산하여, 캐럿(`^`)이 실제 결함 문자(공백, `'`, `/*`, `$`, `-` 등)를 정확히 지목하도록 개선.
+2. **우선순위 기반 단일 진단 (Single Diagnostic per Directive) 파이프라인**:
+   - **Step 1 (주석 패턴)**: `/*` 또는 `//` 발견 시 주석 시작 위치에 단독 경고 방출 후 즉시 반환(주석 내부 `*`의 중복 경고 원천 차단).
+   - **Step 2 (비표준 문자 집합)**: `hasForbiddenChars`에서 최초 위반 문자 오프셋(`firstOffenderOffset`)을 추출하고, 공백과 특수문자를 하나의 명확한 경고로 통합 방출(`' '(공백), '''(작은따옴표)`).
+   - **Step 3 (경로 형식)**: 백슬래시(`\`), 상위 경로(`..`), 연속 구분자(`//`), 절대 경로 등 각각의 위반 위치에 단독 경고 방출.
+3. **DAPA 표준 설명 반영**:
+   - 진단 메시지에 DAPA 규격 설명인 `"(일부 컴파일러에서 호환되지 않을 수 있음)"`을 공식 반영.
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM Clang-Tidy 빌드**: `cmake --build .\build --config Release --target clang-tidy` ➡️ **Exit Code 0** 성공.
+* **DAPA 표준 Rule 48 테스트베드 (`C:\TestCase_Root_DAPA\Rule_48_C_IncludeCharSet\NonCompliant.c`)**:
+  - Line 1:14: `금지 문자: ' '(공백), '''(작은따옴표)` ➡️ **열 14 공백 위치 정확 지목, 단독 1건** (기존 3건 중복 제거).
+  - Line 2:21: `주석 패턴(/**/ 또는 //)을 포함할 수 없습니다` ➡️ **열 21 `/*` 위치 정확 지목, 단독 1건** (기존 2건 중복 제거).
+  - Line 3:15: `금지 문자: '$'` ➡️ **열 15 `$` 위치 정확 지목, 단독 1건**.
+  - Line 4:15: `금지 문자: '''(작은따옴표), '-'(하이픈)` ➡️ **열 15 `'` 위치 정확 지목, 단독 1건**.
+  - **총 4개 라인 정확 지목, 동일 라인 중복 0건 (기존 7건 ➡️ 정확히 4건 단독 경고 정밀화 달성)**.
+* **준수 코드 (`Compliant.c`)**: `lex-include-charset` 경고 **0건** 무경고 통과.
+* **복합 회귀 테스트 (`test_include_charset_suite.c`)**:
+  - 들여쓰기된 `#include`, 꺾쇠괄호(`<...>`), 백슬래시(`\`), 상위 경로(`..`), 연속 구분자(`//`), 표준 헤더 등 8개 시나리오 전수 통과.
+
+
