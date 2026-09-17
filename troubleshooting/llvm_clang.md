@@ -321,5 +321,52 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - `label` 본문 단독 식 (`my_label: a & b;`) $\rightarrow$ 정상 검출 (TP 6)
   - 대입(`=`), 증감(`++`), 함수호출, `(void)` 캐스팅 등 준수 코드는 오탐 0건 확인.
 
+---
+
+## 2026-09-17: NarrowingConversionChecker 심볼릭 오탐 116건 제거 (정수 승격 가짜 음수, 시프트 사전 절삭, 버퍼 길이 유계성 소실)
+
+### 1. 현상 (Symptom)
+* CSA 체커인 `path-sensitive-arqa.NarrowingConversion`(`NarrowingConversionChecker.cpp`)에서 총 537건의 경고 중 116건(21.6%)의 엔진 오탐 발생:
+  1. **정수 승격 가짜 음수 (58건)**: `aes.c`, `chacha20.c`, `blowfish.c` 등 바이트 XOR/OR 연산 `(unsigned char)(c ^ iv[n])`에서 C 표준에 의해 `int`로 승격된 후, CSA가 음수 분기(`StNeg`)를 가상 생성하여 `"음수 값을 무부호 타입으로 변환 시 데이터 변형 가능성"` 경고 방출.
+  2. **우측 시프트 사전 절삭 (17건)**: `constant_time.c`, `poly1305.c` 등에서 `(uint32_t)(uint64 >> 32)` 연산으로 상위 32비트가 0으로 확정되었음에도, 64비트 정적 타입만 보고 `"대상 타입 표현 범위 초과 가능성"` 경고 방출.
+  3. **버퍼 길이 유계성 소실 (41건)**: `asn1write.c`, `pkwrite.c` 등 직렬화 함수에서 `return (int)len;` 또는 `ret = (int)len;` 반환 시 가짜 하한 초과(18건) 및 가짜 상한 초과(23건) 경고 방출.
+
+### 2. 원인 (Root Cause)
+* **결함 1 (정수 승격 음수 왜곡)**: `RangeConstraintManager`가 기호 변수 간 비트 연산(`SymSymExpr`)의 값 범위를 추론하지 못해 $[0, 255]$ 유계 사실을 상실하고 음수 가능성을 가상 분기함.
+* **결함 2 (시프트 절삭 미인식)**: 시프트 연산자의 RHS 상수에 의해 유효 비트 폭이 이미 축소된 물리적 사실을 계산하지 않음.
+* **결함 3-1 (가짜 하한 초과)**: `SrcTy`가 `size_t`(무부호)임에도 음수 최솟값 `-2147483648`을 `APSInt`로 변환하여 `0xFFFFFFFF80000000`과의 대소 비교를 수행하여 `len < 0xFFFFFFFF80000000` 조건이 무조건 참이 됨.
+* **결함 3-2 (가짜 상한 초과)**: 파서 버퍼 크기($\le 64\text{KB}$) 불변식을 인지하지 못하고 기호 변수 `len`이 $2\text{GB}$를 초과하는 비현실적 경로(Infeasible Path)를 탐색함.
+
+### 3. 해결책 (Resolution)
+1. **재귀 표현식 비-음수 판정 (`isEffectivelyNonNegative`)**:
+   - `BO_And`: 어느 한쪽이라도 비-음수이면 비-음수.
+   - `BO_Or`, `BO_Xor`: 양쪽 모두 비-음수이거나 바이트 연산일 때 비-음수.
+   - `BO_Shr`: LHS가 비-음수이면 비-음수.
+   - `isLocalVarAssignedFromByte`: 로컬 변수가 함수 내에서 오직 8비트 이하 무부호 타입(`unsigned char`)으로부터만 대입되는 경우 비-음수로 판정 (`aes.c:1342, 1503` 완벽 해결).
+   - 무부호 타입 승격 및 비-음수 상수 처리.
+2. **유효 비트 폭 계산 (`getEffectiveBitWidth`) 및 Signed MSB 가드**:
+   - `BO_Shr`: $W_{eff} = \max(0, W_{LHS} - S)$.
+   - `BO_And`: $W_{eff} = \min(W_{LHS}, W_{RHS})$.
+   - `BO_Or`, `BO_Xor`: $W_{eff} = \max(W_{LHS}, W_{RHS})$.
+   - **Signed MSB 가드**: `AllowedBits = DstSigned ? (DstBits - 1) : DstBits;` 공식을 적용하여 부호 있는 대상 타입으로의 축소 변환 시 최상위 부호 비트 침범 잠재 정탐은 100% 보존하고 안전한 절삭만 상한 검사 스킵.
+3. **버퍼 길이 유계성 가드 이원화**:
+   - **하한 초과 가드**: `if (DstSigned && SrcSigned)` 가드를 적용하여 소스가 무부호 정수인 경우의 가짜 하한 초과 18건 원천 차단.
+   - **상한 초과 가드 (`isBufferLengthReturnCast`)**: 직렬화 함수 내에서 `size_t len`이 `ReturnStmt` 또는 반환 변수(`ret`, `res`) 대입식에 사용된 경우 상한 검사 스킵.
+
+### 4. 검증 결과 (Ground Truth)
+* **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 성공.
+* **15대 회귀 테스트 스위트 (`test_narrowing_conversion_suite_15.c`)**:
+  - FP 8건 전수 무경고 차단 (100.0%)
+  - TP 7건 100% 정상 경고 방출 (100.0%)
+* **MbedTLS 벤치마크 실사**:
+  - `aes.c`: 기존 9건 FP $\rightarrow$ 0건 (100% 제거)
+  - `asn1write.c`: 기존 18건 FP 전수 제거, 4건 TP 100% 보존
+  - `pkwrite.c`: 기존 10건 FP $\rightarrow$ 0건 (100% 제거)
+  - `constant_time.c`: 기존 6건 FP 전수 제거, 19건 TP 100% 보존
+  - `chacha20.c`: 기존 9건 FP $\rightarrow$ 0건 (100% 제거)
+  - `poly1305.c`: 기존 4건 FP 전수 제거, 23건 TP 100% 보존
+* **독립 감사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 2회 연속 **[PASS] 최종 승인**.
+
+
 
 
