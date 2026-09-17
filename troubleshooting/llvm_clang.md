@@ -704,4 +704,33 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 * **복합 회귀 테스트 (`test_include_charset_suite.c`)**:
   - 들여쓰기된 `#include`, 꺾쇠괄호(`<...>`), 백슬래시(`\`), 상위 경로(`..`), 연속 구분자(`//`), 표준 헤더 등 8개 시나리오 전수 통과.
 
+---
+
+## 2026-09-17: ast-exception-specification DAPA Rule 57 공식 테스트베드 동기화 및 진단 메시지 표준화
+
+### 1. 현상 (Symptom)
+* DAPA C++ 전용 6) 규칙 (Rule 57: `exception specification에 기술되지 않은 모든 throw에 대하여 예외처리를 해야만 한다`):
+  * `C:\TestCase_Root_DAPA\Rule_57_Cpp_ExceptionSpecification`의 기존 파일이 공식 매뉴얼과 달리 임의로 단순화/변형되어 있었음 (`NonCompliant.cpp`는 `throw 1.0f;` 단일행, `Compliant.cpp`는 `noexcept(false)`로 임의 변형).
+  * 공식 문서 원문은 `throw(int)` 선언 하에 `if (a > 0) throw int(); else throw float();` 분기 검사와 `try { throw float(); } catch(...) {}` 포획 방어 코드로 구성됨.
+  * C++17 이상 컴파일러에서 동적 예외 명세(`throw(int)`) 분석 시 `error: ISO C++17 does not allow dynamic exception specifications` 에러로 인한 분석 중단 위험 존재.
+
+### 2. 해결책 (Resolution)
+1. **DAPA 공식 표준 테스트베드 100% 원문 동기화**:
+   - `NonCompliant.cpp`: `void foo(int a) throw(int)` 분기문 기반 `throw int();` 통과 및 `throw float();` 위반 구조로 원문 일치.
+   - `Compliant.cpp`: `void foo(int a) throw(int)` 내부 `try { throw float(); } catch(...) {}` 방어 코드로 원문 일치.
+2. **진단 메시지 DAPA 표준 설명 반영 (`ExceptionSpecificationCheck.cpp`)**:
+   - 메시지 갱신: `"함수의 예외 명세(throw(T...))에 기술되지 않은 타입 '%0'을(를) 던지고 있습니다. (처리되지 않은 예외는 unexpected() 또는 terminate()를 호출하여 비정상 종료를 유발할 수 있습니다.)"`
+3. **C++17+ 환경 분석 호환성 보장 (`ClangTidyRunnerService.cs`)**:
+   - 기본 컴파일러 인자에 `-Wno-error=dynamic-exception-spec` 추가하여 C++17/20 최신 프로젝트에서도 동적 예외 명세 코드가 에러 없이 원활하게 정적 분석되도록 조치.
+
+### 3. 검증 결과 (Ground Truth)
+* **LLVM Clang-Tidy 빌드**: `cmake --build .\build --config Release --target clang-tidy` ➡️ **Exit Code 0** 성공.
+* **DAPA 공식 테스트베드 실측 (`C:\TestCase_Root_DAPA\Rule_57_Cpp_ExceptionSpecification`)**:
+  - `NonCompliant.cpp`:
+    - Line 3 `throw int();` ➡️ 0건 (정상 통과)
+    - Line 5:9 `throw float();` ➡️ **정확히 단독 1건 검출** (`Exit Code 0`)
+  - `Compliant.cpp`:
+    - `try { throw float(); } catch(...) {}` ➡️ **0건 무경고 클린 통과** (`Exit Code 0`)
+
+
 
