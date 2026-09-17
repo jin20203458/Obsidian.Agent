@@ -484,3 +484,47 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - 정탐 27건: 10개 파일 27건 $\rightarrow$ **27건 (100.0% 완벽 보존)**.
 * **이중 계쇄 심사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 2회 연속 **[PASS] 최종 공인**.
 
+---
+
+## 2026-09-17: NoOutOfRangeAssignmentCheck (`ast-no-out-of-range-assignment`) 무부호 정수 리터럴 음수 오인 및 이항 연산 부호 오염 오탐 25건 전수 해결
+
+### 1. 현상 (Symptom)
+* DAPA 데이터 변환 규칙 Rule 5, MISRA C:2012 Rule 10.1, CWE-190 정적 검증 시:
+  * MbedTLS 7개 핵심 암호화/해시 소스 파일(`sha256.c`, `sha512.c`, `sha1.c`, `ripemd160.c`, `xtea.c`, `md5.c` 등)에서 유효한 32/64비트 무부호 16진수 초기화 벡터(IV) 및 상수식(`0xBB67AE85`, `0xEFCDAB89`, `0x9E3779B9`, `UL64(0xBB67AE8584CAA73B)`, `delta * 32`)에 대해 `"타입 'unsigned int'의 표현 범위(0 ~ 4294967295)를 초과하는 상수값 -1150833019 을(를) 대입/초기화했습니다."`와 같은 허위 경고가 총 **25건 대량 오탐(False Positive)** 발생.
+
+### 2. 원인 (Root Cause)
+1. **리터럴 상수 평가기 부호 하드코딩 (C99 §6.4.4.1 위반)**:
+   - `evalIntWithLocals` 및 `evalOriginalValue` 내 `IntegerLiteral` 평가 시 `Out = llvm::APSInt(IL->getValue(), false);`로 `isUnsigned = false`가 하드코딩되어, MSB=1인 32/64비트 16진수 리터럴이 부호 있는 음수(`-1150833019`, `-4942790177534073029`)로 왜곡됨.
+   - `check()` 진입 후 `CVal.isSigned() && CVal.isNegative()` 조건이 참이 되어 무부호 대상 변수에 범위 초과 오탐 방출.
+2. **이항 연산자 부호 전파 논리 결함 (C99 §6.3.1.8 위반)**:
+   - `evalIntWithLocals`에서 `bool Signed = L.isSigned() || R.isSigned();`로 인해, `uint32_t delta * 32` 연산 시 리터럴 `32`가 signed라는 이유로 결과식 전체가 signed로 강제 변환되어 음수(`-957401312`) 오탐 유발.
+3. **렉서 토큰 파싱 폴백 부호성 누락**:
+   - `0x` 접두어 파싱 시 64비트 무부호 정수(`> LLONG_MAX`)를 signed로 생성하여 음수 왜곡.
+
+### 3. 해결책 (Resolution)
+1. **AST 무부호 정수 타입 반영 (`IL->getType()->isUnsignedIntegerType()`)**:
+   - `evalIntWithLocals` 및 `evalOriginalValue` 내 `IntegerLiteral` 평가 시 `Out = llvm::APSInt(IL->getValue(), IL->getType()->isUnsignedIntegerType());` 적용.
+2. **이항 연산자 AST 타입 부호성 준수 (`!BO->getType()->isUnsignedIntegerType()`)**:
+   - `evalIntWithLocals` 내 `bool Signed = !BO->getType()->isUnsignedIntegerType();`를 적용하여 C 언어 통상 산술 변환(Usual arithmetic conversions) 결과 타입 완벽 보존.
+3. **단항 마이너스 부정 시 64비트 상향 확장 (`std::max(64U, Sub.getBitWidth() + 1)`)**:
+   - 2의 보수 부호 반전 시 `INT_MIN` 오버플로우 방어 로직 완비.
+4. **렉서 폴백 64비트 정밀도 확장**:
+   - `Value > LLONG_MAX || E->getType()->isUnsignedIntegerType()` 충족 시 unsigned APSInt 생성.
+
+### 4. 검증 결과 (Ground Truth)
+* **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 성공.
+* **18대 정밀 회귀 테스트 스위트 (`test_no_out_of_range_assignment_suite_18.c`)**:
+  - TP 9건 (TC-01 ~ TC-09): 100.0% 1:1 라인 매핑 완벽 검출 (9/9건).
+  - FP 9건 (TC-10 ~ TC-18): 단 1건의 허위 경고 없이 100.0% 완벽 차단 (0 경고).
+* **MbedTLS 7개 소스 파일 벤치마크 실사**:
+  - `sha256.c`: 기존 7건 FP $\rightarrow$ **0건** (100% 제거)
+  - `sha512.c`: 기존 7건 FP $\rightarrow$ **0건** (100% 제거)
+  - `sha1.c`: 기존 3건 FP $\rightarrow$ **0건** (100% 제거)
+  - `ripemd160.c`: 기존 3건 FP $\rightarrow$ **0건** (100% 제거)
+  - `xtea.c`: 기존 3건 FP $\rightarrow$ **0건** (100% 제거)
+  - `md5.c`: 기존 2건 FP $\rightarrow$ **0건** (100% 제거)
+  - `bignum.c`: 0건 정상 유지 (Clean)
+  - **총 25건 엔진 오탐 $\rightarrow$ 0건 (100.0% 전수 박멸 달성)**.
+* **이중 계쇄 심사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 2회 연속 **[PASS] 최종 공인**.
+
+
