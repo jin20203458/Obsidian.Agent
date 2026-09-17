@@ -449,3 +449,38 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - TP-1 ~ TP-7 (7건): 8/8건 위반 100% 정탐.
   - FP-1 ~ FP-5 (5건): 0건 방출 100% 무결점 준수.
   - **12종 전수 100% 정탐 / 0% 오탐 달성**.
+
+---
+
+## 2026-09-17: PointerCvQualifierDropCheck (`ast-pointer-cv-qualifier-drop`) 포인터 비교문 내 암묵적 형변환 오탐 68건 전수 해결
+
+### 1. 현상 (Symptom)
+* DAPA 타입변환 규칙 Rule 31 (바. const 한정자 상실 방지) 및 MISRA C:2012 Rule 11.8 (Required) 정적 검증 시:
+  * MbedTLS 11개 소스 파일(`asn1parse.c`, `x509_crt.c`, `x509.c`, `bignum.c` 등)에서 단순 포인터 버퍼 경계 비교문(`if (*p != end)`, `if (*p < end)`, `if (X == Y)`)에 대해 `"포인터 캐스트로 인해 pointee의 'const'가 제거되었습니다. from 'const unsigned char *' to 'unsigned char *'."` 경고가 총 **68건 대량 오탐(False Positive)** 발생.
+
+### 2. 원인 (Root Cause)
+* C99 §6.5.9 / §6.5.8 규격에 따라 피연산자 중 한쪽만 `const`인 포인터 간 비교 연산(`==`, `!=`, `<`, `>`, `<=`, `>=`) 수행 시, Clang C 컴파일러는 주소 비교를 위한 타입 통일을 목적으로 내부적인 암묵적 비트캐스트(`ImplicitCastExpr <BitCast>`)를 AST에 자동 생성함.
+* `PointerCvQualifierDropCheck.cpp`가 `implicitCastExpr()` 매처를 등록하면서 비교 연산자 컨텍스트를 예외 처리하지 않아, 대상 메모리를 전혀 수정하지 않는 순수 읽기 전용 주소 비교문을 한정자 탈락 위반으로 오진단함.
+
+### 3. 해결책 (Resolution)
+1. **비교 연산자 컨텍스트 판별 함수 (`isInComparisonContext`) 구현**:
+   - `Ctx.getParents(*Current)` 상향 순회를 통해 `ParenExpr` 및 중첩 `ImplicitCastExpr`를 투과하고, 직계 상위 노드가 비교 연산자(`BO->isComparisonOp()`: `==`, `!=`, `<`, `>`, `<=`, `>=`, `<=>`)인지 판별.
+   - 다중 부모 순회 방어 패턴(`for (const auto &Parent : Parents)`) 및 비-비교 구문 조기 탈출 로직 완비.
+2. **`check()` 진단 진입부 암묵적 캐스트 전용 가드 배치**:
+   - `if (isa<ImplicitCastExpr>(CE) && isInComparisonContext(CE, *R.Context)) return;`
+   - 컴파일러가 자동 생성한 주소 비교용 비트캐스트만 정확히 선별 바이패스하여 68건 오탐 완전 제거.
+3. **27건 진성 규격 정탐(TP) 100% 보존**:
+   - 개발자가 명시적으로 작성한 `CStyleCastExpr`(파서 10건, 콜백 7건, 래퍼 5건, 구조체 5건)는 `isa<ImplicitCastExpr>`가 `false`이므로 100% 보존.
+   - 비교문 내부라 할지라도 명시적으로 `(char *)cp == p`를 작성한 경우 정상 정탐으로 검출.
+   - 대입, 초기화, 함수 인자 전달 등 비-비교 컨텍스트의 암묵적 캐스트 역시 정상 정탐으로 보존.
+
+### 4. 검증 결과 (Ground Truth)
+* **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 성공.
+* **15대 정밀 회귀 테스트 스위트 (`test_pointer_cv_drop_suite_15.c`)**:
+  - TP 7건 (TC-01 ~ TC-07): 100.0% 1:1 라인 매핑 완벽 검출 (7/7건).
+  - FP 8건 (TC-08 ~ TC-15): 단 1건의 허위 경고 없이 100.0% 완벽 차단 (0 경고).
+* **MbedTLS 19개 소스 파일 벤치마크 실사 (`scan_19.ps1`)**:
+  - 오탐 68건: 11개 파일 68건 $\rightarrow$ **0건 (100.0% 전수 박멸)**.
+  - 정탐 27건: 10개 파일 27건 $\rightarrow$ **27건 (100.0% 완벽 보존)**.
+* **이중 계쇄 심사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 2회 연속 **[PASS] 최종 공인**.
+
