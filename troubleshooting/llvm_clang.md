@@ -10,7 +10,13 @@ related:
 본 문서는 LLVM/Clang 커스텀 Tidy 체커 및 Static Analyzer 개발 중 발생하는 버그와 오류 해결 방법을 기록하는 문서입니다.
 
 ---
-핵심 원칙 및 방향성에도 나와있듯이 테스트케이스를 인위적으로 ARQA에 유리하게 작성하지말고 실무패턴에서 ARQA의 약점이 있으면 언제든 수정해서 업그레이드가 가능해야해.
+**테스트 케이스 및 코드 품질 원칙**
+
+- **인위적 편향 배제**: 특정 입력이나 이상적인 시나리오에만 통과하도록 테스트를 끼워 맞추지 않는다. 경계값, 비정상 입력, 극단적 예외 상황을 포함해 검증한다.
+    
+- **지속적 리팩터링 및 확장성 보장**: 결함 발견 시 임시 패치에 그치지 않고, 구조적 리팩터링을 통해 언제든 코드를 고도화할 수 있는 유연한 아키텍처를 유지한다.
+
+
 ## 2026-07-07: checkBranchCondition 콜백 내의 오탐지 (동일 조건식에 대한 참/거짓 경고 동시 발생)
 
 ### 1. 현상 (Symptom)
@@ -562,5 +568,45 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 * **심층 충돌 테스트베드 (`test_deep_collision.c`)**:
   - 두 체커 동시 구동 시 모든 라인에서 중복 발생 0건 달성 (Line 5: CFG 단독, Line 18/31/37: CSA 단독).
 
+---
 
+## 2026-09-17: path-sensitive-core.StackAddressEscape 대입 위치 ExplodedGraph 역추적 고도화 및 DAPA Rule 34 진단 위치 정밀화
 
+### 1. 현상 (Symptom)
+* DAPA Rule 34 ("지역 변수 주소값을 더 넓은 scope를 가진 변수에 할당하지 않는다") 표준 테스트베드인 `C:\TestCase_Root_DAPA\Rule_34_Ptr_LocalAddressEscape\NonCompliant.c` 분석 시:
+  * 실제 주소 대입이 일어난 Line 4 (`pi = &a;`)가 아닌, 함수의 마지막 닫는 중괄호 스코프 종료점인 Line 5 (`}`)에 경고가 발생하는 문제 발생.
+  * 과거 단순 AST 체커인 `ast-return-stack-address`의 경우 대입 연산자 위치를 가리켰으나, 정수 바이트 복사(XOR) 및 값 전달 매개변수 재할당 등에서 11건 중 11건 전수 오탐(100.0% FP)이 발생하여 영구 퇴출된 이력이 있음.
+
+### 2. 원인 (Root Cause)
+1. **CSA `checkEndFunction` 콜백의 `FunctionExitPoint` 리포팅 구조**:
+   - `StackAddrEscapeChecker.cpp`는 함수 종료 시점(`checkEndFunction`)에 스토어 바인딩을 전수 검사(`HandleBinding`)하여 전역/정적 변수에 여전히 현재 프레임의 스택 메모리가 참조되고 있는지 여부를 완벽하게 판정(0-FP 보장).
+   - 그러나 이때 생성되는 에러 노드 `N = Ctx.generateNonFatalErrorNode(State);`의 프로그램 포인트가 `FunctionExitPoint`이므로, `PathSensitiveBugReport` 생성 시 위치 계산기(`BugReporter.cpp`의 `createDeclEnd`)에 의해 함수의 맨 마지막 닫는 중괄호(`}`) 위치가 메인 진단 위치로 설정됨.
+
+### 3. 해결책 (Resolution)
+1. **ExplodedGraph 역추적을 통한 대입 노드(`ReportNode`) 탐색 구현 (`StackAddrEscapeChecker.cpp`)**:
+   - `checkEndFunction` 내에서 검출된 전역/정적 수신체 `Referrer`(`P.first->getBaseRegion()`)와 탈출된 스택 메모리 `Referred`(`P.second`) 정보를 활용.
+   - `ErrorNode(N)`로부터 역방향 조상 노드(`Curr = Curr->getFirstPred()`)를 탐색하며, 실제 대입이 수행된 `PostStmt<BinaryOperator>` 노드를 정밀 식별:
+     - **RHS 검증**: 심볼릭 `CurState->getSVal(BO->getRHS(), LCtx)`의 기저 리전이 `Referred`와 일치하거나, AST 단에서 `&local`의 `DeclRefExpr`이 `Referred`의 `VarDecl`과 일치하는지 확인.
+     - **LHS 검증**: 심볼릭 `CurState->getSVal(BO->getLHS(), LCtx)`의 기저 리전이 `Referrer`와 일치하거나, AST 단에서 구조체 멤버(`MemberExpr`)나 배열 인덱스(`ArraySubscriptExpr`)를 거슬러 올라간 기저 변수가 `Referrer`의 `VarDecl`과 일치하는지 확인.
+   - RHS와 LHS 조건이 모두 부합하는 최초의 조상 대입 노드를 `ReportNode`로 확정하고, `PathSensitiveBugReport`의 앵커 노드로 전달하여 대입 연산자(`=`)의 정확한 라인과 컬럼을 지목하도록 개선.
+   - 만일 역추적 과정에서 매칭 노드를 찾지 못할 경우 기존의 안전한 종료 노드 `N`으로 자동 폴백(Graceful Fallback)되도록 방어 로직 완비.
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM Clang-Tidy 빌드**: `cmake --build .\build --config Release --target clang-tidy` ➡️ **Exit Code 0** 성공.
+* **DAPA 표준 Rule 34 테스트베드**:
+  - `NonCompliant.c`: 기존 Line 5 (`}`) 대신 **Line 4:8 (`pi = &a;`) 대입 연산자 위치 100% 정밀 지목** 확인.
+  - `Compliant.c`: 0건 무경고 클린 통과.
+* **12대 실전 전수 회귀 테스트베드 (`test_stack_address_escape_suite_12.c`)**:
+  - TC-01 (전역 포인터 대입, Line 15): Line 15:10 (`=`) 정확 검출.
+  - TC-02 (static 포인터 대입, Line 22): Line 22:11 (`=`) 정확 검출.
+  - TC-03 (구조체 포인터 멤버 대입, Line 28): Line 28:15 (`=`) 정확 검출.
+  - TC-04 (포인터 배열 요소 대입, Line 34): Line 34:14 (`=`) 정확 검출.
+  - TC-05 (if 조건 분기 대입, Line 41): Line 41:14 (`=`) 정확 검출.
+  - TC-06 (함수 종료 전 NULL 재할당): **0건 무경고** (정상 방어).
+  - TC-07 (값 전달 매개변수 재할당): **0건 무경고** (과거 AST 체커 오탐 패턴 방어).
+  - TC-08 (배열 바이트 XOR 값 복사): **0건 무경고** (과거 AST 체커 오탐 패턴 방어).
+  - TC-09 (힙 메모리 동적 할당): **0건 무경고** (정상 방어).
+  - TC-10 (중첩 블록 로컬 변수 탈출, Line 79): Line 79:14 (`=`) 정확 검출.
+  - TC-11 (조기 리턴 경로 탈출, Line 87): Line 87:14 (`=`) 정확 검출.
+  - TC-12 (매개변수 주소 탈출, Line 95): Line 95:10 (`=`) 정확 검출.
+  - **총 14개 테스트 케이스 전수 통과 (100.0% 위치 정확도 및 0.0% 오탐 달성)**.
