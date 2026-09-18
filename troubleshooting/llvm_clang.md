@@ -822,5 +822,39 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - `gcm.c`, `ssl_tls.c`, `bignum.c`, `ecp.c`, `hkdf.c`, `md.c`: **0건 경고 (기존 11건 전수 오탐 100% 박멸)**.
 * **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
 
+---
+
+## 2026-09-18: path-sensitive-arqa.ArrayBound 구조체 배열 센티널 오탐 3건 제거 및 상위 버퍼 크기 불일치 트레이드오프 선보고
+
+### 1. 현상 (Symptom)
+* DAPA 포인터 및 배열 규칙 6조, MISRA C:2012 Rule 18.1, CWE-119 검증용 체커인 `path-sensitive-arqa.ArrayBound`를 MbedTLS 벤치마크에 적용 시, 총 5건의 진단이 검출되었으나 실측 결과 두 가지 상이한 패턴으로 분리됨:
+  1. **전역 상수 구조체 배열의 종료 센티널 미인식 오탐 (3건)**: `oid.c:313, 599, 756`에서 OID 디스크립터 배열의 마지막 요소에 위치한 `{ NULL, 0, NULL, NULL }` 센티널을 엔진이 `0(NULL)`으로 평가하지 못하고 `UnknownVal`로 처리하여, 루프가 1회 더 순회하면서 배열 경계를 초과해 가상 경로(Infeasible Path)를 탐색함.
+  2. **상위 호출자 버퍼 크기 불일치에 따른 경고 방출 (2건)**: `sha512.c:407`에서 `ssl_tls.c:3315` 및 `1914`로부터 48바이트 버퍼(`padbuf[48]`, `session_hash[48]`)를 넘겨받은 `mbedtls_sha512_finish_ret`가 `if (!truncated)` 분기로 64바이트까지 쓰기를 수행함. MbedTLS 개발자도 GCC 11.1의 `-Wstringop-overflow` 버퍼 초과 경고를 피하지 못해 `#pragma GCC diagnostic ignored "-Wstringop-overflow"`로 억제한 코드임.
+
+### 2. 원인 (Root Cause)
+* **패턴 1**: Clang Static Analyzer의 `RegionStoreManager::getBindingForField`(`RegionStore.cpp`)가 `superR`이 단일 변수인 `VarRegion`(`s.field`)인 경우에만 `InitListExpr` 상수 폴딩을 지원하고, `superR`이 `ElementRegion`(`arr[i].field`)인 경우는 상수 조회를 수행하지 않고 `UnknownVal`을 반환함.
+* **패턴 2**: 함수 포인터 간접 호출로 인해 상위 호출자 컨텍스트(`is384 == 1`)가 하위 함수 진입점에 전달되지 않아 정적 분석의 튜링 결정 불완전성에 직면함. 이를 체커 레벨에서 무리하게 억제할 경우, 작은 버퍼를 넘겨 발생하는 모든 진성 CWE-119 버퍼 오버플로우가 전수 침묵(치명적 미탐, FN)되는 파급효과 발생.
+
+### 3. 해결책 (Resolution)
+1. **`RegionStore.cpp` 구조체 배열 및 중첩 레코드 상수 폴딩 구현 (패턴 1)**:
+   - `superR` 체인을 역추적(`ReversePath`)하여 기저 `VarRegion`과 `ElementRegion`/`FieldRegion`의 인덱스 경로를 추출하는 `PathStep` 파이프라인 도입.
+   - `VarDecl`의 `InitListExpr`로부터 요소 및 필드 인덱스를 계층적으로 순회하여 상수를 평가하는 `getConstantValueFromInitializerPath` 구현.
+   - 센티널 필드가 `ConcreteInt(0)`으로 정확히 바인딩되어 루프가 즉시 정상 종료됨.
+2. **트레이드오프 선보고 및 구조적 한계 공인 (패턴 2)**:
+   - `번외_체커_오류_수정_워크플로우_템플릿.md` v1.2.0 제6장 2절에 의거 선보고를 수행하고, 인간 아키텍트의 승인을 받아 엔진의 버퍼 오버플로우 검출력을 100% 보존(0% FN)하기 위해 사양서에 '구조적 잔류 한계(Known Limitation)'로 공인 기록.
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM 컴파일 빌드**: `clang.exe`, `clang-tidy.exe` Release 타겟 **Exit Code 0** 성공.
+* **10대 단위 회귀 테스트 스위트 (`test_array_bound_suite_10.c`)**:
+  - TP 5건 (TC-01 ~ TC-05): **100% 정상 경고 방출** (Line 10, 17, 28, 35, 43).
+  - FP 5건 (TC-06 ~ TC-10): **0건 무경고 클린 통과** (100% 차단).
+* **MbedTLS 실전 벤치마크 실측**:
+  - `oid.c`: 기존 3건 오탐 ➡️ **수정 후 0건 완전 소멸 (오탐 제거율 100%)**.
+* **DAPA 국방 공식 검증 스위트 (`CWE-119`)**:
+  - `NonCompliant.c`: Line 3 `arr[10]` TP 100% 정확 지목.
+  - `Compliant.c`: 0건 무경고 클린 통과.
+* **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
+
+
 
 
