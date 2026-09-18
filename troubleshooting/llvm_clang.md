@@ -778,5 +778,49 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - `Compliant.c`: 경고 0건 클린 통과.
 * **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
 
+---
+
+## 2026-09-18: StackAddressEscape 체커 내 호출자 출력 매개변수/힙/this 미탐 및 단언문 크래시 해결
+
+### 1. 현상 (Symptom)
+* DAPA 포인터 및 배열 규칙 Rule 34/Rule 35, MISRA C:2012 Rule 18.6, CWE-562 검증용 체커인 `path-sensitive-core.StackAddressEscape`(`StackAddrEscapeChecker.cpp`)에서 스택 주소 유출 패턴 중 가장 빈번한 3대 시나리오에 대해 진단을 내리지 못하는 **진성 엔진 미탐 (False Negative 100%)** 현상 발생:
+  1. **호출자 이중 포인터 출력 매개변수 (`*out = &local`)**: 독립 최상위 함수 분석 시 미탐.
+  2. **호출자 구조체 포인터 멤버 (`ctx->ptr = &local`)**: 미탐.
+  3. **동적 할당 힙 메모리 (`heap_obj->ptr = &local`)**: 미탐.
+  4. **C++ `this` 객체 멤버 (`this->ptr = &local`)**: 미탐.
+  5. **단언문 크래시(Assert Crash)**: `assert(isa<StackSpaceRegion>(Space))` 및 `assert(ReferrerVar && "We should have a VarRegion here")`로 인해 `VarRegion`이 아닌 기저 영역 유입 시 디버그 빌드 크래시 또는 릴리스 빌드 무음 경고 누락.
+
+### 2. 원인 (Root Cause)
+* 업스트림 LLVM의 `HandleBinding`이 `if (!isa<GlobalsSpaceRegion>(Region->getMemorySpace())) return true;` 단일 검사만 수행하여 `UnknownSpaceRegion`(`SymbolicRegion`) 및 `HeapSpaceRegion`을 무조건 누락함.
+* 최상위 함수 분석 시 호출자 파라미터(`out`, `ctx`)는 함수 종료 직전 `SymbolReaper`에 의해 데드 심볼로 간주되어 `removeDeadBindings` 단계에서 `RegionStore` 바인딩이 조기 소멸됨.
+* 결과적으로 `checkEndFunction` 시점에 `iterBindings`를 돌려도 심볼릭 바인딩이 남아있지 않아 탈출을 감지할 수 없음.
+
+### 3. 해결책 (Resolution)
+1. **`check::Bind`와 `ProgramState` GDM 연동 (`EscapedStackMap`)**:
+   - `REGISTER_MAP_WITH_PROGRAMSTATE(EscapedStackMap, const MemRegion *, EscapedStackInfo)` 도입.
+   - `checkBind` 콜백에서 대입 발생 즉시 탈출 대상(`isEscapingStorage`) 여부를 판별하여 GDM에 실시간 기록. 데드 심볼 수거에 영향을 받지 않고 함수 종료 시점까지 상태 보존.
+   - 비-스택 값(예: `NULL`)으로 덮어써질 경우 `State->remove<EscapedStackMap>(LocReg)`로 탈출 상태를 즉시 해제하여 TC-15(종료 전 복구 관용구)의 0-FP 완벽 보존.
+2. **`isEscapingStorage` 수명주기 경계 판별**:
+   - `GlobalsSpaceRegion`, `HeapSpaceRegion`, 기저 영역이 `SymbolicRegion` 또는 `CXXThisRegion`인 경우 탈출로 판정.
+   - 현재 스택 프레임(`CurrentFrame`)에 종속된 로컬 포인터 및 값전달 매개변수(`ParamVarDecl`)는 배제하여 MbedTLS 패턴 1/2 오탐 0건 보존.
+3. **단언문 크래시 원천 차단 및 다형적 리퍼러 포맷팅**:
+   - `assert` 전면 제거 및 `FieldRegion`, `SymbolicRegion`, `VarRegion`, `CXXThisRegion` 다형적 안전 추출.
+   - 한국어 메시지 다변화: `"호출자 매개변수 '*out'"`, `"호출자 매개변수 'ctx->ptr'"`, `"동적 할당된 힙(heap) 메모리 'ptr'"`, `"현재 객체(this) 'this->ptr'"`.
+4. **이중 병합 및 중복 방지 (Deduplication)**:
+   - `checkEndFunction`에서 `EscapedStackMap`과 `StoreManager::iterBindings` 결과를 기저 영역 대조를 통해 완벽 병합.
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM 컴파일 빌드**: `clang.exe`, `clang-tidy.exe` Release 타겟 `Exit Code 0` 성공.
+* **16대 정밀 회귀 테스트 스위트 (`test_stack_address_escape_suite_16.c`)**:
+  - TP 11건 (TC-01 ~ TC-11): **100% 정상 경고 방출** (`*out = &a`, `ctx->ptr = &a`, `heap->ptr = &a` 포함).
+  - FP 5건 (TC-12 ~ TC-16): **0건 무경고 클린 (100% 차단)**.
+* **C++ 테스트 스위트 (`test_stack_address_escape_cpp.cpp`)**:
+  - `this->ptr = &a` 및 참조자 반환 정상 경고, 클린 메서드 0건 통과.
+* **DAPA 국방 공식 검증 스위트 (`Rule_34_Ptr_LocalAddressEscape`, `Rule_35_Ptr_ReturnLocalAddress`)**:
+  - Rule 34 NonCompliant (Line 4:8 지목), Rule 35 NonCompliant (Line 3:5 지목) TP 100% 보존. Compliant 각 0건 통과.
+* **MbedTLS 6대 실전 벤치마크 파일 전수 실측**:
+  - `gcm.c`, `ssl_tls.c`, `bignum.c`, `ecp.c`, `hkdf.c`, `md.c`: **0건 경고 (기존 11건 전수 오탐 100% 박멸)**.
+* **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
+
 
 
