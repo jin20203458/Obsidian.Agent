@@ -855,6 +855,42 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - `Compliant.c`: 0건 무경고 클린 통과.
 * **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
 
+---
+
+## 2026-09-18: Checker 7 (`NarrowingConversion`) & Checker 18 (`UninitializedAddressToConstParam`) 과적합 제거 및 엔진 중립성·무결점 리팩토링
+
+### 1. 현상 및 전수 감사 적발 (Symptom & Retro-Audit)
+* `00_오탐분석_마스터_계획서` 기 수정 체커 전수 감사(Retro-Audit) 결과, 특정 벤치마크 통과만을 목적으로 작성된 위험한 하드코딩 및 광범위한 진단 억제 로직 적발:
+  1. **Checker 7 (`NarrowingConversionChecker.cpp`)**: `isBufferLengthReturnCast` 함수에서 변수명이 `"len"`, `"size"`이고 대입 대상이 `"ret"`, `"res"`이거나 반환문인 경우 축소 변환(Truncation) 검사를 무조건 건너뜀.
+     - **실전 파급효과**: 64비트 크기 변수 `len = 5000000000ULL`이 32/16비트로 축소되어 상위 비트가 날아가고 버퍼 오버플로우가 발생해도, 단지 변수명이 `len`이라는 이유로 경고를 침묵하는 심각한 보안 미탐(FN, CWE-197) 발생.
+  2. **Checker 18 (`UninitializedAddressToConstParamChecker.cpp`)**: `checkBind`에서 배열이나 구조체의 단 1개 원소/필드 대입(`arr[0] = 1;`, `s.a = 1;`) 발생 시 베이스 변수 전체(`BaseR`)를 `InitializedOrEscapedVars` GDM에 등록하여 후속 검사를 전면 무력화(`Guard 3`).
+     - **실전 파급효과**: `int arr[100]; arr[0] = 1; foo(arr);` 또는 `struct Point pt; pt.x = 1; foo(&pt);`와 같이 부분 초기화된 메모리를 const 함수에 넘겨 나머지 쓰레기값을 읽게 하는 결함(DAPA Rule 15, CWE-457)을 완전히 놓치는 미탐(FN) 발생. 파라미터명 문자열 검색(`"len"`, `"size"`, `"count"`) 잔존.
+
+### 2. 해결책 (Resolution)
+1. **Checker 7 리팩토링 (`NarrowingConversionChecker.cpp`, 커밋 `bc9a50b3eb6d`)**:
+   - `isBufferLengthReturnCast` 함수 및 `SafeBufferLen` 플래그 완전 삭제 (변수명 하드코딩 100% 철거).
+   - 수학적 비트폭으로 안전성이 증명되지 않은 모든 표현식은 변수명과 관계없이 CSA 심볼릭 제약조건(`State->assume`)을 정직하게 평가하도록 정규화.
+   - `isLocalVarAssignedFromByte`의 `AssignmentVisitor`에 복합 대입(`+=`, `-=`), 증감(`++`, `--`), 주소 전달(`&`) 연산 발생 시 바이트 유계성을 무효화하는 엄밀한 방어 가드 추가.
+   - MbedTLS `asn1write.c:107` 등 함수 내에 `len <= INT_MAX` 유계 가드가 없는 코드는 규격상 합당한 축소 변환 경고를 정직하게 방출하도록 엔진 중립성 수호.
+2. **Checker 18 리팩토링 (`UninitializedAddressToConstParamChecker.cpp`, 커밋 `bc9a50b3eb6d`)**:
+   - `checkBind`에서 `Loc.getAsRegion()->getAs<VarRegion>()`으로 한정하여, 변수 전체에 직접 대입된 경우(예: `x = 42;`, `struct Point pt = pt0;`)에만 GDM에 등록.
+   - 부분 원소/필드 대입 시에는 변수 전체를 등록하지 않음으로써, `foo(&pt)` 호출 시 `FindUninitializedField`가 `pt.y`의 미초기화 상태를 정확히 적발하도록 정상화.
+   - 파라미터명 문자열 검색을 전면 삭제하고 `Parameters[...]->getType()->isIntegerType()` 및 `isZeroLen()` 심볼릭 평가로 정규화.
+
+### 3. 검증 결과 (Ground Truth)
+* **LLVM 컴파일 빌드**: `clang.exe`, `clang-tidy.exe` Release 타겟 **Exit Code 0** 성공.
+* **Checker 7 16대 회귀 테스트 (`test_narrowing_conversion_suite_16.c`)**:
+  - 과거 누락되던 TC-07 (`len`), TC-08 (`size`), TC-09 (`ret`)의 CWE-197 축소 변환 결함 100% 정상 경고 방출 (미탐 구멍 완전 소멸).
+  - TC-01~06 비트 연산, 시프트, 유계 조건식은 100% 무경고 클린 통과.
+* **Checker 18 18대 회귀 테스트 (`test_uninitialized_const_param_suite_18.c`)**:
+  - 과거 누락되던 부분 초기화 구조체(`pt.x = 1; foo(&pt);`) TC-04에서 `pt.y` 미초기화 경고 100% 정확 방출.
+  - 완전 초기화(TC-05) 및 출력 파라미터(TC-06) 등 8종 준수 케이스 100% 무경고 클린 통과.
+* **MbedTLS 실전 벤치마크**:
+  - Checker 18: `psa_crypto_mac.c:94`, `x509_crt.c:1907`, `ecdsa.c` 0건 경고 유지 확인.
+  - Checker 7: `aes.c`, `constant_time.c` 무경고 유지 확인.
+* **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
+
+
 
 
 
