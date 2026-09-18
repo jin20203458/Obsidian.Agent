@@ -927,4 +927,49 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 2. **ArqaStatic 러너 고도화 로드맵 제안**:
    - `ClangTidyRunnerService.cs`에 하드코딩된 옵션을 향후 `AnalysisProfile`(표준 모드: FP 0건 Clang 기본값 vs 심층 모드: 미탐 최소화 Deep Search)로 분리하여 UI 설정 탭에서 사용자가 분석 목적에 맞게 선택할 수 있도록 개선 권고.
 
+---
+
+## 2026-09-18: cfg-null-pointer-arithmetic 복합 논리곱(&&) Terminator 미인식 및 힙 구조체 역참조 오인 결함 해결
+
+### 1. 현상 (Symptom)
+* DAPA 포인터 및 배열 규칙 6조, MISRA C:2012 Rule 18.1 / Rule 18.4, CWE-476 / CWE-823 준수 검증용 체커인 `cfg-null-pointer-arithmetic`(`NullPointerArithmeticCheck.cpp`) 구동 시 MbedTLS 벤치마크에서 3건의 오탐(FP 100%) 검출:
+  1. `psa_crypto.c:2727:17`: `memset(&mac[operation->mac_size], ...)` ➡️ `NULL(0/nullptr) 포인터를 배열 인덱싱의 베이스로 사용할 수 없습니다.`
+  2. `ssl_msg.c:2279:39`: `ssl->handshake->cur_msg_p += cur->len;` ➡️ `NULL(0/nullptr) 포인터에 대한 산술 대입 연산은 금지됩니다.`
+  3. `ssl_msg.c:2333:39`: `ssl->handshake->cur_msg_p += cur_hs_frag_len;` ➡️ `NULL(0/nullptr) 포인터에 대한 산술 대입 연산은 금지됩니다.`
+
+### 2. 원인 (Root Cause)
+1. **복합 논리곱(`&&`) Terminator 및 재귀적 가드 누락 (패턴 1)**:
+   - `psa_crypto.c:2726`에서 `if ((mac != NULL) && (mac_size > operation->mac_size))`로 `mac != NULL`이 검증됨.
+   - 그러나 Clang CFG에서 단락 평가 수식은 terminator가 `BinaryOperator (BO_LAnd)`인 독립 블록으로 분할됨.
+   - 기존 `checkEdgeCondition`은 `IfStmt`, `WhileStmt` 등만 분기하고 `BinaryOperator` terminator를 완전히 누락함.
+   - 또한 조건식이 `BO_LAnd`일 때 서브식을 재귀 평가하지 않고 `BO_EQ`/`BO_NE`만 단순 매칭하여 `ScanState::NotFound`로 처리, 상단 `mac = NULL`로 역추적이 관통되어 오탐 방출.
+2. **구조체 필드(`FieldDecl`) 전역 오염 및 힙 역참조 루프 백에지 오인 (패턴 2)**:
+   - `getReferencedDecl`이 `MemberExpr`에 대해 `ME->getMemberDecl()` (`FieldDecl*`)을 반환하고 있었음.
+   - `FieldDecl`은 구조체 선언 내 필드의 메타 정의일 뿐 메모리 저장 위치(lvalue identity)가 아니므로 동일 타입의 모든 인스턴스가 동일 상태로 오인됨.
+   - 더욱이 `ssl->handshake->cur_msg_p`는 화살표(`->`)를 거친 간접 힙 역참조 포인터로서, 별칭 분석이 없는 intra-procedural syntactic CFG로는 건전한 추적이 불가능함.
+   - 루프 종료 시 `cur_msg = NULL; cur_msg_p = NULL;`로 루프가 탈출함에도, 루프 불변식을 연동하지 못하고 루프 백에지의 `cur_msg_p = NULL` 대입을 유효 경로로 오인함.
+
+### 3. 해결책 (Resolution)
+1. **재귀적 조건식 평가기 `evaluateEdgeGuard` 구현**:
+   - 단항 논리 부정(`!p`), 암시적 포인터-불리언 캐스트(`CK_PointerToBoolean`), 변수 자체(`if (p)`), 이항 비교(`==`, `!=`)를 불리언 대수에 맞게 정밀 평가.
+   - 복합 논리 연산자(`BO_LAnd`, `BO_LOr`)에 대해 참/거짓 분기별 건전한 상태 전파 알고리즘 구축.
+2. **CFG 논리 연산자 Terminator 지원**:
+   - `checkEdgeCondition`에서 `Term->isLogicalOp()` (`BO_LAnd`, `BO_LOr`) terminator를 처리하여 단락 평가 블록의 LHS 조건식을 추출 및 가드 연동.
+3. **`DeclRefExpr` (`VarDecl`) 전용 정규화 및 `areSameVars` 적용**:
+   - `getReferencedDecl` 및 `checkWrite`에서 `MemberExpr` 분기를 제거하고 `VarDecl` 전용으로 정규화하여 자매 체커(`NullDereferenceGuardCheck`, `NonZeroDivisorGuardCheck`)와 아키텍처 정렬.
+   - `areSameVars` 헬퍼(포인터 동일성 + 정규 선언 동일성 + 소스 위치 동일성)를 도입하여 변수 식별 무결성 확립.
+4. **미사용 레거시 함수 선언 제거**:
+   - `NullPointerArithmeticCheck.h`의 `definitelyNullFromInitUntilUse` 미구현 선언 삭제.
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 컴파일 성공.
+* **MbedTLS 실사 검증 (오탐 100% 소멸)**:
+  - `psa_crypto.c:2727`: 기존 1건 ➡️ **0건 (Clean)**
+  - `ssl_msg.c:2279, 2333`: 기존 2건 ➡️ **0건 (Clean)**
+  - MbedTLS 오탐 제거율 **100.0% (3/3건 전수 소멸)**.
+* **13종 단위 회귀 테스트 (`test_null_pointer_arithmetic_suite_13.c`)**:
+  - TP 8건(TC-01, TC-02, TC-03, TC-04, TC-05, TC-09, TC-10, TC-11) 100% 정확 방출 (검출률 100.0%).
+  - Clean 5건(TC-06, TC-07, TC-08, TC-12, TC-13) 0건 무경고 클린 통과 (0-FP 방어율 100.0%).
+* **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
+
 
