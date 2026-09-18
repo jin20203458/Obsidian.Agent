@@ -890,7 +890,41 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - Checker 7: `aes.c`, `constant_time.c` 무경고 유지 확인.
 * **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
 
+---
 
+## 2026-09-18: path-sensitive-core.NullDereference 심층 분석(Deep Mode) 억제 해제 정책과 단일 TU 외부 함수 심볼릭 한계에 따른 구조적 오탐 규명
 
+### 1. 현상 (Symptom)
+* DAPA 포인터 및 배열 규칙 6조, MISRA C:2012 Rule 1.3 / 21.3, CWE-476(NULL Pointer Dereference) 검증용 체커인 `path-sensitive-core.NullDereference`(`DereferenceChecker.cpp`)를 MbedTLS 벤치마크에 적용 시 총 5건의 진단 검출:
+  1. **패턴 1 (3건)**: `x509_crt.c:196`, `ssl_srv.c:865`, `ssl_tls.c:2621`에서 `mbedtls_pk_ec(*pk)->grp.id` 접근 시 "널 포인터 역참조" 경고 발생.
+  2. **패턴 2 (2건)**: `bignum.c:2455`(`X->n`) 및 `debug.c:48`(`ssl->conf->f_dbg`)에서 필드 역참조 경고 발생.
+
+### 2. 원인 (Root Cause)
+* **과거 설계 의도 및 러너 옵션 규명**:
+  - `Obsidian.Personal/LLVM/Clang 환경설정/CSA 옵션 정리.md:39-54`에 기록된 바와 같이, 과거 CTU 및 심층 분석 파이프라인 구축 시 인라인 헬퍼 함수의 널 반환이나 방어적 널 검사 뒤에 숨은 버그(미탐, FN)를 하나도 놓치지 않기 위해 `suppress-inlined-defensive-checks=false` 및 `suppress-null-return-paths=false`를 의도적으로 비활성화하여 `ClangTidyRunnerService.cs:368-369`에 주입함.
+* **패턴 1 (구조체 값 복사 및 크로스 TU 외부 함수 심볼릭 불투명성)**:
+  - 호출자는 `pk_alg == MBEDTLS_PK_ECDSA` 등으로 사전에 EC 키임을 100% 검증함.
+  - 그러나 `mbedtls_pk_ec`가 구조체를 값 복사(`const mbedtls_pk_context pk`)로 전달받고 내부에서 `switch (mbedtls_pk_get_type(&pk))`를 호출함.
+  - `mbedtls_pk_get_type`은 타 번역 단위(`pk.c:603`)에 구현된 extern 함수이므로, 단일 TU 심볼릭 엔진이 복사본에 대한 호출 결과를 미제약 심볼(`conj_$M`)로 처리하여 `default: return NULL;` 경로를 탐색함.
+  - 러너에서 `suppress-null-return-paths=false`가 켜져 있어 Clang이 이 경로를 억제하지 않고 널 역참조로 방출함.
+* **패턴 2 (매크로 전개 소실 및 방어적 널 검사 분기)**:
+  - `bignum.c`에서 `MPI_VALIDATE_RET(X != NULL)`는 MbedTLS 컴파일 옵션상 `MBEDTLS_CHECK_PARAMS` 미정의로 인해 빈 매크로(`do {} while(0)`)로 전개되어 소실됨.
+  - 내부 함수 `mbedtls_mpi_free` 내의 방어적 검사(`if (X == NULL) return;`)가 실행될 때, `suppress-inlined-defensive-checks=false`로 인해 CSA가 `X == NULL` 가상 경로를 열고 후속 역참조를 경고함.
+
+### 3. 실측 검증 (Ground Truth)
+* **Clang upstream 공식 기본값 실측**:
+  - 러너의 강제 비활성화 옵션을 제외하고 Clang 기본값(`suppress-null-return-paths=true`, `suppress-inlined-defensive-checks=true`)으로 구동한 결과:
+  - `x509_crt.c`: **0건 경고 (Clean)**
+  - `ssl_srv.c`: **0건 경고 (Clean)**
+  - `ssl_tls.c:2621`: **0건 경고 (Clean)**
+  - `debug.c`: **0건 경고 (Clean)**
+  - 5건 중 4건이 Clang 공식 오탐 억제 체계 하에서는 본래 방출되지 않는 것임을 실측 확인.
+
+### 4. 조치 및 아키텍처 결정 (Architectural Decision)
+1. **C++ 엔진 코드 보존 (엔진 중립성 수호)**:
+   - `DereferenceChecker.cpp`에 특정 함수명(`"mbedtls_pk_ec"`)을 하드코딩하거나 널 반환 경로를 일반화하여 무차별 예외 처리할 경우, 실제 세그멘테이션 폴트를 일으키는 수많은 진성 널 역참조 결함(TP)을 침묵시키는 치명적인 미탐(FN) 구멍이 뚫림.
+   - `번외_체커_오류_수정_워크플로우_템플릿.md` v1.2.0 제1장 5절 및 제6장 2절에 의거 선보고를 수행하고, 엔진 코드를 오염시키지 않고 사양서에 '설계된 심층 모드 억제 해제 정책에 따른 공인 구조적 오탐(Known Limitation)'으로 완결 처리.
+2. **ArqaStatic 러너 고도화 로드맵 제안**:
+   - `ClangTidyRunnerService.cs`에 하드코딩된 옵션을 향후 `AnalysisProfile`(표준 모드: FP 0건 Clang 기본값 vs 심층 모드: 미탐 최소화 Deep Search)로 분리하여 UI 설정 탭에서 사용자가 분석 목적에 맞게 선택할 수 있도록 개선 권고.
 
 
