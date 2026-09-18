@@ -732,5 +732,51 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - `Compliant.cpp`:
     - `try { throw float(); } catch(...) {}` ➡️ **0건 무경고 클린 통과** (`Exit Code 0`)
 
+---
+
+## 2026-09-18: path-sensitive-arqa.UninitializedAddressToConstParam MbedTLS 12건 전수 오탐 제거 및 GDM 경로 민감 상태 추적 구축
+
+### 1. 현상 (Symptom)
+* DAPA 선언 및 초기화 규칙 Rule 15, MISRA C:2012 Rule 9.1, CWE-457 검증용 체커인 `path-sensitive-arqa.UninitializedAddressToConstParam`을 MbedTLS 벤치마크 96개 파일에 적용 시, 총 12건의 검출이 발생하였으나 전수가 정상 초기화된 버퍼를 미초기화로 오인한 **진성 엔진 오탐 (False Positive 100%, 12/12건)**으로 확인됨.
+  1. **선행 출력 매개변수 바인딩 미추적 (8건)**: 스택 버퍼(`data`, `buf`, `key`, `iv` 등)를 선행 함수(`mbedtls_mpi_write_binary`, `mbedtls_gcm_crypt_and_tag` 등)의 비-const 포인터로 전달하여 정상 초기화하였으나, CSA의 메모리 무효화(Store Invalidation)로 인해 후속 `const` 파라미터 전달 시 `UndefinedVal`로 오인 (`ecdsa.c:448`, `gcm.c:810`, `pkcs12.c:241/266`, `pkcs5.c:236`, `pkwrite.c:155`, `psa_crypto_cipher.c:448`, `rsa.c:2585`).
+  2. **가변 길이/슬라이스 부분 초기화 및 루프 바인딩 소실 (2건)**: 최대 크기 버퍼의 유효 슬라이스만 `memset` 또는 루프 포인터(`*d++ = *c`)로 기록하고 유효 길이만큼만 읽기 함수로 전달했으나 후미 미사용 영역으로 인해 오탐 발생 (`psa_crypto_mac.c:94`, `x509_create.c:151`).
+  3. **비-역참조 포인터 비교 헬퍼 및 공용체 구조체 바인딩 소실 (2건)**:
+     - `ssl_cookie.c:119`: `mbedtls_ssl_chk_buf_ptr`는 포인터 대소 비교 및 감산만 수행하고 메모리를 전혀 역참조하지 않음에도 `const uint8_t *` 매개변수라는 이유로 오탐 발생.
+     - `x509_crt.c:1907`: `other_name` 구조체 복사 시 공용체(Union)의 비활성 필드를 순회하며 `UndefinedVal`을 반환하여 오탐 발생.
+
+### 2. 원인 (Root Cause)
+* CSA 체커가 `check::PreCall`만 등록하고 `check::Bind`, `check::PostCall`, `check::PointerEscape`를 구현하지 않아, 함수 호출 및 대입에 따른 변수의 쓰기/탈출 이력을 ProgramState 경로별로 추적하지 못함.
+* 피호출 함수 내에서 포인터를 역참조하지 않는 순수 주소 비교/연산 헬퍼 함수를 구분하지 못함.
+* 0바이트 복사/비교 API(`memcmp(buf, ..., 0)` 등) 및 인접 크기 인자가 0인 경우를 고려하지 않고 무조건 메모리 검사를 수행함.
+* `FindUninitializedField`가 공용체(Union)의 특성을 고려하지 않고 모든 필드를 필수 초기화 대상으로 취급함.
+
+### 3. 해결책 (Resolution)
+1. **`ProgramState` GDM 집합 등록**:
+   - `REGISTER_SET_WITH_PROGRAMSTATE(InitializedOrEscapedVars, const MemRegion *)` 도입.
+2. **콜백 구현 및 경로 민감 상태 전이**:
+   - `check::Bind`: 대입, 배열 인덱싱, 역참조 쓰기(`*p = 'A'`, `*d++ = *c`), 구조체 필드 대입 발생 시 기본 `VarRegion`을 GDM 집합에 등록.
+   - `check::PostCall` & `check::PointerEscape`: 비-const 포인터/참조 매개변수로 전달된 스택 지역 변수를 GDM 집합에 자동 등록.
+3. **5단계 정밀 진입 가드 (Precision Guards)**:
+   - Guard 1 (지역 자동 저장 변수): `VR->getDecl()->hasLocalStorage()`가 아니면 검사 스킵.
+   - Guard 2 (선언 시 명시적 초기화): `VR->getDecl()->getInit()` 존재 시 검사 스킵.
+   - Guard 3 (선행 변경/탈출 이력): `State->contains<InitializedOrEscapedVars>(BaseR)` 시 검사 스킵.
+   - Guard 4 (인접 0길이 인자): `memcmp`/`memcpy` 및 인접 크기 인자(`len`, `size`, `count`, `bytes`)가 0이거나 0으로 제약된 경우 검사 스킵.
+   - Guard 5 (비-역참조 포인터 비교 헬퍼): 피호출 함수 정의 내에서 매개변수가 역참조되지 않는 경우(`ParamDereferenceVisitor`) 검사 스킵.
+4. **`FindUninitializedField` 공용체 처리 완화**:
+   - `RecordDecl::isUnion()`인 경우, 적어도 1개 필드가 유효 바인딩을 가지면 미초기화 판정에서 제외.
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM 컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` 및 `clang` ➡️ **Exit Code 0** 성공.
+* **16대 정밀 회귀 테스트 스위트 (`test_uninitialized_const_param_suite_16.c`)**:
+  - 진성 규격 정탐 6건 (TC-01 ~ TC-06): **100% 정상 경고 방출**.
+  - 엔진 오탐 방어 10건 (TC-07 ~ TC-16): **0건 무경고 클린 (100% 차단)**.
+* **MbedTLS 벤치마크 11개 파일 (12개 위치) 전수 실측**:
+  - `gcm.c`, `rsa.c`, `ssl_cookie.c`, `psa_crypto_mac.c`, `x509_crt.c`, `x509_create.c`, `ecdsa.c`, `pkcs12.c`, `pkcs5.c`, `pkwrite.c`, `psa_crypto.c`, `psa_crypto_cipher.c`:
+  - **기존 12건 ➡️ 수정 후 0건 (오탐 제거율 100.0%, 잔존 오탐 0건)**.
+* **DAPA 국방 공식 검증 스위트 (`Rule_15_Init_ConstReadOnly`)**:
+  - `NonCompliant.c`: 경고 1건 정상 방출 (진성 정탐 100% 보존).
+  - `Compliant.c`: 경고 0건 클린 통과.
+* **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
+
 
 
