@@ -199,15 +199,15 @@ related:
 > * 모든 코드는 Phalanx의 보안/EDR 도메인(`ProcessEvent`, `ProcessTree`, `MitigationCommand`)에 맞추어 **새롭게 독립 구현(Clean-Room)**되어야 합니다.
 
 1. **C++ 락-스왑 큐 & 비동기 gRPC 클라이언트**:
-   * 저장소 경로: `../MundusVivens.GameServer.Cpp` (로컬 워크스페이스: `C:\Users\adg01\Documents\GitHub\MundusVivens.GameServer.Cpp`)
+   * 저장소 경로: `../MundusVivens.GameServer.Cpp`
    * **참조 범위 (Pattern Only)**: `AsyncGrpcClient.cpp`의 `agrpc::ClientRPC` + `boost::asio::co_spawn` 비동기 호출 **패턴 구조** 및 락-스왑 템플릿 알고리즘 (게임 로직 복제 금지).
 2. **C# Gemini API 호출, gRPC 수신 서비스 & 계층형 메모리**:
-   * 저장소 경로: `../MundusVivens` (로컬 워크스페이스: `C:\Users\adg01\Documents\GitHub\MundusVivens`)
+   * 저장소 경로: `../MundusVivens`
    * **참조 범위 (Pattern Only)**:
      - `GeminiApiService.cs`: Google Gemini REST API 호출, JSON 모드 강제, 토큰 로깅 및 오류 핸들링 **통신 패턴**.
      - `Grpc.AspNetCore` 양방향 스트리밍 수신 파이프라인 및 `Channel<T>` 기반 백그라운드 LiteDB 비동기 쓰기(Write-Behind) **패턴** (게임 세이브/에이전트 모델 복제 금지).
 3. **AI 실시간 사고(Thinking) 스트리밍 타이포그래피**:
-   * 저장소 경로: `../GRC` (로컬 워크스페이스: `C:\Users\adg01\Documents\GitHub\GRC`)
+   * 저장소 경로: `../GRC`
    * **참조 범위 (Tokens Only)**: `GRC/Themes/ModernStyles.xaml`의 폰트 크기, 행간, 이탤릭 슬레이트 블루(`#A2B9D8`) 등 **순수 텍스트 스타일 정의** (롤플레잉 시나리오/뷰모델 복제 금지).
 4. **엔터프라이즈 대시보드 레이아웃 & 캡슐 버튼 스타일**:
     * 참조 에셋: `ArqaStatic/Themes/DarkTheme.xaml` (엔터프라이즈 WPF UI 디자인 에셋)

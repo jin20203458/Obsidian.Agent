@@ -183,14 +183,14 @@ gantt
 ### A. 실험 목적 및 통제 조건
 * **실험 목적**: C# `AutonomousHunterAgent`가 의심 프로세스 동결 상태에서 Gemini LLM 및 로컬 포렌식 도구를 연동하여 침해 조사를 수행하고 최종 처분(`ACTION_KILL`)을 집행하는 과정에서, 3대 LLM 통신 아키텍처 패러다임의 실시간 성능 및 신뢰성을 비교 검증.
 * **실험 환경**:
-  * **타깃 모델**: Google Cloud Vertex AI `gemini-3.8-flash` (`global` 엔드포인트)
+  * **타깃 모델**: Google Cloud Vertex AI `gemini-3.7-flash` (`global` 엔드포인트)
   * **인증 인프라**: Google Cloud Service Account (`grc0-494913`), OAuth 2.0 Bearer Token 통신
   * **타깃 침해 시나리오**: `winword.exe`(PID: 3104) ➔ `powershell.exe -NoProfile -ExecutionPolicy Bypass -enc <Base64>`(PID: 8492) 난독화 다운로더 C2 인입 및 `LifecycleSuspended` 상태
   * **실행 규모**: 3대 아키텍처 각 10회 연속 실행 (총 30회 세션, 40여 회 클라우드 호출 실측)
 
 ### B. 3대 LLM 아키텍처 실측 결과표 (Ground Truth)
 
-| 평가 메트릭 (gemini-3.8-flash 10회 실측) | 방식 1 (One-Shot ReAct JSON) | 방식 2 (OpenAPI responseSchema) | 방식 3 (Native Function Calling / MCP) |
+| 평가 메트릭 (gemini-3.7-flash 10회 실측) | 방식 1 (One-Shot ReAct JSON) | 방식 2 (OpenAPI responseSchema) | 방식 3 (Native Function Calling / MCP) |
 | :--- | :---: | :---: | :---: |
 | **API 정상 응답 시 파싱/실행 성공률** | **100.0% (7/7)** | 100.0% (6/6) | 0.0% (0/10, 머신 Enum 미반환) |
 | **클라우드 쿼터(HTTP 429) 포함 성공률** | **70.0% (7/10)** | 60.0% (6/10) | 60.0% (6/10 완료, 4건 타임아웃/429) |
@@ -241,7 +241,7 @@ gantt
 
 ---
 
-## 7. [Phase 3.5] 10대 엔터프라이즈 실무 시나리오 실시간 벤치마크 (Gemini 3.7 Flash Live)
+## 8. [Phase 3.5] 10대 엔터프라이즈 실무 시나리오 실시간 벤치마크 (Gemini 3.7 Flash Live)
 
 ### A. 실험 목적 및 조건
 * **실험 목적**: 실제 클라우드 인프라(Google Cloud Vertex AI, Gemini 3.7 Flash)와 연동하여, 엔터프라이즈 실무 환경에서 발생하는 악성 침해 공격 6종 및 정상 관리자 스크립트 4종(총 10종)을 대상으로 자율 ReAct 수사의 소요 턴 수, 종단간 지연시간, 오탐/미탐 여부 및 판결 정확도를 실측 검증.
@@ -275,7 +275,7 @@ gantt
 
 ---
 
-## 8. [Phase 3.5] 복합 회피 공격(Masquerading) 5턴 심층 수사 및 도구 결핍 분석
+## 9. [Phase 3.5] 복합 회피 공격(Masquerading) 5턴 심층 수사 및 도구 결핍 분석
 
 ### A. 실험 목적 및 회피 시나리오 구성
 * **목적**: 단독 IoC(블랙리스트 IP)로 조기 종료할 수 없는 복합 회피 공격 환경에서, 에이전트가 3턴 이상의 다단계 심층 조사를 자율 전개하는지 및 수사 한계/도구 결핍 지점 실측.
