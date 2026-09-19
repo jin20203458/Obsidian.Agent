@@ -24,9 +24,9 @@ related:
 
 ---
 
-## 2. 핵심 아키텍처 불변식 (Invariants - 위반 금지 규칙)
+## 2. 핵심 아키텍처 불변식 및 코드베이스 매핑 (Architectural Invariants & Code Mapping)
 
-후속 작업을 수행하는 에이전트는 아래 5대 불변식을 반드시 준수해야 합니다:
+최상위 상시 행동 수칙인 [`.agents/AGENTS.md`](file:///c:/Users/adg01/Documents/GitHub/Phalanx/.agents/AGENTS.md)의 핵심 규칙들을 실제 코드베이스에서 안전하게 계승하기 위해, 후속 에이전트는 아래 5대 불변식의 구현 메커니즘과 세부 매핑 위치를 준수해야 합니다:
 
 1. **AI 수사관 단일 진실 공급원 (SSOT Decision Authority)**:
    * ReAct 루프가 정상 종결(`reachedFinal == true && hasValidAction`)된 경우, Gemini 모델의 `VerdictAction`(`ACTION_KILL` vs `ACTION_RESUME`)은 절대적 최상위 결정권을 가집니다.
@@ -44,7 +44,7 @@ related:
    * 관리자 권한(`High Integrity`)으로 기동된 C++ 센서는 일반 권한(`Medium Integrity`)의 C#에서 OS 레벨 강제 종료가 거부될 수 있습니다.
    * 종료 시에는 반드시 (1) gRPC `PHALANX_SENSOR_SHUTDOWN` 역전송, (2) Win32 `Local\PhalanxSensorShutdownEvent` 시그널링, (3) `sensorProcess.WaitForExit(3000)` 순서를 유지한 후 Kestrel gRPC 서버를 폐쇄하십시오.
 5. **모던 상용 EDR 룩앤필 (0 Emojis Policy)**:
-   * 관제 GUI 화면(XAML) 및 뷰모델에 이모티콘(🤖, 🔴, 🛡️ 등)을 사용하지 마십시오. 순수 XAML 벡터 지오메트리(`IconShield`, `IconTerminal`, `IconKill` 등)와 Obsidian 다크 팔레트 토큰만을 사용합니다.
+   * 관제 GUI 화면(XAML) 및 뷰모델에 유니코드 이모티콘을 일절 사용하지 마십시오. 순수 XAML 벡터 지오메트리(`IconShield`, `IconTerminal`, `IconKill` 등)와 Obsidian 다크 팔레트 토큰만을 사용합니다.
 
 ---
 
@@ -95,26 +95,22 @@ Phalanx는 타 저장소(예: MundusVivens)에 대한 런타임 의존성 없이
 2. **Phalanx 자체 로컬 Config**: 환경 변수 미지정 시 `src/Phalanx.Cockpit/Config/google-credentials.json` 및 `src/Phalanx.Cockpit/AppSettings.json`에서 자체 프로젝트/서비스 계정 정보 탐색.
 3. **보안 규칙**: `google-credentials.json` 및 `AppSettings.json`은 `.gitignore`에 등록되어 엄격히 커밋에서 제외됨.
 
-### 4.2 빌드 및 검증 명령어 (Mandatory Verification Suite)
+### 4.2 검증 체계 및 특화 테스트 가이드 (Verification Suite & Live Guidelines)
 
-모든 작업 완료 후 보고 전 반드시 아래 명령을 실행하여 **Exit Code 0**을 실사하십시오:
+기본적인 상시 빌드 및 테스트 명령어(C# 빌드, 단위 테스트, C++ 빌드, 풀체인 E2E)는 최상위 규격인 [`.agents/AGENTS.md`](file:///c:/Users/adg01/Documents/GitHub/Phalanx/.agents/AGENTS.md)의 `<critical_rules>`에 단일 진실(SSOT)로 정의되어 있습니다.
 
-```powershell
-# 1. C# 전체 프로젝트 빌드 (오류 0개, 경고 0개 확인)
-dotnet build Phalanx.sln
+인수인계 시 실제 클라우드 AI 인프라 연동을 포함한 전체 검증 절차는 아래 특화 지침을 따릅니다:
 
-# 2. C# 순수 단위 테스트 실행 (25개 전원 통과 확인, ~1초)
-dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"
+1. **상시 의무 검증 (Mandatory QA - 오프라인)**:
+   * `dotnet build Phalanx.sln`: C# 컴파일 오류 및 경고 0개 확인.
+   * `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"`: 25개 순수 단위 테스트 통과 확인 (~1초).
+   * `powershell -ExecutionPolicy Bypass -File .\build.ps1`: C++ 네이티브 센서/엔진 빌드.
+   * `powershell -ExecutionPolicy Bypass -File .\scripts\run_fullchain_test.ps1`: 5대 풀체인 E2E 크로스 랭귀지 통합 검증.
 
-# 3. Google Cloud Vertex AI 실시간 Live 연동 테스트 (선택적: 인증 정보 세팅 시)
-dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Live"
-
-# 4. C++ 네이티브 프로젝트 빌드
-powershell -ExecutionPolicy Bypass -File .\build.ps1
-
-# 5. 5대 풀체인 E2E 통합 검증 스위트 실행 (전 단계 통과 확인)
-powershell -ExecutionPolicy Bypass -File .\scripts\run_fullchain_test.ps1
-```
+2. **클라우드 Vertex AI 실시간 연동 검증 (Live AI Benchmark)**:
+   * 실행 명령어: `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Live"`
+   * **실행 전제 조건**: `GOOGLE_APPLICATION_CREDENTIALS` 환경 변수 또는 `src/Phalanx.Cockpit/Config/google-credentials.json`이 유효해야 합니다.
+   * **실측 검증 대상**: 실제 Gemini 3.7 Flash 모델에 10대 실무 프로세스(악성 6종 + 정상 4종) 침해 수사를 실시간 요청하여 턴 수(평균 2.40턴), 레이턴시, `ACTION_KILL`/`ACTION_RESUME` 판정 무결성을 현장 실사합니다.
 
 ---
 
