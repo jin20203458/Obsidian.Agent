@@ -55,7 +55,7 @@ flowchart TD
 * **진짜 멀티턴 상호작용 (True Multi-Turn ReAct)**:
   * 1턴 조기 판결(One-Shot Guess) 숏컷을 원천 차단하고, LLM이 도구 실행 결과를 실제로 관찰(Observation)한 후 결론을 내리도록 대화 히스토리(`List<Content>`) 핑퐁을 유지합니다.
 * **세이프티 워치독 SLA 계약 및 레이스 컨디션 방어**:
-  * C++ `SafetyWatchdog`는 기본 10초(10,000ms) 안전 타임아웃을 적용하며, 로컬 규칙 엔진 판정(평균 23μs / 실측 354ns) 시에는 연장 없이 크래시 대비 10초 복구를 보장합니다.
+  * C++ `SafetyWatchdog`는 기본 10초(10,000ms) 안전 타임아웃을 적용하며, C# 오프라인 결정론적 수사 엔진(실측 23.1ms) 동작 시에는 타임아웃 연장 없이 기본 10초 내에 즉시 완결되어 데드락 복구를 보장합니다 (C++ 로컬 룰 엔진은 0.354μs 만에 사전 선제 조치 완료).
   * 외부 LLM(Gemini) 심층 수사 진입 시 다중 왕복 통신 지연을 수용하기 위해 즉시 1회성 `ACTION_EXTEND_TIMEOUT`(+50,000ms) 티켓을 선제 발송하여 총 60초 예산을 확보합니다 ([SafetyWatchdog.h:55](../../../Phalanx/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h#L55), [AutonomousHunterAgent.cs:120-125](../../../Phalanx/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs#L120-L125)).
   * C++ 워치독 자동 동결 해제(Auto-Resume)와의 데드락/좀비 프로세스 레이스 컨디션을 원천 차단하기 위해 C# 상위 타임아웃 CTS는 **50초(50,000ms)**로 설정하여 워치독 만료 10초 전 안전 마진을 보장합니다 (`troubleshooting/phalanx.md:43`).
 * **루프 한계 도달 시 Fail-Secure 정책**:
@@ -73,14 +73,14 @@ flowchart TD
 | :--- | :--- | :--- | :--- | :--- |
 | `DecodePayloadTool` | `string encodedCommand` | Base64, Hex 등 다단계 난독화 인자 재귀적 디코딩 | 원본 텍스트 스크립트 및 URL 목록 | [DecodePayloadTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/DecodePayloadTool.cs) |
 | `ProcessMemoryScanTool` | `uint32 targetPid` | 타깃 RAM 가상 메모리(`ReadProcessMemory`) 정규식/YARA 스캔 | 발견된 C2 도메인, IP, 특이 문자열 | [ProcessMemoryScanTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/ProcessMemoryScanTool.cs) |
-| `ThreatReputationTool` | `string targetIndicator` | 로컬 SQLite IoC 해시 및 악성 IP/도메인 블랙리스트 조회 | 평판 점수 (0~100) 및 알려진 악성 그룹명 | [ThreatReputationTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/ThreatReputationTool.cs) |
+| `ThreatReputationTool` | `string targetIndicator` | 로컬 내장 위협 인텔리전스 IoC 캐시 및 악성 IP/도메인 블랙리스트 조회 | 평판 점수 (0~100) 및 알려진 악성 그룹명 | [ThreatReputationTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/ThreatReputationTool.cs) |
 | `MitreClassifierTool` | `string observedBehavior` | 관찰된 행위 문자열을 MITRE ATT&CK Matrix 기법(ID)으로 자동 매핑 | `T1059.001`, `T1566` 등의 기법 코드 및 설명 | [MitreClassifierTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/MitreClassifierTool.cs) |
 | `SystemFirewallTool` | `string maliciousIp` | Windows Filtering Platform(WFP) 또는 Netsh 명령으로 해당 IP 인/아웃바운드 즉시 차단 | 차단 성공 여부 (bool) | [SystemFirewallTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/SystemFirewallTool.cs) |
 
 > **설계 원칙 및 구현 완료 상태 (Implementation Status)**:
 > * 본 문서는 에이전트와 도구 간의 상위 인터페이스 규격을 정의하며, 5대 OS 수사 도구는 Phase 3에서 독립 구현 및 단위 검증(`InvestigationToolsTests`, Exit Code 0)이 완료되었습니다.
 > * 각 도구는 다단계 디코딩 재귀 종료 조건(최대 5회, 512KB 상한 Zip Bomb 방어), `ReadProcessMemory` 기반 VAD 스캔, 로컬 위협 DB 캐시, WFP 방화벽 로컬호스트 차단 방지 가드를 갖추고 있습니다.
-> * **추론 레이턴시 특성**: 대부분의 명확한 위협은 1~2회 반복 이내에 확신도 90%에 도달하여 약 2~3초 내에 종결되며, 고도화된 다단계 난독화 분석(최대 5회 순환) 시에는 5~8초의 심층 분석 시간이 소요될 수 있습니다.
+> * **추론 레이턴시 특성**: 실측 벤치마크 기준 전형적 2턴 조기 종결 시나리오는 약 7~10초, 10대 실무 시나리오 평균(2.4턴) 완결은 12.57초가 소요되며, 복합 회피 공격의 5턴 심층 수사 완주 시에는 36.5초가 소요됩니다 (C# 상위 타임아웃 50초 SLA 예산 내 안전 완결).
 
 ---
 
