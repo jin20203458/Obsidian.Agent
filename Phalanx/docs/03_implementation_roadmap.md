@@ -18,9 +18,9 @@ related:
 
 ```
 [ Phase 1: Kernel Sensor & Telemetry ] ──▶ [ Phase 1.5: Atomic Freeze ] ──▶ [ Phase 2: In-Memory DAG & Rules ] ──▶ [ Phase 2.5: Defense Profiling Benchmark ] ──▶ [ Phase 3: AI Agent & Forensic Tools ] ──▶ [ Phase 3.5: Full-Chain E2E & Local FSM ] ──▶ [ Phase 4: Cockpit & Presentation ]
-  • ETW 커널 수집 루프 (완료)   • NtSuspendProcess 동결 (완료)  • C++ 인메모리 프로세스 트리 (완료)   • 스크립트 150ms 웜업 vs 0.1ms 차단 (완료)    • Gemini ReAct 루프 (완료)                • C++ ➔ C# ➔ C++ 폐루프 E2E 실증          • ModernWpfUI 다크 대시보드
-  • 락-스왑 무손실 버퍼 (완료)  • Toolhelp32 폴백 (완료)        • 로컬 룰 판정 (< 100μs) (완료)       • 네이티브 바이너리 2ms 실행 누수 계측 (완료) • 상용 1티어 5대 OS 도구 (완료)          • 로컬 FSM & 위험도 가중치 스코어링       • 인터랙티브 프로세스 트리 Canvas
-  • ACTION_SUSPEND 대칭 (완료)  • 10초 세이프티 워치독 (완료)   • 0.1ms 현장 사살 & 24μs 동결 (완료)  • Canary 누수 0 Bytes 실증 (완료)          • 10s/50s SLA 연장 안전망 (완료)         • 정상 관리 족보 화이트리스트 가드        • QuestPDF 포렌식 리포트 출력
+  • ETW 커널 수집 루프 (완료)   • NtSuspendProcess 동결 (완료)  • C++ 인메모리 프로세스 트리 (완료)   • 스크립트 150ms 웜업 vs 0.1ms 차단 (완료)    • Gemini ReAct 루프 (완료)                • C++ ➔ C# ➔ C++ 폐루프 E2E 실증 (완료)    • ModernWpfUI 다크 대시보드
+  • 락-스왑 무손실 버퍼 (완료)  • Toolhelp32 폴백 (완료)        • 로컬 룰 판정 (< 100μs) (완료)       • 네이티브 바이너리 2ms 실행 누수 계측 (완료) • 상용 1티어 5대 OS 도구 (완료)          • 로컬 FSM & 위험도 가중치 스코어링 (완료) • 인터랙티브 프로세스 트리 Canvas
+  • ACTION_SUSPEND 대칭 (완료)  • 10초 세이프티 워치독 (완료)   • 0.1ms 현장 사살 & 24μs 동결 (완료)  • Canary 누수 0 Bytes 실증 (완료)          • 10s/50s SLA 연장 안전망 (완료)         • 정상 관리 족보 화이트리스트 가드 (완료)  • QuestPDF 포렌식 리포트 출력
 ```
 
 ---
@@ -130,7 +130,7 @@ related:
 
 ---
 
-### Phase 3.5: 풀체인 E2E 실증 및 로컬 FSM 의사결정 고도화 (Full-Chain E2E & Local FSM Decision Engine)
+### Phase 3.5: 풀체인 E2E 실증 및 로컬 FSM 의사결정 고도화 (Full-Chain E2E & Local FSM Decision Engine) [완료]
 * **목표**: C++ 커널 센서와 C# 관제 콕핏/AI 헌터를 실제 런타임 환경에서 결합하여 C++ ➔ C# ➔ C++ 폐루프(Closed-Loop) 전체 방어 서사를 자동 검증하고, 인터넷/LLM 단절 시 발동되는 로컬 오프라인 수사 엔진을 단순 키워드 매칭에서 상태 머신(FSM) 및 가중치 스코어링 모델로 격상하여 오탐을 원천 차단.
 * **주요 개발 내용**:
   * **[태스크 1] C++ ➔ C# ➔ C++ 풀체인 라이브 통합 시스템 테스트 구축 (최우선)**:
