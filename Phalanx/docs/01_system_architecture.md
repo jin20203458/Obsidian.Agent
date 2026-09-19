@@ -31,17 +31,19 @@ flowchart TD
         ETW_Net --> Krabs
         ETW_Img --> Krabs
         
-        Krabs --> IngestQueue["Double-Buffered Swap Queue (Lock-Swap)"]
-        IngestQueue --> ProcTree["In-Memory Process Tree DAG (O(1) Hash Map)"]
+        Krabs --> ProcTree["In-Memory Process Tree DAG (O(1) Hash Map)"]
         ProcTree --> LocalRules{"Local Rule Engine (< 100μs / 354ns)"}
         
         LocalRules -- "고신뢰도 악성 (0.1ms)" --> ActKill["TerminateProcess (Immediate Kill)"]
         LocalRules -- "회색지대 위협 (24μs)" --> ActFreeze["NtSuspendProcess (Atomic Freeze)"]
         ActFreeze --> Watchdog["SafetyWatchdog (10s Auto-Resume)"]
+        ActResume["ResumeProcess (Unfreeze)"]
         
-        LocalRules --> GrpcClient["Async gRPC Streaming Client (agrpc)"]
-        ActKill --> GrpcClient
-        ActFreeze --> GrpcClient
+        LocalRules --> IngestQueue["Double-Buffered Swap Queue (Lock-Swap)"]
+        ActKill --> IngestQueue
+        ActFreeze --> IngestQueue
+        
+        IngestQueue --> GrpcClient["Async gRPC Streaming Client (asio-grpc)"]
     end
 
     subgraph CS_COCKPIT ["Layer 2: CSharp .NET 9 WPF & AI Studio (Phalanx.Cockpit)"]
@@ -57,7 +59,7 @@ flowchart TD
         AgentOrchestrator -->|"Final Verdict (Kill / Resume / Extend)"| GrpcServer
         GrpcServer -->|"MitigationCommand"| GrpcClient
         GrpcClient --> ActKill
-        GrpcClient --> ActResume["ResumeProcess (Unfreeze)"]
+        GrpcClient --> ActResume
     end
 ```
 
@@ -81,12 +83,14 @@ flowchart TD
 
 ## 2. C++ 네이티브 센서 동시성 모델 (`Phalanx.Sensor`)
 
-`[IMPLEMENTED]` C++ 센서는 고주파 커널 인터럽트와 네트워크/연산 병목을 격리하기 위해 **3대 전담 스레드 파이프라인**으로 구동됩니다.
+`[IMPLEMENTED]` C++ 센서는 고주파 커널 인터럽트와 네트워크/연산 병목을 완벽히 분리하기 위해 **3대 전담 스레드 파이프라인**으로 구동됩니다.
 
 ```mermaid
 flowchart LR
-    subgraph PRODUCER ["ETW Callback Producer Thread"]
-        KernelEv["Kernel ETW Callback"] --> Push["queue.Push(item)"]
+    subgraph PRODUCER ["ETW Callback Producer Thread (< 1μs Reflection)"]
+        KernelEv["Kernel ETW Callback"] --> TreeUpdate["ProcessTree DAG Update"]
+        TreeUpdate --> Eval["LocalRuleEngine::EvaluateAndAct()"]
+        Eval --> Push["queue.Push(evaluated_item)"]
     end
 
     subgraph QUEUE ["Double-Buffered Memory Area"]
@@ -95,31 +99,30 @@ flowchart LR
         SwapOper{{"std::swap(write, read)\n1회 수행 (< 0.05μs)"}}
     end
 
-    subgraph CONSUMER ["100Hz Swap & Engine Consumer Worker"]
+    subgraph IPC_DISPATCH ["Async gRPC Worker (asio-grpc, 100Hz)"]
         Timer["10ms Periodic Timer"] --> Swap["queue.SwapAndFlush()"]
-        Swap --> Eval["LocalRuleEngine::EvaluateAndAct()"]
-        Eval --> TreeUpdate["ProcessTree DAG Update"]
-    end
-
-    subgraph IPC_DISPATCH ["Async gRPC Worker (asio-grpc)"]
-        TreeUpdate --> BatchSerialize["TelemetryBatch Serialize"]
+        Swap --> SwapOper
+        SwapOper -.->|"포인터 맞교환"| BufA
+        SwapOper -.->|"포인터 맞교환"| BufB
+        BufB -->|"배치 인출"| BatchSerialize["TelemetryBatch Serialize"]
         BatchSerialize --> Http2Stream["gRPC HTTP/2 Stream Push"]
     end
 
     Push -->|"락 점유 < 1μs"| BufA
-    Swap --> SwapOper
-    SwapOper -.->|"포인터 맞교환"| BufA
-    SwapOper -.->|"포인터 맞교환"| BufB
-    BufB -->|"배치 인출"| Eval
 ```
 
 ### A. 더블 버퍼 락-스왑(Double-Buffered Lock-Swap) 동시성 불변식
-* **생산자 블로킹 극소화**:
-  * ETW 콜백 스레드는 오직 활성 쓰기 버퍼(`write_buffer_`)에 벡터의 `push_back` 1회만 수행하며, 뮤텍스 락 점유 시간은 **1마이크로초 미만(실측 < 0.05μs)**으로 제한됩니다.
-* **무할당 포인터 스왑 (O(1) Pointer Swap)**:
-  * 10ms(100Hz) 주기로 동작하는 소비 스레드는 두 버퍼의 포인터만 맞교환(`std::swap`)한 후, 새로 쓰여질 버퍼를 `clear()`하되 기할당된 용량(`reserve(InitialCapacity)`)은 유지합니다.
+* **생산자 스레드의 동기식 반사신경 및 비블로킹 푸시**:
+  * ETW 콜백 스레드는 커널 이벤트 수신 즉시 인메모리 프로세스 트리를 갱신하고 `LocalRuleEngine::EvaluateAndAct`를 동기식으로 실행하여 현장 사살(0.1ms) 또는 선제 동결(24μs)을 즉각 집행합니다.
+  * 조치가 완료된 후 평가 플래그(`is_suspended`, `is_terminated`)가 태깅된 이벤트를 활성 쓰기 버퍼(`write_buffer_`)에 푸시하며, 뮤텍스 락 점유 시간은 **1마이크로초 미만(실측 < 0.05μs)**으로 제한됩니다.
+* **비동기 100Hz 무할당 포인터 스왑 (O(1) Pointer Swap)**:
+  * `asio-grpc` 워커 스레드는 10ms(100Hz) 타이머 주기로 두 버퍼의 포인터만 맞교환(`std::swap`)한 후, 새로 쓰여질 버퍼를 `clear()`하되 기할당된 용량(`reserve(InitialCapacity)`)은 유지합니다.
   * 힙 메모리 재할당(Heap Allocation) 오버헤드가 발생하지 않아 초당 수만 건의 버스트 상황에서도 **유실률 0.0%**를 보증합니다 ([04_performance_benchmarks.md](./04_performance_benchmarks.md) 실측치 참조).
-* **상세 구현 참조**: [DoubleBufferedSwapQueue.h](../../../Phalanx/src/Phalanx.Sensor/Queue/DoubleBufferedSwapQueue.h)
+* **센서의 3대 전담 스레드 구성**:
+  1. **ETW 콜백 및 실시간 룰 집행 스레드**: 유저모드 ETW 수집, 0.436μs 족보 탐색, 0.354μs 로컬 룰 판정, 24μs 원자적 동결 집행 및 큐 `Push`.
+  2. **asio-grpc I/O 및 100Hz 스트리밍 스레드**: 10ms 주기 `SwapAndFlush`, `TelemetryBatch` 직렬화, HTTP/2 양방향 스트리밍 송수신.
+  3. **SafetyWatchdog 백그라운드 감시 스레드**: 200ms 주기(5Hz) 만료 시한 검사 루프, 데드락 방지 10s/50s 타이머 관리 및 만료 시 자동 복구(Auto-Resume).
+* **상세 구현 참조**: [DoubleBufferedSwapQueue.h](../../../Phalanx/src/Phalanx.Sensor/Queue/DoubleBufferedSwapQueue.h), [EtwKernelCollector.cpp](../../../Phalanx/src/Phalanx.Sensor/Collector/EtwKernelCollector.cpp), [GrpcStreamClient.cpp](../../../Phalanx/src/Phalanx.Sensor/Ipc/GrpcStreamClient.cpp)
 
 ### B. 인메모리 프로세스 트리(DAG) 및 로컬 룰 엔진
 * **인메모리 프로세스 트리 ([ProcessTree.h](../../../Phalanx/src/Phalanx.Sensor/Process/ProcessTree.h))**:
