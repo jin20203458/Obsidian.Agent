@@ -1,11 +1,10 @@
----
+﻿---
 description: >-
   심즈(The Sims) 및 림월드(RimWorld) AI 아키텍처 코드 레벨 상세 분석 보고서. 시뮬레이션 AI 루틴 기획 시 참조.
 related:
   - ../README.md
 ---
 # Sims & RimWorld AI Architecture Report
-> **부제**: 심즈 & 림월드 AI 아키텍처 및 작동 방식 코드 레벨 분석
 
 이 보고서는 전통적 시뮬레이션 인공지능의 양대 산맥인 Maxis의 *심즈(The Sims)*와 Ludeon Studios의 *림월드(RimWorld)*의 AI 아키텍처 설계와 작동 방식을 코드 레벨에서 분석한 백서입니다.
 

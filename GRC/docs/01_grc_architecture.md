@@ -1,11 +1,10 @@
----
+﻿---
 description: >-
   GRC C#/.NET WPF 클라이언트 상세 아키텍처 명세 및 UI/비동기 패턴 구성도. GRC 클라이언트 개발/수정 시 참조.
 related:
   - ../README.md
 ---
 # GRC Architecture & Deep Dive
-> **부제**: GRC 기술 아키텍처 및 C#/.NET 동시성/메모리 관리 딥다이브
 
 본 문서는 GRC(GenAI Roleplay Chat) 클라이언트의 핵심 엔진 구조와, C#/.NET 8.0 환경에서 달성한 동시성 제어 및 메모리 관리 기법을 상세히 기술합니다.
 

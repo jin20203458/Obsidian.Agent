@@ -1,4 +1,4 @@
----
+﻿---
 description: >-
   소프트웨어 아키텍처 명세서, 시스템 파이프라인, AI 에이전트 설계서 및 성능 벤치마크 등 고신뢰성 지식베이스 기술 문서의 사실 무결성(Ground Truth)을 검증하기 위한 순차적 4단계 심층 계쇄(Sequential Deep Gated) 독립감사 표준 지침.
   표준 1회 4단계 계쇄 감사 및 초고신뢰성 요구 시 2회 연속 수렴(Dual-Round Convergence) 확장 옵션 제공.
@@ -10,7 +10,6 @@ related:
 ---
 # Independent Audit Protocol Guidelines
 
-> **부제**: 순차적 4단계 심층 계쇄 독립감사 표준 지침 (Sequential Deep Gated Independent Audit Protocol)
 
 본 문서는 소프트웨어 시스템 아키텍처 명세서, 다이어그램, 동시성 스레드 모델, AI 에이전트 추론 사양서, 실측 성능 벤치마크 및 공인 시험평가 결과서 등 **지식베이스(Obsidian) 기술 문서가 실제 코드베이스 및 런타임 실측 데이터와 100% 일치함을 보증하기 위한 순차적 4단계 심층 계쇄 독립감사 표준 절차**를 정의합니다.
 

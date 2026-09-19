@@ -1,4 +1,4 @@
----
+﻿---
 description: 사용자를 위한 GRC 주요 기능(세션 아키텍트, 로어북, 스탯 관리, TTS 연동, 추천 답글) 사용 지침 및 활용 가이드.
 related:
   - 00_project_overview.md
@@ -7,7 +7,6 @@ related:
 ---
 # GRC 사용자 기능 매뉴얼 (GRC User Feature Guide)
 
-> **부제**: GRC 기능별 상세 사용 지침 및 매뉴얼
 
 ---
 

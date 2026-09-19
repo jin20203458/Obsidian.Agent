@@ -1,11 +1,10 @@
----
+﻿---
 description: >-
   스몰빌(Generative Agents) 인지 아키텍처, 기억 그래프 및 자아 변형 심층 백서. AI 에이전트 기억/소문 모델 설계 시 참조.
 related:
   - ../README.md
 ---
 # Smallville Generative Agents Behavior Report
-> **부제**: 스몰빌(Generative Agents) 인지 아키텍처 및 기억 그래프 심층 백서
 
 이 보고서는 스탠퍼드 대학교의 **Generative Agents (Smallville)** 프로젝트(Park et al., ACM CHI 2023)의 파이썬 오픈소스 소스코드(`joonspk-research/generative_agents`)를 코드 레벨에서 완벽하게 해부한 최종 마스터 백서입니다. 본 문서 한 편으로 스몰빌의 기억 관리 구조, 메모리 그래프 엣지, 상호작용에 따른 자아(Identity) 변형 및 프롬프트 파이프라인 전체를 완벽히 이해할 수 있도록 작성되었습니다.
 

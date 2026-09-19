@@ -1,12 +1,10 @@
----
+﻿---
 description: GRC 프로젝트 개요 및 C#/.NET 네이티브 데스크톱 클라이언트 시스템 전반 설계서. GRC 전체 구조 파악 시 참조.
 related:
   - ../README.md
 ---
 # Project Overview
-> **부제**: GRC (GenAI Roleplay Chat) 프로젝트 개요 및 비전
 
-> **한 줄 요약**: 단 한 줄의 프롬프트로 세계관과 캐릭터를 창조하고, 수백 턴의 장기 롤플레잉을 쾌적하게 즐길 수 있는 고성능 AI 역할극 데스크톱 클라이언트.
 
 ---
 

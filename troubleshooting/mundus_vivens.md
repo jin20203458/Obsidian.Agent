@@ -3,9 +3,9 @@ description: >-
   Mundus Vivens C# AI 서버 & C++ 물리 서버 트러블슈팅 런북. Mundus Vivens 프로젝트 버그/에러 발생 시 참조.
 related:
   - ../README.md
+  - ../MundusVivens/README.md
 ---
 # Mundus Vivens Troubleshooting
-> **부제**: C# AI 서버 & C++ 물리 서버 트러블슈팅 및 런북
 
 본 문서는 Mundus Vivens 프로젝트 개발 및 통합 테스트 중 발생하는 시스템별 예외 현상과 해결 시나리오를 상세히 기록합니다. 주로 시스템 환경 오류, 빌드 에러, gRPC 프로토콜 및 아키텍처 정합성 관련 문제를 누적하여 다룹니다.
 

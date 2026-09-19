@@ -1,4 +1,4 @@
----
+﻿---
 description: >-
   2025~2026 최신 AI 에이전트 소프트웨어 엔지니어링(Agentic SE) 연구(CodePlan, Agentless, AgentCoder, Magentic-One)에 기반한
   일상 개발용 에이전트 협동 및 이중 계쇄(Dual-Gated: Plan Audit -> Code QA Audit) 오케스트레이션 표준 가이드라인.
@@ -12,7 +12,6 @@ related:
 ---
 # Agent Collaboration Workflow Guidelines (일상 개발용 에이전트 협동 및 이중 계쇄 오케스트레이션 표준)
 
-> **부제**: 2025~2026 최신 Agentic SE 연구 기반 이중 계쇄(Dual-Gated) 일상 개발 파이프라인
 
 본 문서는 **2025~2026년 발표된 글로벌 빅테크 및 최고 권위 학계의 최신 AI 에이전트 소프트웨어 엔지니어링(Agentic SE) 연구 성과**를 집대성하여, 일상적인 기능 구현, 리팩토링, 버그 수정 시 **AI 환각을 원천 차단하고 오차율 0%의 코드 품질을 달성하기 위한 표준 오케스트레이션 프로토콜**을 정의합니다.
 

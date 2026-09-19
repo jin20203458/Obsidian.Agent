@@ -1,4 +1,4 @@
----
+﻿---
 description: >-
   Obsidian 지식베이스 작성 규격 및 에이전트 라우팅 Frontmatter 표준 지침. 마크다운 문서 작성/수정 시 참조.
 related:
@@ -7,7 +7,6 @@ related:
 ---
 # Knowledge Base Authoring Guidelines
 
-> **부제**: Obsidian Knowledge Base Authoring Guidelines (문서 작성 지침)
 
 본 문서는 `Obsidian.Agent` 지식베이스 내에서 문서를 신규 생성하거나 수정할 때, **인간 개발자와 AI 에이전트가 모두 공통으로 준수해야 하는 파일 작성 표준**을 정의합니다. 일관된 구조는 에이전트의 환각(Hallucination)을 줄이고 탐색 효율성을 극대화합니다.
 

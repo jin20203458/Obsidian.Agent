@@ -1,4 +1,4 @@
----
+﻿---
 description: >-
   Mundus Vivens C# AI 서버 프로파일링 및 Smallville 논문 정량 비교 보고서. AI 서버 비용/속도 최적화 시 참조.
 related:
@@ -7,7 +7,6 @@ related:
   - ./04_cpp_server_profiling.md
 ---
 # C# AI Server Profiling & Optimization
-> **부제**: C# AI 서버 성능 프로파일링 및 Smallville 비교 보고서
 
 본 문서는 Mundus Vivens **C# AI 대뇌 서버**의 LLM API 비용 효율성, 기억 계층 구조, 비동기 스케줄링 성능을 정량적으로 계측하고, 스탠퍼드 *Generative Agents (Smallville)* 논문의 아키텍처와 직접 대조하여 설계 우위를 실증하는 보고서입니다.
 

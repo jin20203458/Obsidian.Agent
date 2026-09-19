@@ -1,4 +1,4 @@
----
+﻿---
 description: >-
   Phalanx 2계층(2-Tier) EDR 시스템 아키텍처, C++20 네이티브 센서 동시성 모델, 더블 버퍼드 락-스왑 큐, gRPC 통신 규약 및 C# WPF 관제 콘솔 설계 명세. 시스템 토폴로지, 스레드 경계, 프로세스 트리 동기화(CQRS) 및 gRPC 프로토콜 수정/설계 시 참조.
 related:
@@ -8,7 +8,6 @@ related:
   - ./04_performance_benchmarks.md
 ---
 # Phalanx System Architecture & Pipeline Specification
-> **부제**: Phalanx 2계층 EDR 시스템 아키텍처 및 동시성 파이프라인 명세
 
 본 문서는 `Phalanx` EDR 시스템을 구성하는 **C++20 네이티브 실시간 탐지/방어 센서(`Phalanx.Sensor`)**, **gRPC 양방향 비동기 통신 계층**, 그리고 **C# .NET 9 AI 관제 콘솔(`Phalanx.Cockpit`)**의 기술적 결합 구조, 동시성 스레드 모델 및 세부 구현 명세를 정의합니다.
 

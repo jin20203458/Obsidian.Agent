@@ -9,7 +9,6 @@ related:
 ---
 # AI Project Integration Guidelines
 
-> **부제**: 신규 프로젝트 연동 지침
 
 본 문서는 새로운 개발 저장소(Repository)를 `Obsidian.Agent` 지식베이스 및 AI 에이전트 협업 환경과 연계하기 위해 수행해야 하는 표준 연동 절차와 행동 강령을 정의합니다.
 
@@ -66,13 +65,7 @@ related:
    * 폴더 내에 시스템의 핵심 설계 사상, 동작 원리, 모듈 간 구조(SSOT)를 정의하는 기술 명세 문서를 최소 1개 이상 생성합니다. (예: `StaticAnalyzer_Architecture.md`)
 2. **트러블슈팅 로그 생성**:
    * `troubleshooting/<project_name>.md` 경로에 전용 로그 문서를 생성합니다.
-   * **필수 템플릿 규격**을 반드시 준수하여 구조화합니다:
-     ```markdown
-     ## YYYY-MM-DD: 에러 발생명
-     ### 1. 현상 (Symptom)
-     ### 2. 원인 (Root Cause)
-     ### 3. 해결책 (Resolution)
-     ```
+   * 작성 서식 및 구조는 [Agent_Runtime_Operations_Protocol.md](./Agent_Runtime_Operations_Protocol.md) 제6.1조의 표준 템플릿(`[Resolved]` / `[Unresolved]`)을 엄격히 준수합니다.
 
 ---
 

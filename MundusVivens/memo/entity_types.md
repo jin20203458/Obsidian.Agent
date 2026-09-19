@@ -1,11 +1,10 @@
----
+﻿---
 description: >-
   C++ 게임 서버 EnTT ECS 엔티티 4종 분류 및 메모리 메모. EnTT ECS 엔티티 설계 시 참조.
 related:
   - ../README.md
 ---
 # Entity Types Memo
-> **부제**: C++ 게임 서버 EnTT ECS 엔티티 분류 노트
 
 C++ 게임 서버에서 EnTT ECS를 통해 개념적으로 분류되는 **엔티티(Entity)는 크게 4가지 종류**가 존재합니다. 
 

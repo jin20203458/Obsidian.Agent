@@ -5,7 +5,7 @@ related:
   - ../README.md
   - ../Phalanx/README.md
 ---
-# Phalanx Troubleshooting Runbook
+# Phalanx Troubleshooting
 
 본 문서는 Phalanx EDR 솔루션(C++ 센서, gRPC 스트리밍, C# 코어 및 AI 에이전트) 개발 및 실전 운영 중 발생하는 시스템 예외 현상과 해결 방안을 기록하는 중앙 기술 런북입니다.
 

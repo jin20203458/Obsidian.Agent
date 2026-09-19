@@ -1,11 +1,10 @@
----
+﻿---
 description: >-
   Mundus Vivens 핵심 시스템 미래 로드맵 및 기획 노트. 서버 및 AI 기능 확장 계획 수립 시 참조.
 related:
   - ../README.md
 ---
 # Future Roadmap
-> **부제**: Mundus Vivens 미래 로드맵 및 기획 노트
 
 본 문서는 **Mundus Vivens** 프로젝트에서 향후 구현할 핵심 시스템 및 구조적 설계 방향을 정리한 로드맵입니다. 디버깅 편의성 및 개발 연계성에 따라 우선 구현할 과제와 중장기 과제로 나누어 관리합니다.
 

@@ -1,4 +1,4 @@
----
+﻿---
 description: >-
   Phalanx 프로젝트의 비전, 해결 과제, 3대 핵심 엔지니어링 가치 및 시스템 정량 목표 명세. Phalanx 프로젝트 전체 비전, 아키텍처 개요 확인 및 시스템 목표 파악 시 참조.
 related:
@@ -7,9 +7,7 @@ related:
   - ./02_ai_agent_investigation_design.md
 ---
 # Project Overview
-> **부제**: Phalanx 프로젝트 개요
 
-> **한 줄 요약**: 0.1ms 초저지연 C++ 네이티브 탐지 엔진과 자율 AI 위협 헌팅 에이전트(Autonomous Hunter Agent)가 결합된 차세대 엔드포인트 탐지 및 대응(EDR) 시스템.
 
 ---
 

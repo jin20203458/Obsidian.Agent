@@ -1,13 +1,11 @@
----
+﻿---
 description: >-
   Mundus Vivens 프로젝트 개요 및 중세 판타지 마을 시뮬레이션 전체 콘셉트. 멀티 에이전트 월드 시스템 이해 시 참조.
 related:
   - ../README.md
 ---
 # Project Overview
-> **부제**: Mundus Vivens 프로젝트 개요
 
-> **한 줄 요약**: 대본 없이 스스로 생각하고, 기억하고, 소문을 퍼트리는 AI 주민들이 살아가는 중세 판타지 마을 시뮬레이션.
 
 ---
 

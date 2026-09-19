@@ -1,4 +1,4 @@
----
+﻿---
 description: >-
   Mundus Vivens C++ 게임 서버 코드 리뷰 및 학습 로드맵 노트. C++ 코드베이스 분석 시 참조.
 related:
@@ -6,7 +6,6 @@ related:
   - ../docs/01_game_server_architecture.md
 ---
 # C++ Server Architecture Study Notes
-> **부제**: Mundus Vivens C++ 게임 서버 코드 리뷰 로드맵
 
 이 문서는 C++ 게임 서버(`MundusVivens.GameServer.Cpp`)를 분석하고 리뷰할 때, **하위 의존성(의존성이 없는 원시 타입/자료구조)부터 시작해 상위 오케스트레이터 계층으로 점진적으로 학습**할 수 있도록 설계된 로드맵입니다. 
 

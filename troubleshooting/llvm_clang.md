@@ -1,11 +1,11 @@
-﻿---
+---
 description: >-
   LLVM/Clang 커스텀 Tidy 체커 및 Static Analyzer 개발 트러블슈팅 런북. LLVM 정적 분석기 빌드/실행 에러 시 참조.
 related:
   - ../README.md
+  - ../LLVM/StaticAnalyzer_Architecture.md
 ---
 # LLVM/Clang Troubleshooting
-> **부제**: LLVM/Clang 커스텀 Tidy 체커 및 Static Analyzer 장애 조치 로그
 
 본 문서는 LLVM/Clang 커스텀 Tidy 체커 및 Static Analyzer 개발 중 발생하는 버그와 오류 해결 방법을 기록하는 문서입니다.
 

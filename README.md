@@ -1,10 +1,9 @@
----
+﻿---
 description: Obsidian.Agent 지식베이스의 메인 인덱스 및 아키텍처/가이드라인 전체 지점. 시스템 전반의 아키텍처 탐색 시 참조.
 related:
   - ./ai_agent_refs/Knowledge_Base_Authoring_Guidelines.md
 ---
 # Obsidian Agent Collaboration Knowledge Base
-> **부제**: 에이전트 협업을 위한 지식베이스 최상위 인덱스
 
 본 저장소는 개발자와 AI 에이전트 간의 협업을 위한 공유 지식 베이스(Knowledge Base)입니다.
 
