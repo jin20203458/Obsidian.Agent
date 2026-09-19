@@ -68,16 +68,14 @@ flowchart TD
     Doc --> Stage1 --> Gate1
     Gate1 -- Pass --> Stage2 --> Gate2
     Gate1 -- Fail --> FailRollback
-    Stage2 --> Gate2
     Gate2 -- Pass --> Stage3 --> Gate3
     Gate2 -- Fail --> FailRollback
-    Stage3 --> Gate3
     Gate3 -- Pass --> Stage4 --> Gate4
     Gate3 -- Fail --> FailRollback
-    Stage4 --> Gate4
     Gate4 -- Pass --> FinalPass
     Gate4 -- Fail --> FailRollback
     FailRollback -- 3회 실패 시 --> Escalate
+    FailRollback -.->|결함 수정 후 재실사| Stage1
 ```
 
 ### 결함 발생 시 자가 치유 및 재감사 절차 (Fail-Fix-Reaudit Lifecycle)
@@ -176,6 +174,13 @@ flowchart TD
         R1G1 -- Pass --> R1S2["[R1S2] 1차 다이어그램/시퀀스 감사관"] --> R1G2{"R1 Gate 2 PASS?"}
         R1G2 -- Pass --> R1S3["[R1S3] 1차 API/인터페이스 감사관"] --> R1G3{"R1 Gate 3 PASS?"}
         R1G3 -- Pass --> R1S4["[R1S4] 1차 레거시/거버넌스 감사관"] --> R1G4{"R1 Gate 4 PASS?"}
+
+        R1Fix["R1 결함 수정 및 재실사 (최대 3회)"]
+        R1G1 -- Fail --> R1Fix
+        R1G2 -- Fail --> R1Fix
+        R1G3 -- Fail --> R1Fix
+        R1G4 -- Fail --> R1Fix
+        R1Fix -.->|수정 후 재실사| R1S1
     end
 
     subgraph Round2 ["Round 2: 2차 4단계 심층 계쇄 (완전 신규 에이전트 4인)"]
@@ -183,31 +188,31 @@ flowchart TD
         R2G1 -- Pass --> R2S2["[R2S2] 2차 다이어그램/시퀀스 감사관"] --> R2G2{"R2 Gate 2 PASS?"}
         R2G2 -- Pass --> R2S3["[R2S3] 2차 API/인터페이스 감사관"] --> R2G3{"R2 Gate 3 PASS?"}
         R2G3 -- Pass --> R2S4["[R2S4] 2차 레거시/거버넌스 감사관"] --> R2G4{"R2 Gate 4 PASS?"}
+
+        R2Fix["R2 결함 수정 및 재실사 (최대 3회)"]
+        R2G1 -- Fail --> R2Fix
+        R2G2 -- Fail --> R2Fix
+        R2G3 -- Fail --> R2Fix
+        R2G4 -- Fail --> R2Fix
+        R2Fix -.->|수정 후 재실사| R2S1
     end
 
     CheckMatch{"Round 1 결과 == Round 2 결과?<br>(수치/다이어그램/API 100% 동일 수렴?)"}
     UltraCertified["초고신뢰성 공인 완료 (Ultra-High Certified)"]
-    SelfHealing["사양서 수정 및 Round N+1 재실사"]
-    CheckLimit{"감사 횟수 > 4회 초과?"}
+    CheckLimit{"수렴 감사 횟수 > 4회 초과?"}
+    RoundRestart["사양서 보정 및 Round N+1 신규 라운드 재실사"]
     CircuitBreaker["서킷 브레이커 발동<br>(작업 정지 및 인간 개발자 에스컬레이션)"]
 
-    Doc --> Round1
-    R1G1 -- Fail --> SelfHealing
-    R1G2 -- Fail --> SelfHealing
-    R1G3 -- Fail --> SelfHealing
-    R1G4 -- Fail --> SelfHealing
-
-    R1G4 -- Pass --> Round2
-    R2G1 -- Fail --> SelfHealing
-    R2G2 -- Fail --> SelfHealing
-    R2G3 -- Fail --> SelfHealing
-    R2G4 -- Fail --> SelfHealing
-
+    Doc --> R1S1
+    R1G4 -- Pass --> R2S1
     R2G4 -- Pass --> CheckMatch
+
     CheckMatch -- Yes (100% 일치) --> UltraCertified
-    CheckMatch -- No (변동 발생) --> CheckLimit
-    CheckLimit -- No (<= 4회) --> SelfHealing --> Round2
+    CheckMatch -- No (불일치) --> CheckLimit
+    CheckLimit -- No (<= 4회) --> RoundRestart --> R2S1
     CheckLimit -- Yes (> 4회) --> CircuitBreaker
+    R1Fix -- 3회 실패 시 --> CircuitBreaker
+    R2Fix -- 3회 실패 시 --> CircuitBreaker
 ```
 
 ### 초고신뢰성 옵션 운영 규칙
