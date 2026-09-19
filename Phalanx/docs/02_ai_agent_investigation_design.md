@@ -57,7 +57,7 @@ flowchart TD
 * **세이프티 워치독 SLA 계약 및 레이스 컨디션 방어**:
   * C++ `SafetyWatchdog`는 기본 10초(10,000ms) 안전 타임아웃을 적용하며, C# 오프라인 결정론적 수사 엔진(실측 23.1ms) 동작 시에는 타임아웃 연장 없이 기본 10초 내에 즉시 완결되어 데드락 복구를 보장합니다 (C++ 로컬 룰 엔진은 0.354μs 만에 사전 선제 조치 완료).
   * 외부 LLM(Gemini) 심층 수사 진입 시 다중 왕복 통신 지연을 수용하기 위해 즉시 1회성 `ACTION_EXTEND_TIMEOUT`(+50,000ms) 티켓을 선제 발송하여 총 60초 예산을 확보합니다 ([SafetyWatchdog.h:55](../../../Phalanx/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h#L55), [AutonomousHunterAgent.cs:120-125](../../../Phalanx/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs#L120-L125)).
-  * C++ 워치독 자동 동결 해제(Auto-Resume)와의 데드락/좀비 프로세스 레이스 컨디션을 원천 차단하기 위해 C# 상위 타임아웃 CTS는 **50초(50,000ms)**로 설정하여 워치독 만료 10초 전 안전 마진을 보장합니다 (`troubleshooting/phalanx.md:43`).
+  * C++ 워치독 자동 동결 해제(Auto-Resume)와의 데드락/좀비 프로세스 레이스 컨디션을 원천 차단하기 위해 C# 상위 타임아웃 CTS는 **50초(50,000ms)**로 설정하여 워치독 만료 10초 전 안전 마진을 보장합니다 ([troubleshooting/phalanx.md#L43](../../troubleshooting/phalanx.md#L43)).
 * **루프 한계 도달 시 Fail-Secure 정책**:
   * 최대 5턴(`MaxSteps = 5`) 소진 시까지 결론이 도출되지 않을 경우, 선제 동결된 회색지대 타깃을 방치하지 않고 즉시 사살(`ACTION_KILL`) 격리를 집행하여 시스템 안전을 최우선 보장합니다.
 * **도구 예외 방어 및 자가 치유(Self-Correction)**:
@@ -117,23 +117,50 @@ flowchart TD
 
 ---
 
-## 5. 침해사고 서사(Incident Narrative) 생성
+## 5. 침해사고 서사(Incident Narrative) 생성 및 영속화 스키마
 
-사고 조사가 완료되면, LLM은 보안 지식이 부족한 일반 관리자도 즉시 상황을 파악할 수 있도록 **타임라인 기반의 구조화된 서사(Narrative)**를 작성합니다.
+수사 세션이 종결되면, LLM이 구조화된 판결/서사 DTO(`AiInvestigationDecision`)를 확정하고, C# 에이전트([AutonomousHunterAgent.cs](../../../Phalanx/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs))가 OS 텔레메트리 컨텍스트와 결합하여 최종 침해사고 레코드([IncidentRecord](../../../Phalanx/src/Phalanx.Cockpit/Storage/ForensicModels.cs))로 영속화합니다.
 
-### 출력 JSON 스키마 규격
+### A. LLM ReAct 최종 판결 DTO 규격 (`AiInvestigationDecision`)
+Gemini 3.7 Flash가 JSON Mode로 반환하는 최종 턴 구조화 결정 페이로드 규격입니다:
+
 ```json
 {
-  "incident_id": "INC-20260907-001",
+  "thought": "동결된 powershell.exe 메모리에서 C2 IP(185.220.101.5) 및 난독화 페이로드가 확인되어 악성 확신도 98%로 즉각 사살 및 IP 차단을 판결합니다.",
+  "action_tool": "None",
+  "action_args": {},
+  "is_final_verdict": true,
+  "verdict_action": "ACTION_KILL",
   "confidence_score": 0.98,
-  "mitre_tactics": ["T1566.001", "T1059.001", "T1071.001"],
   "summary_title": "악성 오피스 매크로를 통한 파일리스 C2 다운로더 침투 시도",
   "narrative": "16시 56분, 사용자 계정에서 실행된 2026_09_invoice.docm 문서가 winword.exe를 통해 난독화된 파워셸을 은밀히 기동했습니다. Phalanx 센서가 24μs(0.024ms) 만에 프로세스를 원자적으로 동결하였으며, AI 에이전트의 메모리 역추적 결과 해외 악성 C2(185.220.101.5)로의 통신 시도가 확인되어 프로세스를 강제 종료하고 IP를 차단했습니다.",
-  "root_cause_process": "winword.exe (PID: 3104)",
-  "terminated_processes": ["powershell.exe (PID: 8492)"],
-  "remediation_status": "SECURED"
+  "mitre_tactics": ["T1566.001", "T1059.001", "T1071.001"],
+  "remediation_steps": [
+    "악성 파워셸 프로세스 즉각 강제 사살 (ACTION_KILL)",
+    "해외 악성 C2 IP(185.220.101.5) WFP 방화벽 인/아웃바운드 즉시 차단",
+    "침해 엔드포인트 계정 자격증명 초기화 권고"
+  ]
 }
 ```
+
+### B. C# Cockpit 최종 합성 포렌식 아카이브 규격 (`IncidentRecord`)
+C# 에이전트가 로컬 DAG 족보 분석기 및 센서 집행 결과와 합성하여 `LiteDB` 및 `QuestPDF`에 영구 보존하는 완전한 포렌식 레코드 스키마입니다:
+
+| 필드명 (Field) | 소스 공급 주체 (Source) | 설명 및 예시 데이터 |
+| :--- | :--- | :--- |
+| `IncidentId` | C# 오케스트레이터 | 고유 사고 식별자 (`INC-20260907-001`) |
+| `Timestamp` | C# 오케스트레이터 | 사고 인입 UTC 일시 (`2026-09-07T07:56:12Z`) |
+| `TargetPid` / `TargetImage` | C++ 센서 텔레메트리 | 타깃 프로세스 ID (`8492`) 및 이미지명 (`powershell.exe`) |
+| `CommandLine` | C++ 센서 텔레메트리 | 실행 시 전체 명령줄 인자 (난독화된 페이로드 포함) |
+| `ConfidenceScore` | Gemini AI 에이전트 | 최종 위협 확신도 (`0.98` / 98%) |
+| `VerdictAction` | Gemini AI 에이전트 | 최종 대응 명령 (`ACTION_KILL` 또는 `ACTION_RESUME`) |
+| `SummaryTitle` / `Narrative` | Gemini AI 에이전트 | 사건 요약 및 관리자용 타임라인 서사 |
+| `MitreTactics` | Gemini AI 에이전트 | 매핑된 MITRE ATT&CK 기법 배열 (`["T1566.001", ...]`) |
+| `BlockedIp` | `SystemFirewallTool` | 차단 집행된 악성 C2 IP (`185.220.101.5`) |
+| `RootCauseProcess` | C# 로컬 DAG 족보 분석 | 침해 근원 부모 프로세스 (`winword.exe (PID: 3104)`) |
+| `TerminatedProcesses` | C++ 액추에이터 집행 결과 | 실제 강제 사살된 프로세스 목록 (`["powershell.exe (PID: 8492)"]`) |
+| `RemediationStatus` | C# 오케스트레이터 | 사후 보안 조치 종결 상태 (`SECURED` / `RESTORED`) |
+| `RemediationSteps` | Gemini AI 에이전트 | 권고 및 집행된 대응 조치 단계 목록 |
 
 ---
 
