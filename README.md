@@ -39,9 +39,8 @@ related:
   - [phalanx.md](troubleshooting/phalanx.md): Phalanx C++ 센서 & C# 코어 장애 조치 로그
   - [llvm_clang.md](troubleshooting/llvm_clang.md): LLVM/Clang 커스텀 체커 및 Static Analyzer 장애 조치 로그
   - [mundus_vivens.md](troubleshooting/mundus_vivens.md): C# AI Server & C++ Game Server 장애 조치 로그
-  - [git_and_os.md](troubleshooting/git_and_os.md): 공통 OS 및 Git 환경 오류 장애 조치 로그
   - [unity_client.md](troubleshooting/unity_client.md): 유니티 엔진 및 클라이언트 장애 조치 로그
-  - [etc/README.md](troubleshooting/etc/README.md): 프로젝트 비종속 범용 기술(OpenXML, C# 등) 장애 조치 로그
+  - [common_and_os.md](troubleshooting/common_and_os.md): 공통 OS, Git 환경 및 범용 라이브러리 장애 조치 로그
 
 
 

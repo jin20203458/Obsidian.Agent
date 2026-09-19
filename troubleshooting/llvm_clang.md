@@ -1,4 +1,4 @@
----
+﻿---
 description: >-
   LLVM/Clang 커스텀 Tidy 체커 및 Static Analyzer 개발 트러블슈팅 런북. LLVM 정적 분석기 빌드/실행 에러 시 참조.
 related:
@@ -17,7 +17,7 @@ related:
 - **지속적 리팩터링 및 확장성 보장**: 결함 발견 시 임시 패치에 그치지 않고, 구조적 리팩터링을 통해 언제든 코드를 고도화할 수 있는 유연한 아키텍처를 유지한다.
 
 
-## 2026-07-07: checkBranchCondition 콜백 내의 오탐지 (동일 조건식에 대한 참/거짓 경고 동시 발생)
+## 2026-07-07: [Resolved] checkBranchCondition 콜백 내의 오탐지 (동일 조건식에 대한 참/거짓 경고 동시 발생)
 
 ### 1. 현상 (Symptom)
 * 일반적이고 정상적인 조건문 `if (x == 5)`에 대해 "항상 참(True)으로 평가됩니다" 경고와 "항상 거짓(False)으로 평가됩니다" 경고가 동일한 위치에서 동시에 검출되는 오탐지(False Positive) 현상 발생.
@@ -52,7 +52,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-07-14: 커스텀 Tidy 체커 내 AST 상수 값 평가 중 크래시 (Expression evaluator can't be called on a dependent expression 및 Unknown builtin type)
+## 2026-07-14: [Resolved] 커스텀 Tidy 체커 내 AST 상수 값 평가 중 크래시 (Expression evaluator can't be called on a dependent expression 및 Unknown builtin type)
 
 ### 1. 현상 (Symptom)
 * 템플릿 기반 C++ 코드 혹은 컴파일 에러가 발생한 소스코드(예: `OpenKAI-master` 프로젝트의 `_GeoFence.cpp`, `HttpClient.cpp`, `main.cpp`) 정적분석 진행 중, `clang-tidy` 프로세스가 아래와 같은 내부 Assertion 혹은 Unreachable 코드로 인해 비정상 종료(Crash)되는 문제 발생:
@@ -71,7 +71,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-07-14: SingleExitAndReturnTypeCheck 내 템플릿 종속 타입(Dependent Type) 오탐지
+## 2026-07-14: [Resolved] SingleExitAndReturnTypeCheck 내 템플릿 종속 타입(Dependent Type) 오탐지
 
 ### 1. 현상 (Symptom)
 * 템플릿 기반 C++ 코드 혹은 컴파일 오류로 인해 헤더 파일 해석이 끊겨 일부 타입이 정의되지 않은 소스코드(예: `_APmavlink_base.cpp` 내 `check` 함수) 분석 시, 분명히 리턴문이 존재하고 리턴 타입이 매칭됨에도 불구하고 `"함수 선언 반환형(_Bool)과 반환값 타입(<dependent type>)이 일치하지 않습니다"`라는 타입 불일치 오탐지(False Positive) 발생.
@@ -85,7 +85,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-07-14: FunctionCallArgumentConsistencyCheck 내 참조형(&) 및 종속 타입(Dependent Type) 인자 오탐지
+## 2026-07-14: [Resolved] FunctionCallArgumentConsistencyCheck 내 참조형(&) 및 종속 타입(Dependent Type) 인자 오탐지
 
 ### 1. 현상 (Symptom)
 * C++에서 참조형 매개변수(`T &` 또는 `const T &`)를 취하는 함수에 인자로 동일한 타입의 Lvalue 변수를 전달하여 정상 호출하는 코드 분석 시, `"1번째 인자의 타입이 프로토타입과 일치하지 않습니다. 기대: 'T &', 실제: 'T'"`와 같은 인자 타입 불일치 오탐지(False Positive) 발생.
@@ -101,7 +101,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-07-22: Clang RecoveryExpr 기반 AST 매칭 및 C/C++ 컴파일 플래그 다운그레이드
+## 2026-07-22: [Resolved] Clang RecoveryExpr 기반 AST 매칭 및 C/C++ 컴파일 플래그 다운그레이드
 
 ### 1. 현상 (Symptom)
 * C/C++ 미선언 함수 호출, 리턴값 누락, 인자 개수 불일치 등 컴파일러가 AST 생성을 차단하거나 노드를 복구 표현식으로 다루는 하드 에러 발생 시, `clang-tidy` AST 체커들이 수집하지 못하고 미탐(0%)이 발생하는 문제.
@@ -119,7 +119,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-07-22: AST Drop 구문에 대한 로케일 독립적 Clang Diagnostic ID 가로채기 및 한글 메시지 재정의
+## 2026-07-22: [Resolved] AST Drop 구문에 대한 로케일 독립적 Clang Diagnostic ID 가로채기 및 한글 메시지 재정의
 
 ### 1. 현상 (Symptom)
 * catch-all 위치 오류(Rule 56), virtual 키워드 누락 순수가상함수(Rule 63), virtual 순수가상함수 비정상 초기화(Rule 62), virtual base 캐스팅(Rule 64) 등 Clang 파서 레벨에서 AST 노드가 100% Drop되는 구문의 경우 AST 매치가 기술적으로 불가능함.
@@ -153,7 +153,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-01: NoAutoTypeCheck (`ast-no-auto-type`) 컴파일러 암시적 변수 오탐 및 복합 auto 타입 미탐 해결
+## 2026-09-01: [Resolved] NoAutoTypeCheck (`ast-no-auto-type`) 컴파일러 암시적 변수 오탐 및 복합 auto 타입 미탐 해결
 
 ### 1. 현상 (Symptom)
 * DAPA 국방 규격 `공통(스타일) c. 함수/변수의 선언 시 type을 명시해야 한다 (auto 사용 제한)` 검증용 체커인 `ast-no-auto-type` 사용 시:
@@ -173,7 +173,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-04: PartialCopyAssignmentCheck (`ast-partial-copy-assignment`) C++ 클래스/구조체 멤버 대입 오탐지 해결
+## 2026-09-04: [Resolved] PartialCopyAssignmentCheck (`ast-partial-copy-assignment`) C++ 클래스/구조체 멤버 대입 오탐지 해결
 
 ### 1. 현상 (Symptom)
 * DAPA C++ 전용 i (Rule 60: `copy operator를 통해서, 복사되지 않는 멤버 변수가 존재하지 말아야 한다`) 검증용 체커인 `ast-partial-copy-assignment` 분석 시:
@@ -193,7 +193,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-07: ThreadLockChecker (`path-sensitive-arqa.ThreadLock`) 함수 조기 반환 락 누수 미탐 및 NewDeleteLeaks 연동 해결
+## 2026-09-07: [Resolved] ThreadLockChecker (`path-sensitive-arqa.ThreadLock`) 함수 조기 반환 락 누수 미탐 및 NewDeleteLeaks 연동 해결
 
 ### 1. 현상 (Symptom)
 * CWE-404(부적절한 자원 해제) 정적 검증 시, `pthread_mutex_lock` 또는 `EnterCriticalSection` 획득 후 조건부 에러 분기나 조기 반환(`return -1;`) 시 `unlock`을 호출하지 않는 심각한 교착 상태(데드락) 결함에 대해 `ThreadLockChecker`가 0건 미탐(Silent Failure)을 발생시킴.
@@ -228,7 +228,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-16: MultiStatementPerLineCheck (`ast-multi-statement-per-line`) 매크로 전개 누수, typedef struct 및 파일 간 라인 충돌 오탐 474건 전수 해결
+## 2026-09-16: [Resolved] MultiStatementPerLineCheck (`ast-multi-statement-per-line`) 매크로 전개 누수, typedef struct 및 파일 간 라인 충돌 오탐 474건 전수 해결
 
 ### 1. 현상 (Symptom)
 * DAPA 스타일 규칙 Rule 11 (카. 한 줄에 하나의 명령문을 사용한다) 및 MISRA C:2012 Rule 5.9 정적 검증 시, `mbedtls` 프로젝트 96개 소스 파일 대상 전수 분석에서 총 1,016건 중 **474건(46.7%)의 대규모 엔진 오탐(False Positive)** 발생:
@@ -278,7 +278,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-16: NoMeaninglessExprCheck (`ast-no-meaningless-expr`) switch-case 라벨 상수 평가식 매칭 결함 오탐 247건 전수 해결
+## 2026-09-16: [Resolved] NoMeaninglessExprCheck (`ast-no-meaningless-expr`) switch-case 라벨 상수 평가식 매칭 결함 오탐 247건 전수 해결
 
 ### 1. 현상 (Symptom)
 * DAPA 스타일 규칙 Rule 4 (라. 부작용 없는 의미 없는 구문 사용 금지) 및 MISRA C:2012 Rule 2.2 정적 검증 시, `mbedtls` 라이브러리 분석에서 **247건(100.0%)의 대규모 엔진 오탐(False Positive)** 발생:
@@ -329,7 +329,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-17: NarrowingConversionChecker 심볼릭 오탐 116건 제거 (정수 승격 가짜 음수, 시프트 사전 절삭, 버퍼 길이 유계성 소실)
+## 2026-09-17: [Resolved] NarrowingConversionChecker 심볼릭 오탐 116건 제거 (정수 승격 가짜 음수, 시프트 사전 절삭, 버퍼 길이 유계성 소실)
 
 ### 1. 현상 (Symptom)
 * CSA 체커인 `path-sensitive-arqa.NarrowingConversion`(`NarrowingConversionChecker.cpp`)에서 총 537건의 경고 중 116건(21.6%)의 엔진 오탐 발생:
@@ -375,7 +375,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-17: UnreachableCodeCheck (`cfg-unreachable-code`) 단축평가 조건식 서브 수식, 방어적 default 및 sizeof switch 오탐 157건 전수 해결
+## 2026-09-17: [Resolved] UnreachableCodeCheck (`cfg-unreachable-code`) 단축평가 조건식 서브 수식, 방어적 default 및 sizeof switch 오탐 157건 전수 해결
 
 ### 1. 현상 (Symptom)
 * DAPA 조건식 규칙 Rule 24 (마. 수행되지 않는 소스코드 작성 금지), MISRA C:2012 Rule 2.1 및 CWE-561 검증 시, `mbedtls` 프로젝트 96개 소스 파일 대상 전수 분석에서 **총 157건(100.0%)의 대규모 엔진 오탐(False Positive)** 발생:
@@ -420,7 +420,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-17: ExplicitTypeDeclCheck (`ast-explicit-type-decl`) 소스 정규화 및 C/C++ 공용 명시적 타입 검사 확장 (Implicit Int 미탐 해결)
+## 2026-09-17: [Resolved] ExplicitTypeDeclCheck (`ast-explicit-type-decl`) 소스 정규화 및 C/C++ 공용 명시적 타입 검사 확장 (Implicit Int 미탐 해결)
 
 ### 1. 현상 (Symptom)
 * DAPA 국방 규격 `공통(스타일) c. 함수/변수의 선언 시 type을 명시해야 한다 (auto 사용 제한)` 검증 시:
@@ -458,7 +458,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-17: PointerCvQualifierDropCheck (`ast-pointer-cv-qualifier-drop`) 포인터 비교문 내 암묵적 형변환 오탐 68건 전수 해결
+## 2026-09-17: [Resolved] PointerCvQualifierDropCheck (`ast-pointer-cv-qualifier-drop`) 포인터 비교문 내 암묵적 형변환 오탐 68건 전수 해결
 
 ### 1. 현상 (Symptom)
 * DAPA 타입변환 규칙 Rule 31 (바. const 한정자 상실 방지) 및 MISRA C:2012 Rule 11.8 (Required) 정적 검증 시:
@@ -492,7 +492,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-17: NoOutOfRangeAssignmentCheck (`ast-no-out-of-range-assignment`) 무부호 정수 리터럴 음수 오인 및 이항 연산 부호 오염 오탐 25건 전수 해결
+## 2026-09-17: [Resolved] NoOutOfRangeAssignmentCheck (`ast-no-out-of-range-assignment`) 무부호 정수 리터럴 음수 오인 및 이항 연산 부호 오염 오탐 25건 전수 해결
 
 ### 1. 현상 (Symptom)
 * DAPA 데이터 변환 규칙 Rule 5, MISRA C:2012 Rule 10.1, CWE-190 정적 검증 시:
@@ -535,7 +535,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-17: cfg-null-dereference-guard 순수 방어 가드 래티스 개량 및 CSA NullDereference 중복 경고 차단
+## 2026-09-17: [Resolved] cfg-null-dereference-guard 순수 방어 가드 래티스 개량 및 CSA NullDereference 중복 경고 차단
 
 ### 1. 현상 (Symptom)
 * DAPA Rule 33 ("포인터 사용 전 NULL 검사 수행")을 위한 `cfg-null-dereference-guard` 체커와 CSA 심볼릭 실행 체커 `path-sensitive-core.NullDereference`를 동시 구동 시:
@@ -570,7 +570,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-17: path-sensitive-core.StackAddressEscape 대입 위치 ExplodedGraph 역추적 고도화 및 DAPA Rule 34 진단 위치 정밀화
+## 2026-09-17: [Resolved] path-sensitive-core.StackAddressEscape 대입 위치 ExplodedGraph 역추적 고도화 및 DAPA Rule 34 진단 위치 정밀화
 
 ### 1. 현상 (Symptom)
 * DAPA Rule 34 ("지역 변수 주소값을 더 넓은 scope를 가진 변수에 할당하지 않는다") 표준 테스트베드인 `C:\TestCase_Root_DAPA\Rule_34_Ptr_LocalAddressEscape\NonCompliant.c` 분석 시:
@@ -613,7 +613,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-17: cfg-nonzero-divisor-guard 3-상태 래티스 개량 및 CSA DivideZero 중복 경고 차단 (DAPA Rule 39)
+## 2026-09-17: [Resolved] cfg-nonzero-divisor-guard 3-상태 래티스 개량 및 CSA DivideZero 중복 경고 차단 (DAPA Rule 39)
 
 ### 1. 현상 (Symptom)
 * DAPA Rule 39 ("나누는 값이 변수일 경우 0인지를 반드시 확인하여야 한다") 표준 테스트베드인 `C:\TestCase_Root_DAPA\Rule_39_Op_DivbyZero\NonCompliant.c`(`return x / n;`) 분석 시:
@@ -669,7 +669,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-17: lex-include-charset 진단 위치 정밀화 (열 10 고정 버그) 및 중복 경고 제거 (DAPA Rule 48)
+## 2026-09-17: [Resolved] lex-include-charset 진단 위치 정밀화 (열 10 고정 버그) 및 중복 경고 제거 (DAPA Rule 48)
 
 ### 1. 현상 (Symptom)
 * DAPA C 전용 2) 규칙 (Rule 48: `#include 구문에서 표준에 맞지 않는 Character set을 사용하지 않아야 한다`) 정적 검증 시:
@@ -706,7 +706,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-17: ast-exception-specification DAPA Rule 57 공식 테스트베드 동기화 및 진단 메시지 표준화
+## 2026-09-17: [Resolved] ast-exception-specification DAPA Rule 57 공식 테스트베드 동기화 및 진단 메시지 표준화
 
 ### 1. 현상 (Symptom)
 * DAPA C++ 전용 6) 규칙 (Rule 57: `exception specification에 기술되지 않은 모든 throw에 대하여 예외처리를 해야만 한다`):
@@ -734,7 +734,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-18: path-sensitive-arqa.UninitializedAddressToConstParam MbedTLS 12건 전수 오탐 제거 및 GDM 경로 민감 상태 추적 구축
+## 2026-09-18: [Resolved] path-sensitive-arqa.UninitializedAddressToConstParam MbedTLS 12건 전수 오탐 제거 및 GDM 경로 민감 상태 추적 구축
 
 ### 1. 현상 (Symptom)
 * DAPA 선언 및 초기화 규칙 Rule 15, MISRA C:2012 Rule 9.1, CWE-457 검증용 체커인 `path-sensitive-arqa.UninitializedAddressToConstParam`을 MbedTLS 벤치마크 96개 파일에 적용 시, 총 12건의 검출이 발생하였으나 전수가 정상 초기화된 버퍼를 미초기화로 오인한 **진성 엔진 오탐 (False Positive 100%, 12/12건)**으로 확인됨.
@@ -780,7 +780,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-18: StackAddressEscape 체커 내 호출자 출력 매개변수/힙/this 미탐 및 단언문 크래시 해결
+## 2026-09-18: [Resolved] StackAddressEscape 체커 내 호출자 출력 매개변수/힙/this 미탐 및 단언문 크래시 해결
 
 ### 1. 현상 (Symptom)
 * DAPA 포인터 및 배열 규칙 Rule 34/Rule 35, MISRA C:2012 Rule 18.6, CWE-562 검증용 체커인 `path-sensitive-core.StackAddressEscape`(`StackAddrEscapeChecker.cpp`)에서 스택 주소 유출 패턴 중 가장 빈번한 3대 시나리오에 대해 진단을 내리지 못하는 **진성 엔진 미탐 (False Negative 100%)** 현상 발생:
@@ -824,7 +824,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-18: path-sensitive-arqa.ArrayBound 구조체 배열 센티널 오탐 3건 제거 및 상위 버퍼 크기 불일치 트레이드오프 선보고
+## 2026-09-18: [Resolved] path-sensitive-arqa.ArrayBound 구조체 배열 센티널 오탐 3건 제거 및 상위 버퍼 크기 불일치 트레이드오프 선보고
 
 ### 1. 현상 (Symptom)
 * DAPA 포인터 및 배열 규칙 6조, MISRA C:2012 Rule 18.1, CWE-119 검증용 체커인 `path-sensitive-arqa.ArrayBound`를 MbedTLS 벤치마크에 적용 시, 총 5건의 진단이 검출되었으나 실측 결과 두 가지 상이한 패턴으로 분리됨:
@@ -857,7 +857,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-18: Checker 7 (`NarrowingConversion`) & Checker 18 (`UninitializedAddressToConstParam`) 과적합 제거 및 엔진 중립성·무결점 리팩토링
+## 2026-09-18: [Resolved] Checker 7 (`NarrowingConversion`) & Checker 18 (`UninitializedAddressToConstParam`) 과적합 제거 및 엔진 중립성·무결점 리팩토링
 
 ### 1. 현상 및 전수 감사 적발 (Symptom & Retro-Audit)
 * `00_오탐분석_마스터_계획서` 기 수정 체커 전수 감사(Retro-Audit) 결과, 특정 벤치마크 통과만을 목적으로 작성된 위험한 하드코딩 및 광범위한 진단 억제 로직 적발:
@@ -892,7 +892,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-18: path-sensitive-core.NullDereference 심층 분석(Deep Mode) 억제 해제 정책과 단일 TU 외부 함수 심볼릭 한계에 따른 구조적 오탐 규명
+## 2026-09-18: [Resolved] path-sensitive-core.NullDereference 심층 분석(Deep Mode) 억제 해제 정책과 단일 TU 외부 함수 심볼릭 한계에 따른 구조적 오탐 규명
 
 ### 1. 현상 (Symptom)
 * DAPA 포인터 및 배열 규칙 6조, MISRA C:2012 Rule 1.3 / 21.3, CWE-476(NULL Pointer Dereference) 검증용 체커인 `path-sensitive-core.NullDereference`(`DereferenceChecker.cpp`)를 MbedTLS 벤치마크에 적용 시 총 5건의 진단 검출:
@@ -929,7 +929,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-18: cfg-null-pointer-arithmetic 복합 논리곱(&&) Terminator 미인식 및 힙 구조체 역참조 오인 결함 해결
+## 2026-09-18: [Resolved] cfg-null-pointer-arithmetic 복합 논리곱(&&) Terminator 미인식 및 힙 구조체 역참조 오인 결함 해결
 
 ### 1. 현상 (Symptom)
 * DAPA 포인터 및 배열 규칙 6조, MISRA C:2012 Rule 18.1 / Rule 18.4, CWE-476 / CWE-823 준수 검증용 체커인 `cfg-null-pointer-arithmetic`(`NullPointerArithmeticCheck.cpp`) 구동 시 MbedTLS 벤치마크에서 3건의 오탐(FP 100%) 검출:

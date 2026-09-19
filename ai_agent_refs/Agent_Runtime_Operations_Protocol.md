@@ -103,9 +103,25 @@ flowchart TD
 작업을 중단한 에이전트는 침묵하거나 단순히 "실패했습니다"라는 한마디로 끝나서는 안 됩니다. 인간 개발자가 상황을 즉시 파악하고 개입(HITL)할 수 있도록 정형화된 인수인계 절차를 수행합니다.
 
 ### 6.1 트러블슈팅 로그 작성 표준
-[Knowledge_Base_Authoring_Guidelines.md](./Knowledge_Base_Authoring_Guidelines.md) 및 [AI_Project_Integration_Guidelines.md](./AI_Project_Integration_Guidelines.md)에 따라, 해당 프로젝트의 트러블슈팅 문서(`troubleshooting/<project_name>.md`)에 에러 상황을 박제합니다.
+[Knowledge_Base_Authoring_Guidelines.md](./Knowledge_Base_Authoring_Guidelines.md) 및 [AI_Project_Integration_Guidelines.md](./AI_Project_Integration_Guidelines.md)에 따라, 해당 프로젝트의 트러블슈팅 문서(`troubleshooting/<project_name>.md`)에 에러 상황 또는 해결 내역을 기록합니다.
 
-#### [Unresolved] 표준 트러블슈팅 마크다운 템플릿
+모든 트러블슈팅 문서는 탐색 일관성과 목차(TOC) 앵커 링크 보전을 위해 **H2(이슈 단위) + H3(속성 단위)**의 단일 계층 구조를 엄격히 준수합니다. 단일 일자에 복수의 이슈가 발생하더라도 H3로 중첩하지 않고 개별 H2 엔트리로 분리합니다.
+
+#### [Resolved] 표준 트러블슈팅 마크다운 템플릿 (해결 완료 런북)
+```markdown
+## YYYY-MM-DD: [Resolved] <에러/이슈 명칭 요약>
+
+### 1. 현상 (Symptom)
+- 발생한 에러 메시지, 로그 내용 또는 시스템 오작동 상황 요약
+
+### 2. 원인 (Root Cause)
+- 코드, API, 아키텍처 또는 동시성 메커니즘 차원의 근본 원인 분석
+
+### 3. 해결책 (Resolution)
+- 적용된 코드 변경점, 설정 수정 및 검증 결과 (Exit Code 0 Ground Truth 확인)
+```
+
+#### [Unresolved] 표준 트러블슈팅 마크다운 템플릿 (서킷 브레이커 중단 및 인수인계)
 ```markdown
 ## YYYY-MM-DD: [Unresolved] <에러/이슈 명칭 요약>
 
