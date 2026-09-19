@@ -23,8 +23,10 @@ related:
 
 ## 1. 독립감사 핵심 철학 (Core Philosophy)
 
-1. **독립성 및 단일 역할 격리 (Single Role Isolation)**:
-   * 문서를 작성한 에이전트는 감사를 수행할 수 없으며, 각 감사 단계는 상호 편향이 배제된 독립된 서브에이전트가 단독으로 수행합니다.
+1. **독립성 및 감사-수정 분리 (Separation of Audit and Fix)**:
+   * **작성자 감사 절대 금지**: 문서를 작성한 에이전트는 해당 문서의 감사를 수행할 수 없으며, 각 감사 단계는 상호 편향이 배제된 독립된 서브에이전트가 단독으로 수행합니다.
+   * **감사관의 직접 수정 금지 (Read-Only Isolation)**: 감사 서브에이전트는 검사 대상 문서를 직접 수정할 수 없습니다(자체 감사 및 이해상충 방지). 결함 발견 시 오직 구체적 증거와 함께 `[GATE N FAIL]` 보고서만을 메인 세션에 회신합니다.
+   * **메인 에이전트의 수정 및 재감사 의무 (Fix & Re-Audit Protocol)**: 결함 수정은 메인 에이전트가 집행하며, 수정 완료 후 해당 단계 감사관을 새로 소환하여 재실사를 받아야 합니다. `[GATE N PASS]` 확정 전에는 절대 다음 단계로 전진할 수 없습니다.
 2. **사고 기반 검증(Blind Coding) 및 표면적 라벨 매칭 절대 금지**:
    * "머릿속 추론"이나 "문서의 그럴듯한 서술"만으로 정합성을 판정하는 행위를 엄격히 금지합니다. 실제 원본 소스코드, 빌드 설정, 커널/프로토콜 스키마, 테스트 로그(`jsonl`, `csv`, `stdout`), 물리적 런타임 메트릭에 대한 직접적 실사를 기반으로 증명되어야 합니다.
 3. **휘발성 코드 방지 원칙 (Anti-Volatile Code Policy)**:
@@ -77,6 +79,39 @@ flowchart TD
     Gate4 -- Fail --> FailRollback
     FailRollback -- 3회 실패 시 --> Escalate
 ```
+
+### 결함 발생 시 자가 치유 및 재감사 절차 (Fail-Fix-Reaudit Lifecycle)
+
+감사관(서브에이전트)과 오케스트레이터(메인 에이전트)는 '감사와 수정의 분리' 원칙에 따라 다음과 같은 폐루프로 결함을 치유합니다.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Auditor as "감사 서브에이전트 (Auditor)"
+    participant Main as "메인 오케스트레이터 (Main Agent)"
+    participant Doc as "기술 문서 (Target Doc)"
+
+    Note over Auditor, Doc: [1단계: 읽기 전용 실사 (Read-Only)]
+    Auditor->>Doc: 소스코드/로그 대조 실사 (쓰기 도구 미사용)
+    alt 결함 발견 (Defect Detected)
+        Auditor-->>Main: [GATE N FAIL] 불일치 증거 보고서 회신 (수정 미수행)
+        Note over Main, Doc: [2단계: 메인 에이전트 수정 집행]
+        Main->>Doc: 결함 원인 분석 및 문서 수정/보정
+        Note over Main, Auditor: [3단계: 신규 서브에이전트 재실사]
+        Main->>Auditor: 해당 Stage 신규 감사관 단독 소환 (Re-Audit)
+        Auditor->>Doc: 수정본 재검증
+        Auditor-->>Main: [GATE N PASS] 공식 통과 회신
+        Note over Main: 다음 Stage 감사관 소환 (전진)
+    else 결함 없음 (Clean)
+        Auditor-->>Main: [GATE N PASS] 통과 회신
+        Note over Main: 즉시 다음 Stage 전진
+    end
+```
+
+1. **[결함 적발 및 회신]**: 감사 서브에이전트는 문서를 임의 수정하지 않고 `[GATE N FAIL]` 판정과 함께 구체적인 불일치 행, 수치, 코드 증거를 담은 보고서를 메인 세션에 반환합니다.
+2. **[메인 에이전트 보정]**: 메인 에이전트는 보고서의 결함을 검토하고 문서(또는 코드)를 올바른 Ground Truth로 수정합니다.
+3. **[독립 재감사 (Re-Audit)]**: 수정 완료 후, 메인 에이전트는 해당 단계의 독립 서브에이전트를 새로 단독 소환(`Subagents.Length == 1`)하여 수정 내용의 무결성을 재검증받습니다.
+4. **[서킷 브레이커]**: 동일 Gate에서 3회 연속 `FAIL`이 발생할 경우 자가 치유를 즉시 중단하고 인간 개발자에게 에스컬레이션합니다.
 
 ---
 
