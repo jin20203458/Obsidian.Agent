@@ -14,10 +14,10 @@ related:
 
 ## 1. 프로젝트 현황 및 리포지토리 매핑
 
-* **메인 리포지토리**: `../Phalanx` (로컬 워크스페이스: `C:\Users\adg01\Documents\GitHub\Phalanx`)
+* **메인 리포지토리**: `../Phalanx`
   * 활성 작업 브랜치: `feature/phase3-ai-hunter`
   * 원격 저장소: `https://github.com/jin20203458/phalanx` (최신 커밋 푸시 완료)
-* **지식베이스 리포지토리**: `../Obsidian.Agent` (로컬 워크스페이스: `C:\Users\adg01\Documents\GitHub\Obsidian.Agent`)
+* **지식베이스 리포지토리**: `../Obsidian.Agent`
   * 공식 스펙: `Phalanx/docs/`
   * 트러블슈팅 런북: `troubleshooting/phalanx.md` (12개 핵심 기술 문제 해결 내역 보존)
 * **솔루션 파일**: `Phalanx.sln` (Visual Studio 2026 / Dev18 및 VS 2022 v17.x 호환 표준 솔루션)
@@ -26,17 +26,17 @@ related:
 
 ## 2. 핵심 아키텍처 불변식 및 코드베이스 매핑 (Architectural Invariants & Code Mapping)
 
-최상위 상시 행동 수칙인 [`.agents/AGENTS.md`](file:///c:/Users/adg01/Documents/GitHub/Phalanx/.agents/AGENTS.md)의 핵심 규칙들을 실제 코드베이스에서 안전하게 계승하기 위해, 후속 에이전트는 아래 5대 불변식의 구현 메커니즘과 세부 매핑 위치를 준수해야 합니다:
+최상위 상시 행동 수칙인 [`.agents/AGENTS.md`](../../../Phalanx/.agents/AGENTS.md)의 핵심 규칙들을 실제 코드베이스에서 안전하게 계승하기 위해, 후속 에이전트는 아래 5대 불변식의 구현 메커니즘과 세부 매핑 위치를 준수해야 합니다:
 
 1. **AI 수사관 단일 진실 공급원 (SSOT Decision Authority)**:
    * ReAct 루프가 정상 종결(`reachedFinal == true && hasValidAction`)된 경우, Gemini 모델의 `VerdictAction`(`ACTION_KILL` vs `ACTION_RESUME`)은 절대적 최상위 결정권을 가집니다.
    * `CommandLine.Contains("-enc")` 등 단순 정적 문자열 검사로 LLM의 정상 판결을 사살로 강제 오버라이드하거나 사내 IP를 임의 차단하는 하드코딩 if문을 절대 추가하지 마십시오.
    * 시스템 가드는 **최대 턴(5턴) 초과 타임아웃** 또는 **API 완전 단절/예외** 시의 Fail-Secure 방어에만 국한되어야 합니다.
 2. **세이프티 워치독 SLA 계약 (10초 기본 / 50초 연장 티켓)**:
-   * C++ 센서는 프로세스를 동결할 때 데드락 및 고아 동결(Orphan Freeze) 방지를 위해 기본 10초(10,000ms) 안전 타임아웃을 적용합니다 (`SafetyWatchdog.h:37`).
+   * C++ 센서는 프로세스를 동결할 때 데드락 및 고아 동결(Orphan Freeze) 방지를 위해 기본 10초(10,000ms) 안전 타임아웃을 적용합니다 ([`SafetyWatchdog::SafetyWatchdog`](../../../Phalanx/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h)).
    * 오프라인 로컬 규칙 엔진(평균 23ms 완결)은 연장을 요청하지 않으므로, 비정상 크래시 시 10초 데드락 자가 회복(Auto-Resume)이 보장됩니다.
-   * C# AI 헌터가 외부 LLM 심층 수사에 진입할 경우 즉시 `ACTION_EXTEND_TIMEOUT` 티켓을 선제 발송하여 마감 기한을 1회에 한해 50초 누적 연장(+50,000ms ➔ 총 60초 예산 확보)합니다 (`SafetyWatchdog.h:55`, `AutonomousHunterAgent.cs:120-125`).
-   * C# 최상위 타임아웃 CTS는 네트워크 통신 레이스를 차단하고 워치독 만료 10초 전 안전 마진을 두기 위해 50초(50,000ms)로 엄격 제한합니다 (`AutonomousHunterAgent.cs:131`, `troubleshooting/phalanx.md:43`).
+   * C# AI 헌터가 외부 LLM 심층 수사에 진입할 경우 즉시 `ACTION_EXTEND_TIMEOUT` 티켓을 선제 발송하여 마감 기한을 1회에 한해 50초 누적 연장(+50,000ms ➔ 총 60초 예산 확보)합니다 ([`SafetyWatchdog::ExtendTimeout`](../../../Phalanx/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h), [`AutonomousHunterAgent.InvestigateWithGeminiAsync`](../../../Phalanx/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs)).
+   * C# 최상위 타임아웃 CTS는 네트워크 통신 레이스를 차단하고 워치독 만료 10초 전 안전 마진을 두기 위해 50초(50,000ms)로 엄격 제한합니다 ([`AutonomousHunterAgent`](../../../Phalanx/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs) 취소 토큰, [`troubleshooting/phalanx.md`](../../troubleshooting/phalanx.md)).
 3. **UI 스레드 안전 마샬링 및 Headless 호환성**:
    * Kestrel gRPC 및 비동기 작업 스레드는 `ObservableCollection`을 직접 조작할 수 없습니다. 반드시 `CockpitUiBridge.Instance`를 거쳐 `Dispatcher.InvokeAsync`로 마샬링하십시오.
    * 비GUI 환경(단위 테스트 및 `--headless` CI 러너)을 위해 `Application.Current`가 null이어도 예외 없이 안전 통과하는 Null-Safety 방어를 유지해야 합니다.
@@ -97,7 +97,7 @@ Phalanx는 타 저장소(예: MundusVivens)에 대한 런타임 의존성 없이
 
 ### 4.2 검증 체계 및 특화 테스트 가이드 (Verification Suite & Live Guidelines)
 
-기본적인 상시 빌드 및 테스트 명령어(C# 빌드, 단위 테스트, C++ 빌드, 풀체인 E2E)는 최상위 규격인 [`.agents/AGENTS.md`](file:///c:/Users/adg01/Documents/GitHub/Phalanx/.agents/AGENTS.md)의 `<critical_rules>`에 단일 진실(SSOT)로 정의되어 있습니다.
+기본적인 상시 빌드 및 테스트 명령어(C# 빌드, 단위 테스트, C++ 빌드, 풀체인 E2E)는 최상위 규격인 [`.agents/AGENTS.md`](../../../Phalanx/.agents/AGENTS.md)의 `<critical_rules>`에 단일 진실(SSOT)로 정의되어 있습니다.
 
 인수인계 시 실제 클라우드 AI 인프라 연동을 포함한 전체 검증 절차는 아래 특화 지침을 따릅니다:
 
@@ -168,7 +168,7 @@ Phalanx는 타 저장소(예: MundusVivens)에 대한 런타임 의존성 없이
 * **구현 방식**: `wintrust.dll` 및 `crypt32.dll`의 `WinVerifyTrust` API P/Invoke 호출.
 * **검증 액션 GUID**: `WINTRUST_ACTION_GENERIC_VERIFY_V2` (`{00AAC56B-CD44-11d0-8CC2-00C04FC295EE}`).
 * **주요 플래그**:
-  * `WDF_REVOCATION_CHECK_NONE` (오프라인/동결 상태 고속 검증용) 또는 `WDF_REVOCATION_CHECK_CHAIN`
+  * `WTD_REVOCATION_CHECK_NONE` (오프라인/동결 상태 고속 검증용) 또는 `WTD_REVOCATION_CHECK_CHAIN`
   * `WTD_STATEACTION_VERIFY`
 * **추출 정보**: 서명 유효 여부(`IsValid`), 서명 주체(`SignerSubjectName`), 발급자(`IssuerName`), 카탈로그 서명 여부(`IsCatalogSigned`).
 * **판정 기준**: Microsoft Windows 정규 서명이 없거나 유효하지 않은 `svchost.exe`, `csrss.exe`, `lsass.exe` 등은 즉시 위험 점수 100점 부여.
@@ -193,12 +193,18 @@ Phalanx는 타 저장소(예: MundusVivens)에 대한 런타임 의존성 없이
 ```csharp
 namespace Phalanx.Cockpit.Tools;
 
-public sealed class FileInspectionTool : IForensicTool
+public sealed class FileInspectionTool : IInvestigationTool
 {
     public string Name => "FileInspectionTool";
     public string Description => 
         "디스크 상의 파일 경로, 디지털 서명(Authenticode), 시스템 파일 위장(Masquerading), " +
         "PE 헤더 정합성, 엔트로피를 정밀 검증합니다. 인자: { \"filePath\": \"C:\\\\...\" }";
+
+    public async Task<ToolResult> ExecuteAsync(Dictionary<string, object> parameters)
+    {
+        // WinVerifyTrust P/Invoke, 시스템 경로 위장 검증, 섀넌 엔트로피 분석 수행
+        // 반환: new ToolResult(true, observationSummary, resultData)
+    }
 
     // 도구 입력 인자 모델
     public sealed class Input
@@ -226,8 +232,8 @@ public sealed class FileInspectionTool : IForensicTool
 }
 ```
 
-### 6.4 `AutonomousHunterAgent` 프롬프트 및 도구 등록 통합
-* **도구 등록**: `AutonomousHunterAgent` 생성자에서 `_tools["FileInspectionTool"] = new FileInspectionTool();` 등록.
+### 6.4 의존성 주입(DI) 등록 및 `AutonomousHunterAgent` 프롬프트 통합
+* **DI 컨테이너 등록**: `Program.cs`에서 `builder.Services.AddSingleton<IInvestigationTool, FileInspectionTool>();` 등록 (Cockpit 기동 시 `IEnumerable<IInvestigationTool>` 컬렉션을 통해 `AutonomousHunterAgent`에 자동 주입).
 * **PICCO 시스템 프롬프트 업데이트**:
   * `[AVAILABLE FORENSIC TOOLS]` 섹션에 `FileInspectionTool` 인터페이스 및 입출력 명세 추가.
   * **수사 지침 규칙(Rules)**:
