@@ -282,3 +282,17 @@ related:
 3. **모의 도구 및 단위 테스트 검증**:
    * `FullChainSystemTests.cs`의 `TestScenario1_InstantKill_BypassesAiInvestigation`에 포렌식 아카이브 및 인시던트 자동 등록 검증 단계를 추가하여 회귀 방지(26/26 Unit Tests 통과).
    * `Phalanx.AttackSimulator` 시나리오 2(`vssadmin.exe delete shadows`)의 페이로드를 실제 C++ 센서의 사살 텔레메트리 포맷(`IsSuspended = false, IsTerminated = true, LifecycleTerminated`)으로 동기화.
+4. **적응형 레이턴시(Latency) 포맷터 및 영구 복원 개선 (`IncidentItemViewModel.cs`, `MainViewModel.cs`, `ForensicModels.cs`)**:
+   * 밀리초(`ElapsedMs`)를 무조건 초(`s`) 단위로 변환 후 소수점 둘째 자리(`:F2`)로 포맷팅하여 10ms 미만 초고속 사건이 `0.00s`로 절삭되던 결함 수정 (`80μs (0.08ms, Reflex)` 표기).
+   * 재시작 후 모든 과거 카드가 `Investigating...`으로 초기화되던 원인: `IncidentRecord`에 지연시간 필드가 부재하고 `LoadIncidentsFromDatabase`에서 `ElapsedMs` 바인딩이 누락되어 `0.0`으로 남아있었던 결함.
+   * `IncidentRecord.ElapsedMs` 스키마 필드 추가 및 `traces.Sum(t => t.ElapsedMs)` 복원 파이프라인 구축.
+   * 이미 판결이 종결된 사건(`ACTION_KILL`/`ACTION_RESUME`)은 `ElapsedMs`가 0이더라도 `Investigating...`이 절대 표출되지 않도록 이중 방어.
+5. **현장 사살 후속 대응 런북(Remediation) 정제 (`AutonomousHunterAgent.cs`)**:
+   * 이미 완료된 실행 사실(`사살 완료 (소요시간 0.08ms)`)을 런북에서 완전 제거.
+   * 룰 유형(`vssadmin` 섀도 복사본 무결성 검증, `bcdedit` BCD 부팅 정책 점검, `wbadmin` 백업 카탈로그 감사 등)에 따른 실제 관제관 후속 Action Item으로 세분화.
+6. **수동 개입(Force Terminate / Resume) 버튼 제거 및 관제 UX 단순화 (`MainWindow.xaml`, `MainViewModel.cs`)**:
+   * 이미 C++ 커널 또는 AI 수사관에 의해 종결(`ACTION_KILL`/`ACTION_RESUME`)된 사건에 대해 사후 수동 개입 버튼을 노출하는 논리적 모순 및 관제관 혼선 해소.
+   * 자율 EDR 원칙(Autonomous Execution)에 맞춰 프로세스 강제 종료/재개 버튼 및 불필요한 바인딩 코드를 완전히 제거하고, 향후 실무형 2차 거버넌스 기능(화이트리스트 등록, 포렌식 보고서 복사 등)으로 전환할 수 있도록 UX 정리.
+
+
+
