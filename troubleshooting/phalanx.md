@@ -293,6 +293,7 @@ related:
 6. **수동 개입(Force Terminate / Resume) 버튼 제거 및 관제 UX 단순화 (`MainWindow.xaml`, `MainViewModel.cs`)**:
    * 이미 C++ 커널 또는 AI 수사관에 의해 종결(`ACTION_KILL`/`ACTION_RESUME`)된 사건에 대해 사후 수동 개입 버튼을 노출하는 논리적 모순 및 관제관 혼선 해소.
    * 자율 EDR 원칙(Autonomous Execution)에 맞춰 프로세스 강제 종료/재개 버튼 및 불필요한 바인딩 코드를 완전히 제거하고, 향후 실무형 2차 거버넌스 기능(화이트리스트 등록, 포렌식 보고서 복사 등)으로 전환할 수 있도록 UX 정리.
-
-
-
+7. **관제 콕핏 인시던트 검색 필터(`ApplyFilter`) `NullReferenceException` 예외 결함 해결 (`MainViewModel.cs`)**:
+   * 현상: 관제 콕핏 상단 검색창에 키워드 입력 시 `MainViewModel.ApplyFilter()`(줄 340)에서 `NullReferenceException`이 발생하며 콕핏 크래시.
+   * 원인: 과거 사건의 `BlockedIp`, `CommandLine` 등이 null인 상태에서 Null 조건부 연산자 없이 `.Contains()`를 직접 호출하여 발생. 또한 DB 역직렬화 시 null 필드가 뷰모델에 그대로 바인딩됨.
+   * 해결: `TargetImage`, `CommandLine`, `SummaryTitle`, `BlockedIp` 등에 `?.Contains(...) ?? false` 널-세이프 탐색 연산자 적용 및 `LoadIncidentsFromDatabase`에서 `?? string.Empty`로 방어 초기화.
