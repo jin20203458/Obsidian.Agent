@@ -228,3 +228,57 @@ related:
    * gRPC 수신 및 AI 수사 시작/완료 알림을 `Application.Current?.Dispatcher?.InvokeAsync(...)`로 안전하게 래핑하여 UI 스레드로 마샬링.
    * 비GUI 환경(헤드리스 러너 및 단위 테스트)에서도 `Application.Current`가 null일 때 안전하게 No-op 통과하는 Null-Safety 방어 구현.
 
+---
+
+## 2026-09-20: [Resolved] gRPC 스트림 다중 클라이언트 세션 덮어쓰기 및 거짓 DISCONNECTED 상태 전이 결함 해결
+
+### 1. 현상 (Symptom)
+* C++ 커널 센서(`Phalanx.Sensor`)가 백그라운드에서 정상 기동되어 gRPC 스트림을 유지하고 있음에도 불구하고, 모의 공격 도구(`Phalanx.AttackSimulator`) 실행 종료 직후 또는 유휴 상태 경과 시 WPF 관제 콘솔의 상단 통신 상태가 주기적으로 빨간색 `[DISCONNECTED]`로 반전되는 현상 발생.
+* 센서 토글 버튼은 `STOP SENSOR`로 가동 상태를 가리키는데 통신 상태는 `[DISCONNECTED]`로 표시되어 관제관에게 혼선을 초래하고, 수동 완화 명령 하달 실패 가능성 유발.
+
+### 2. 원인 (Root Cause)
+1. **단일 응답 스트림 포인터 덮어쓰기 및 조기 폐기**:
+   * `PhalanxGrpcService`가 단일 필드 `private IServerStreamWriter<MitigationCommand>? _responseStream;`로 작성되어 있었음.
+   * C++ 센서가 연결된 상태에서 모의 공격 도구가 추가로 `StreamTelemetry`에 연결하면 해당 필드가 모의 도구의 스트림으로 덮어써짐.
+   * 모의 도구의 시나리오가 끝나 연결이 해제되면 `finally` 블록에서 `_responseStream = null`로 초기화하고 `_uiBridge?.NotifySensorConnected(false)`를 무조건 호출함.
+   * 이로 인해 C++ 센서가 여전히 연결되어 있음에도 UI가 `[DISCONNECTED]`로 반전되고, 백그라운드 센서로 완화 명령을 보낼 수 없는 단절 상태 발생.
+2. **Kestrel HTTP/2 유휴 킵얼라이브 미설정**:
+   * Kestrel gRPC 엔드포인트에 HTTP/2 KeepAlive Ping 설정이 부재하여 유휴 시 소켓 반폐쇄(Half-closed) 상태 진입 가능성 존재.
+
+### 3. 해결책 (Resolution)
+1. **동시성 컬렉션 기반 멀티 클라이언트 세션 관리 (`PhalanxGrpcService.cs`)**:
+   * 단일 포인터를 `ConcurrentDictionary<string, IServerStreamWriter<MitigationCommand>> _activeClients`로 교체.
+   * 클라이언트 접속 시 고유 ID로 등록하고, 연결 해제 시 해당 클라이언트만 제거.
+   * `_activeClients.IsEmpty`가 true(즉, 등록된 모든 클라이언트가 완전히 단절)일 때만 `_uiBridge.NotifySensorConnected(false)`를 호출하도록 통신 수명주기 보정.
+   * `SendCommandAsync` 실행 시 살아있는 모든 스트림으로 완화 명령을 브로드캐스팅하고 죽은 스트림은 안전하게 제거.
+2. **Kestrel HTTP/2 킵얼라이브 활성화 (`Program.cs`)**:
+   * `KeepAlivePingDelay = 30s`, `KeepAlivePingTimeout = 15s`, `KeepAliveTimeout = 5분`을 명시하여 장기 유휴 gRPC 세션의 무중단 연결 유지 보장.
+3. **기존 센서 프로세스 감지 시 이벤트 리스너 바인딩 (`SensorProcessController.cs`)**:
+   * 이미 외부에서 실행 중이던 `Phalanx.Sensor` 프로세스를 감지했을 때도 `EnableRaisingEvents = true` 및 `Exited` 핸들러를 등록하여 비정상 종료 시 가동 상태 플래그가 정확히 동기화되도록 보강.
+
+---
+
+## 2026-09-20: [Resolved] C++ 커널 룰 엔진 0.1ms 즉각 현장 사살(Reflex Kill)의 관제 콕핏 누락 및 포렌식 즉시 등록 구현
+
+### 1. 현상 (Symptom)
+* 랜섬웨어(`vssadmin.exe delete shadows`, `bcdedit /set recoveryenabled no` 등)가 실행될 때 C++ 커널 센서의 `LocalRuleEngine`이 0.1ms(80μs) 이내에 즉각 현장 사살(`NtTerminateProcess`)을 집행하고 `Lifecycle = LIFECYCLE_TERMINATED` 텔레메트리를 C# Cockpit으로 전송함.
+* 그러나 WPF 관제 콕핏 UI 상단의 Monitored Processes 카운트 및 내부 CQRS 트리에서만 프로세스가 비활성화(`IsAlive = false`)될 뿐, 좌측 실시간 인시던트 작업 목록(Incident Worklist)에는 침해 대응 카드가 전혀 생성되지 않는 현상 발생.
+
+### 2. 원인 (Root Cause)
+1. **수사 파이프라인 트리거 조건의 단일화 (`PhalanxGrpcService.cs`)**:
+   * 기존 gRPC 서비스의 텔레메트리 루프는 `if (ev.IsSuspended)` 조건문만 검사하여 동결된 회색지대 프로세스만 `AutonomousHunterAgent.InvestigateThreatAsync`로 라우팅하고 있었음.
+   * C++ 로컬 룰 엔진에 의해 즉각 사살된 이벤트는 이미 종료되었으므로 `IsSuspended = false`, `IsTerminated = true`, `Lifecycle = LIFECYCLE_TERMINATED` 상태로 인입됨.
+   * 이로 인해 C# 에이전트 수사관 및 관제 UI 브리지로 사건 통지가 도달하지 못함.
+2. **사살 후 역전송 불필요 제약과의 결합**:
+   * 이미 C++ 센서가 프로세스를 사살했기 때문에 C#에서 센서로 `MitigationCommand`를 다시 보낼 필요가 없음(오히려 중복 송신 시 오류). 그러나 관제관(SOC) 보고 및 LiteDB 포렌식 아카이빙은 여전히 필수적임.
+
+### 3. 해결책 (Resolution)
+1. **현장 사살 즉각 보고 파이프라인 신설 (`AutonomousHunterAgent.HandleReflexKill`)**:
+   * AI ReAct 루프의 수 초 지연을 거치지 않고, 0.08ms 소요시간 레코드와 `LocalRuleEngine` 사살 사유, MITRE ATT&CK T1490 전술을 담은 `IncidentRecord` 및 1단계 `ReActTraceRecord`를 즉각 생성.
+   * LiteDB 영구 저장소(`ForensicArchiveManager.SaveIncident`)에 즉시 적재.
+   * `OnInvestigationCompleted` 이벤트를 트리거하여 `CockpitUiBridge`를 통해 WPF UI 스레드로 마샬링, 관제 콕핏 인시던트 목록에 빨간색 `CRITICAL` / `SECURED` 카드를 즉시 표시.
+2. **gRPC 인입 라우팅 분기 보강 (`PhalanxGrpcService.cs`)**:
+   * `else if (ev.IsTerminated || ev.Lifecycle == ProcessLifecycle.LifecycleTerminated)` 분기를 추가하여 C++ 현장 사살 수신 시 `_agent.HandleReflexKill(node)`로 직결.
+3. **모의 도구 및 단위 테스트 검증**:
+   * `FullChainSystemTests.cs`의 `TestScenario1_InstantKill_BypassesAiInvestigation`에 포렌식 아카이브 및 인시던트 자동 등록 검증 단계를 추가하여 회귀 방지(26/26 Unit Tests 통과).
+   * `Phalanx.AttackSimulator` 시나리오 2(`vssadmin.exe delete shadows`)의 페이로드를 실제 C++ 센서의 사살 텔레메트리 포맷(`IsSuspended = false, IsTerminated = true, LifecycleTerminated`)으로 동기화.
