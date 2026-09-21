@@ -1049,6 +1049,42 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - Clean 8건(TC-04, TC-05, TC-06, TC-07, TC-08, TC-09, TC-10, TC-11) 0건 무경고 클린 통과 (0-FP 방어율 100.0%).
 * **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
 
+---
+
+## 2026-09-21: [Certified] path-sensitive-core.UndefinedBinaryOperatorResult 인라인 복합 에러 반환 제약 소실에 따른 가상 경로 오탐 규명 및 구조적 한계 공인
+
+### 1. 현상 (Symptom)
+* DAPA 초기화 규칙 2조, MISRA C:2012 Rule 9.1 (Mandatory), CWE-457 준수 검증용 CSA 체커인 `path-sensitive-core.UndefinedBinaryOperatorResult`(`UndefResultChecker.cpp`) 구동 시 MbedTLS 벤치마크에서 2건 검출:
+  1. `psa_crypto_cipher.c:414:13`: `*output_length > output_size` ➡️ `'>' 연산자의 왼쪽 피연산자가 초기화되지 않은 쓰레기 값입니다` (**진성 규격 정탐, TP 100%**)
+  2. `rsa.c:2125:16`: `buf[0] >> (8 - siglen * 8 + msb)` ➡️ `'>>' 연산자의 왼쪽 피연산자가 초기화되지 않은 쓰레기 값입니다` (**엔진 제약 소실 오탐, FP 100%**)
+
+### 2. 원인 (Root Cause)
+1. **진성 정탐 (`psa_crypto_cipher.c:414`)**:
+   - `mbedtls_cipher_update` 호출 후 반환값 `status`를 검증하지 않고 `if (*output_length > output_size)`를 즉시 평가.
+   - `mbedtls_cipher_update`는 비정상 인자 유입 시 `*output_length = 0` 초기화 코드를 거치지 않고 조기 에러를 반환하는 실패 경로가 실존하므로, 런타임에 미초기화 스택 쓰레기값을 직접 대소 비교하는 진성 보안 결함.
+2. **엔진 오탐 (`rsa.c:2125`)**:
+   - `rsa.c:2088`에서 `ret = mbedtls_rsa_public(ctx, sig, buf);` 호출.
+   - `mbedtls_rsa_public` 내부(717행)에서 `mbedtls_mpi_read_binary` 실패 경로를 탐색하여 738행 `return MBEDTLS_ERROR_ADD(MBEDTLS_ERR_RSA_PUBLIC_FAILED, ret);`로 빠져나감 (이때 `buf`는 쓰이지 않음).
+   - 호출부인 `rsa.c:2091`로 복귀한 후, 명시적인 방어 코드 `if (ret != 0) return ret;`가 존재함에도 CSA 심볼릭 실행기(`ExprEngineCallAndReturn.cpp`)가 `MBEDTLS_ERROR_ADD` 복합 비트 연산 매크로의 반환값 심볼에 대해 비영(non-zero) 제약을 호출자 컨텍스트로 전달하지 못하고 상실(Constraint Loss)함.
+   - 그 결과 `Assuming the condition is false / 가정함: 'ret' 은(는) 다음과 같음: 0`으로 비실행 가상 경로(Infeasible Path)를 분기하여 2125행에서 `buf[0]`이 쓰레기값이라고 허위 경보를 방출함.
+
+### 3. 트레이드오프 및 아키텍처 결정 (Architectural Decision)
+1. **엔진 중립성 수호 및 Zero Cheating (No-Engine-Touch)**:
+   - `UndefResultChecker.cpp`는 LLVM Upstream의 120줄 순수 코어 체커로, `C.getSVal(B).isUndef()`를 정직하게 감시함.
+   - 특정 변수명(`buf`)이나 함수명(`rsa`)을 하드코딩하여 오탐을 억제하는 것은 Zero Cheating 원칙에 위배됨.
+   - 비트 시프트 연산자(`>>`)나 배열 참조의 `isUndef()` 경고를 완화할 경우, `psa_crypto_cipher.c:414`와 같은 치명적인 보안 취약점(CWE-457) 진성 결함을 놓치는 심각한 미탐(FN) 구멍이 발생함.
+   - 따라서 진성 결함 검출력을 100% 보존하기 위해 엔진 소스코드를 변형하지 않고 원형 그대로 보존함.
+2. **구조적 한계 공인 (Known Structural Limitation)**:
+   - 본 오탐은 체커의 버그가 아니라 Clang Static Analyzer 심볼릭 실행기의 고전적인 인라인 대수적 에러 반환 제약 소실에 의한 것이므로, 상위 아키텍트 승인 하에 **[설계 및 심볼릭 엔진 한계에 따른 공인 구조적 오탐 (Known Limitation, 100.0%)]**으로 공식 공인 완결함.
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 무결점 유지.
+* **MbedTLS 실사 검증**:
+  - `psa_crypto_cipher.c:414`: 진성 결함 1건 ➡️ **100% 정상 방출 유지 (TP 100% 보존)**.
+  - `rsa.c:2125`: 구조적 한계 원인 규명 및 공인 완료.
+* **지식베이스 동기화**: `28_path-sensitive-core.UndefinedBinaryOperatorResult.md v2.1.0` 완결 개정, `00_오탐분석_마스터_계획서.md` 업데이트 완료.
+
+
 
 
 
