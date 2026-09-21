@@ -972,4 +972,43 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - Clean 5건(TC-06, TC-07, TC-08, TC-12, TC-13) 0건 무경고 클린 통과 (0-FP 방어율 100.0%).
 * **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
 
+---
+
+## 2026-09-21: [Resolved] ast-extern-function-declaration 호스트 MSVC 전처리기 가드 오용 및 컴파일러 내장 함수(__builtin_*) 오탐 해결
+
+### 1. 현상 (Symptom)
+* DAPA 스타일 및 구조 규칙 1조, MISRA C:2012 Rule 8.4 / Rule 8.5, CWE-686 준수 검증용 체커인 `ast-extern-function-declaration`(`ExternFunctionDeclarationCheck.cpp`) 구동 시 MbedTLS 벤치마크에서 2건의 오탐(FP 100%) 검출:
+  1. `bignum.c:756:20`: `return __builtin_bswap32(x);` ➡️ `외부 함수 '__builtin_bswap32'가 선언 없이 사용되었습니다. 사용 전에 선언(예: 'extern unsigned int __builtin_bswap32(...);')하십시오.`
+  2. `bignum.c:758:20`: `return __builtin_bswap64(x);` ➡️ `외부 함수 '__builtin_bswap64'가 선언 없이 사용되었습니다. 사용 전에 선언(예: 'extern unsigned long long __builtin_bswap64(...);')하십시오.`
+
+### 2. 원인 (Root Cause)
+1. **호스트 컴파일러 전처리기 가드 오용 (`#if defined(__clang__)`)**:
+   - `ExternFunctionDeclarationCheck.cpp`의 23~25행에 `isFromSystemOrBuiltin` 헬퍼가 구현되어 있었으나, `FD->getBuiltinID() != 0` 검사문이 `#if defined(__clang__)`으로 감싸져 있었음.
+   - Windows 환경에서 Visual Studio MSVC(`cl.exe`)로 ARQA Clang-Tidy 엔진을 컴파일할 때, 매크로 `__clang__`은 정의되지 않음 (`_MSC_VER`만 정의됨).
+   - 호스트 빌더 매크로와 분석 타겟 AST 라이브러리를 혼동하여 작성된 가드로 인해, MSVC 빌드 시 `FD->getBuiltinID() != 0` 코드가 **컴파일 단계에서 완전히 증발(탈락)**함.
+2. **C 모드 암묵적 선언(implicit declaration) 오인 및 위치 순서 결함**:
+   - Clang 파서는 `__builtin_bswap32` 등을 파싱할 때 `isImplicit() == true` 및 `getBuiltinID() != 0`인 AST 노드로 생성함.
+   - MSVC 빌드에서 내장 심볼 필터링이 누락되어 `if (!LO.CPlusPlus && FD->isImplicit())` 분기로 직행하여 "선언 없는 외부 함수" 오탐을 방출함.
+   - 또한 컴파일러 내장 함수는 가상 위치를 가질 수 있어 `L.isInvalid()` 검사보다 앞서 Builtin 판별이 우선되어야 함에도 순서가 뒤바뀌어 있었음.
+
+### 3. 해결책 (Resolution)
+1. **호스트 컴파일러 가드 `#if defined(__clang__)` 완전 제거**:
+   - 호스트 컴파일러(MSVC, GCC, Clang)와 무관하게 무조건 Clang AST API인 `FD->getBuiltinID() != 0`를 호출하도록 보장.
+2. **컴파일러 내장 함수 최우선 판별 및 식별자 접두사 보조 가드 확립**:
+   - 소스 위치 유효성 검사(`L.isInvalid()`)보다 앞서 `FD->getBuiltinID() != 0` 및 `FD->getDeclName().isIdentifier() && FD->getName().starts_with("__builtin_")`를 최우선 평가하도록 재배치.
+3. **엔진 중립성 수호 (Zero Hardcoding)**:
+   - `bswap32`, `bswap64` 등 특정 함수명을 하드코딩하거나 임의 화이트리스트를 사용하는 땜질 처방을 100% 배제하고, Clang AST의 순수 내장 식별 메커니즘만 적용.
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 컴파일 성공.
+* **MbedTLS 실사 검증 (오탐 100% 소멸)**:
+  - `bignum.c:756`: 기존 1건 ➡️ **0건 (Clean)**
+  - `bignum.c:758`: 기존 1건 ➡️ **0건 (Clean)**
+  - MbedTLS 오탐 제거율 **100.0% (2/2건 전수 소멸)**.
+* **11종 단위 회귀 테스트 (`test_extern_function_declaration_suite_11.c`)**:
+  - TP 3건(TC-01, TC-02, TC-11) 100% 정확 방출 (검출률 100.0%).
+  - Clean 8건(TC-03, TC-04, TC-05, TC-06, TC-07, TC-08, TC-09, TC-10) 0건 무경고 클린 통과 (0-FP 방어율 100.0%).
+* **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
+
+
 
