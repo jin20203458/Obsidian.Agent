@@ -1084,6 +1084,39 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - `rsa.c:2125`: 구조적 한계 원인 규명 및 공인 완료.
 * **지식베이스 동기화**: `28_path-sensitive-core.UndefinedBinaryOperatorResult.md v2.1.0` 완결 개정, `00_오탐분석_마스터_계획서.md` 업데이트 완료.
 
+---
+
+## 2026-09-21: [Certified] path-sensitive-core.CallAndMessage 심층 분석 모드(방어적 검사 억제 해제) 및 인라인 널 분기에 따른 가상 경로 오탐 규명 및 구조적 한계 공인
+
+### 1. 현상 (Symptom)
+* DAPA 포인터 규칙, MISRA C:2012 Rule 1.3 (Required), CWE-476 준수 검증용 CSA 코어 체커인 `path-sensitive-core.CallAndMessage`(`CallAndMessageChecker.cpp`) 구동 시 MbedTLS 벤치마크에서 1건 검출:
+  - `debug.c:48:5`: `f_dbg(p_dbg, level, file, line, str)` ➡️ `호출된 함수 포인터가 널(Null)입니다` (**엔진 방어적 검사 분기 오탐, FP 100%**)
+
+### 2. 원인 (Root Cause)
+1. **인라인 방어적 검사(Defensive Check) 널 경로 분기**:
+   - `mbedtls_debug_print_ecp` 180행에 방어적 널 가드 `if (NULL == ssl->conf->f_dbg) return;` 존재.
+   - ArqaStatic의 최고 감도 심층 정적분석 정책(`ClangTidyRunnerService.cs`: `-analyzer-config suppress-inlined-defensive-checks=false`)에 의해, CSA 심볼릭 엔진이 인라인 호출된 `mbedtls_debug_print_ecp`의 방어적 널 검사에서 `ssl->conf->f_dbg == NULL` 상태를 가상 경로로 분기하여 `debug_send_line` 48행까지 전달함.
+2. **Clang 기본 억제 정책과의 대조 (Ground Truth)**:
+   - Clang 기본 설정(`suppress-inlined-defensive-checks=true`)에서는 인라인된 함수의 방어적 널 검사로부터 파생된 널 경로는 노이즈로 간주되어 자동 억제(0건 Clean)됨.
+   - 그러나 ArqaStatic은 철저한 보안 결함 전수 탐지를 위해 해당 억제를 비활성화하고 있어, 실제 런타임에는 도달할 수 없는 비실행 가상 경로(Infeasible Path)에서 함수 포인터 역참조 경고가 방출됨.
+
+### 3. 트레이드오프 및 아키텍처 결정 (Architectural Decision)
+1. **엔진 중립성 수호 및 Zero Cheating (No-Engine-Touch)**:
+   - `CallAndMessageChecker.cpp`는 LLVM Upstream의 84줄 순수 코어 체커로, `State->isNull(Callee)`를 충실하게 판별함.
+   - 특정 함수명(`debug_send_line`)이나 변수명(`f_dbg`)을 화이트리스트로 하드코딩하는 것은 Zero Cheating 원칙에 정면 위배됨.
+   - 체커 코드 레벨에서 널 함수 포인터 판별을 완화할 경우, 실제 치명적인 널 포인터 역참조 및 미정의 동작(CWE-476) 진성 결함을 놓치는 치명적인 미탐(FN) 구멍이 뚫리게 됨.
+   - 따라서 진성 결함 검출력을 100% 보존하기 위해 엔진 코드를 수정하지 않고 원형 그대로 보존함.
+2. **구조적 한계 공인 (Known Structural Limitation)**:
+   - 본 오탐은 체커의 버그가 아니라 Clang Static Analyzer 심층 분석 모드 하에서 인라인 방어적 가드 분기가 야기하는 구조적 가상 경로 현상이므로, 상위 아키텍트 승인 하에 **[설계 및 심볼릭 엔진 한계에 따른 공인 구조적 오탐 (Known Limitation, 100.0%)]**으로 공식 공인 완결함.
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 무결점 유지.
+* **설정별 대조 실사**:
+  - `suppress-inlined-defensive-checks=false` (ArqaStatic 기본): 1건 검출 확인.
+  - `suppress-inlined-defensive-checks=true` (Clang 표준 기본): 0건 무경고 (Clean) 통과 확인.
+* **지식베이스 동기화**: `29_path-sensitive-core.CallAndMessage.md v2.1.0` 완결 개정, `00_오탐분석_마스터_계획서.md` 업데이트 완료.
+
+
 
 
 
