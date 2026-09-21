@@ -1010,5 +1010,45 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - Clean 8건(TC-03, TC-04, TC-05, TC-06, TC-07, TC-08, TC-09, TC-10) 0건 무경고 클린 통과 (0-FP 방어율 100.0%).
 * **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
 
+---
+
+## 2026-09-21: [Resolved] lex-macro-defined-before-use 전처리기 내장 연산자(__has_builtin 등) 인자 오인 오탐 및 소스 위치 정규화 해결
+
+### 1. 현상 (Symptom)
+* DAPA 스타일 및 구조 규칙 1조, MISRA C:2012 Rule 20.9 (Required), CWE-1068 준수 검증용 체커인 `lex-macro-defined-before-use`(`MacroDefinedBeforeUseCheck.cpp`) 구동 시 MbedTLS 벤치마크에서 1건의 오탐(FP) 검출:
+  - `bignum.c:747:19`: `#if __has_builtin(__builtin_bswap32) && __has_builtin(__builtin_bswap64)` ➡️ `전처리 조건식에서 매크로 '__builtin_bswap64' 가 정의되지 않았습니다.` (오탐)
+  - 반면 `aes.c:540:34`에서는 `(defined(MBEDTLS_AESNI_C) && MBEDTLS_AESNI_HAVE_CODE == 2)` ➡️ `전처리 조건식에서 매크로 'MBEDTLS_AESNI_HAVE_CODE' 가 정의되지 않았습니다.` (진성 규격 정탐)
+
+### 2. 원인 (Root Cause)
+1. **전처리기 내장 연산자(Preprocessor Operators) 스코프 미인식**:
+   - 기존 `MacroDefinedBeforeUseCheck.cpp`의 `DefinedTracker`는 오직 `defined` 식별자만 감지하도록 하드코딩되어 있었음.
+   - Clang, GCC 및 C23/C++20 표준에 정의된 함수형 전처리기 연산자(`__has_builtin`, `__has_include`, `__has_feature`, `__has_attribute` 등)의 괄호 안 인자는 매크로가 아닌 컴파일러 기능 질의용 심볼 식별자임.
+   - 그러나 엔진이 이들 연산자의 인자 스코프를 인식하지 못하고 일반 매크로 정의 검사(`checkMacroDefinition`)로 직행시켜 `PP.isMacroDefined()` 실패에 따른 허위 경보를 방출함.
+2. **`CondRange` 매크로 확장 위치와 파일 위치 불일치 결함**:
+   - 조건식의 시작 위치가 매크로 확장 위치(`isMacroID()`)를 포함하거나 줄바꿈에 걸쳐 있을 때 `Lexer::getSourceText`가 `StringRef()`를 반환하여 첫 번째 조건식이 조용히 누락되거나 왜곡되는 문제 존재.
+
+### 3. 해결책 (Resolution)
+1. **`isPreprocessorOperator` 판별기 도입**:
+   - `defined`, `__has_builtin`, `__has_include`, `__has_feature`, `__has_extension`, `__has_attribute`, `__has_c_attribute`, `__has_cpp_attribute`, `__has_warning`, `__is_identifier`, `__has_declspec_attribute` 총 11종의 전처리기 연산자를 정확히 식별.
+2. **`DefinedTracker` 괄호 깊이 및 연산자 인자 스코프 격리**:
+   - `OpParenDepth`로 괄호 깊이를 카운팅하여 최외곽 닫는 괄호(`)`) 매칭 시까지 연산자 인자 스코프를 안전하게 격리.
+   - 괄호 없는 형태(`defined X`)도 `ExpectingParenOrIdent` 플래그로 단일 식별자 스코프로 안전하게 제한 후 즉시 리셋.
+   - 단락 평가(`&&`) 보호 셋(`ShortCircuitProtected`)을 보존하여 `defined(X) && X > 0` 패턴 보호.
+3. **`FileCondRange` 소스 위치 정규화**:
+   - `SM.getFileLoc(CondRange.getBegin())` 및 `SM.getFileLoc(CondRange.getEnd())`로 FileLoc 범위를 정규화하여 매크로 확장 토큰 위치 왜곡을 원천 차단.
+4. **엔진 중립성 수호 (Zero Hardcoding)**:
+   - `bswap64`, `bswap32` 등 특정 라이브러리 심볼 하드코딩 0건, 컴파일러 표준 연산자 시맨틱 기반 일반화 설계 확립.
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 컴파일 성공.
+* **MbedTLS 실사 검증**:
+  - `bignum.c:747`: 기존 1건 ➡️ **0건 (Clean, 오탐 100% 소멸)**.
+  - `aes.c:540`: 진성 결함 1건 ➡️ **100% 정상 방출 유지 (TP 100% 보존)**.
+* **12종 단위 회귀 테스트 (`test_macro_defined_before_use_suite_12.c`)**:
+  - TP 4건(TC-01, TC-02, TC-03, TC-12) 100% 정확 방출 (검출률 100.0%).
+  - Clean 8건(TC-04, TC-05, TC-06, TC-07, TC-08, TC-09, TC-10, TC-11) 0건 무경고 클린 통과 (0-FP 방어율 100.0%).
+* **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
+
+
 
 
