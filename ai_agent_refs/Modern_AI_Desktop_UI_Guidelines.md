@@ -1,6 +1,6 @@
 ---
 description: >-
-  WPF 기반 차세대 데스크톱 AI 및 보안 관제(SOC) UI/UX 설계 지침서. 다크 테마 디자인 토큰, 캡슐형 컨트롤, 노드 그래프 및 실시간 AI 사고 스트리밍 XAML 구현 시 참조.
+  WPF 기반 차세대 데스크톱 AI 및 보안 관제(SOC) UI/UX 설계 지침서. 다크 테마 디자인 토큰, 캡슐형 컨트롤, 윈도우 타이틀바 일체화 방법론, 노드 그래프 및 실시간 AI 사고 스트리밍 XAML 구현 시 참조.
 related:
   - ../README.md
   - ./WPF_Architecture_Guidelines.md
@@ -181,3 +181,94 @@ AI 에이전트가 WPF XAML 코드를 작성할 때 다음 안티패턴을 절�
    * gRPC 수신 이벤트나 AI 스트리밍 파이프라인에서 동기 대기(`.Wait()`, `.Result`)를 절대 호출하지 않습니다.
 4. **[금지] 과도한 중첩 드롭 섀도우**:
    * 성능을 갉아먹는 블러 반경 20px 이상의 `DropShadowEffect` 사용을 금지하며, 루미넌스 스태킹과 미세 1px Border로 대체합니다.
+
+---
+
+## 7. 데스크톱 윈도우 프레임 통합 방법론 (Unified Window Title Bar Methodology)
+
+본 절은 강제 규격이 아니며, VS Code, Obsidian, Linear와 같이 앱의 상단 바와 윈도우 타이틀바를 일체화(Seamless)하여 상단 세로 공간(약 30~32px)을 확보하고 프로 도구의 일체감을 부여하고자 할 때 활용할 수 있는 **선택적 고급 아키텍처 방법론**입니다.
+
+### A. 배경 및 문제 의식
+* **2단 헤더 중복**: 전통적인 데스크톱 창은 OS 비클라이언트 영역(Non-Client Area)의 타이틀바와 내부 UI 헤더가 나란히 적층되어, 프로그램 타이틀이 중복 노출되고 유효 작업 영역이 낭비되는 문제가 발생합니다.
+* **WindowStyle="None"의 한계**: 단순히 OS 기본 프레임을 숨기면 윈도우 외곽 크기 조절(Resize), Windows 11 스냅 레이아웃(Snap Assist), 창 그림자(Drop Shadow), 최소화/최대화 네이티브 애니메이션이 손상됩니다.
+
+### B. 핵심 구현 아키텍처 (`WindowChrome` 기반)
+
+#### 1. 비클라이언트 억제 및 클라이언트 확장
+`System.Windows.Shell.WindowChrome`을 적용하여 OS 기본 캡션 렌더링을 억제하고, XAML 클라이언트 영역을 윈도우의 최상단(0px)까지 확장합니다:
+
+```xml
+<WindowChrome.WindowChrome>
+    <WindowChrome
+        CaptionHeight="48"
+        CornerRadius="0"
+        GlassFrameThickness="0"
+        NonClientFrameEdges="None"
+        ResizeBorderThickness="5"
+        UseAeroCaptionButtons="False" />
+</WindowChrome.WindowChrome>
+```
+* `CaptionHeight`: 타이틀바 역할을 수행할 상단 바의 높이(예: 48px). 이 영역 내의 빈 공간을 클릭·드래그하면 창 이동이 발동하고, 더블 클릭 시 최대화/복원이 동작합니다.
+* `ResizeBorderThickness`: 창 테두리 리사이징 감도를 유지합니다(통상 4~6px).
+* `GlassFrameThickness="0"` / `UseAeroCaptionButtons="False"`: OS 기본 Aero 버튼과 프레임을 완전히 비활성화합니다.
+
+#### 2. 상단 바 컨트롤의 클릭 관통 방지 (`IsHitTestVisibleInChrome`)
+타이틀바 영역 내부의 인터랙티브 요소(로고, 검색창, 새로고침 버튼, 시스템 창 제어 버튼 등)는 창 드래그 이벤트에 가로채이지 않도록 명시적으로 히트 테스트를 활성화해야 합니다:
+
+```xml
+<Button Command="{Binding RefreshCommand}"
+        WindowChrome.IsHitTestVisibleInChrome="True" />
+```
+
+#### 3. 윈도우 시스템 캡션 컨트롤 및 네이티브 명령 연동
+WPF의 `SystemCommands`를 활용하여 Windows 고유의 부드러운 전환 애니메이션을 보장합니다:
+
+```csharp
+private void MinimizeButton_Click(object sender, RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
+private void MaximizeButton_Click(object sender, RoutedEventArgs e)
+{
+    if (WindowState == WindowState.Maximized)
+        SystemCommands.RestoreWindow(this);
+    else
+        SystemCommands.MaximizeWindow(this);
+}
+private void CloseButton_Click(object sender, RoutedEventArgs e) => SystemCommands.CloseWindow(this);
+```
+
+#### 4. 창 최대화 시 모니터 가장자리 잘림(Overshoot) 보정
+`WindowChrome`이 적용된 창이 최대화될 때, Windows OS의 비클라이언트 메트릭스로 인해 창 경계가 모니터 바깥으로 7~8px 확장되는 현상이 발생합니다. 루트 그리드 컨테이너에 상태 트리거 마진을 적용하여 작업 표시줄 오버레이 및 경계 잘림을 보정합니다:
+
+```xml
+<Grid>
+    <Grid.Style>
+        <Style TargetType="Grid">
+            <Setter Property="Margin" Value="0" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=WindowState}" Value="Maximized">
+                    <Setter Property="Margin" Value="7" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Grid.Style>
+    <!-- 내부 레이아웃 -->
+</Grid>
+```
+
+#### 5. DWM 심층 다크 모드 속성과의 하이브리드 결합
+상단 바를 직접 그려도, 키보드 `Alt + Space` 입력 시 나타나는 OS 창 제어 시스템 팝업, 창 외곽 DWM 섀도우, Windows 11 스냅 가이드라인이 어색한 흰색으로 뜨지 않도록 `DwmSetWindowAttribute`의 `DWMWA_USE_IMMERSIVE_DARK_MODE` 속성을 함께 활성화하는 것을 권장합니다:
+
+```csharp
+[DllImport("dwmapi.dll", PreserveSig = true)]
+private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;     // Win 10 20H1+ 및 Win 11
+private const int DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19; // Win 10 1809 - 1909
+
+int useImmersiveDarkMode = 1;
+if (DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useImmersiveDarkMode, sizeof(int)) != 0)
+{
+    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_OLD, ref useImmersiveDarkMode, sizeof(int));
+}
+```
+*(참고: WindowChrome으로 자체 타이틀바를 렌더링하는 경우, `DWMWA_CAPTION_COLOR` 및 `DWMWA_TEXT_COLOR`는 렌더 트리에 반영되지 않으므로 불필요한 P/Invoke를 생략할 수 있습니다.)*
+
