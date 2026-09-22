@@ -1117,7 +1117,38 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 * **지식베이스 동기화**: `29_path-sensitive-core.CallAndMessage.md v2.1.0` 완결 개정, `00_오탐분석_마스터_계획서.md` 업데이트 완료.
 
 
+---
 
+## 2026-09-22: [Resolved] LDRA 벤치마크 3대 진성 미탐(FN) 전수 해결 (Unsigned 단항 음수 중첩 수식 미탐 및 UO_Not 범위 초과 상수 평가 결함)
 
+### 1. 현상 (Symptom)
+* 상용 정적분석 도구 LDRA 벤치마크 결과(`C:\LDRA_mbedtls_정오탐분석.xlsx`, 9,987건)와 교차 대조 및 전수 독립 실사 수행 결과, ArqaStatic 엔진에서 실제 결함인 3건의 **진성 미탐 (True False Negative)** 발생 확인:
+  1. **`constant_time.c:182`**: `const size_t diff_msb = (diff | (size_t) -diff);`에서 무부호 정수 `diff`(`size_t`)에 단항 음수 연산자(`-`)가 적용되었음에도 `ast-unsigned-minus-assignment` 경고가 미검출됨 (DRPA Rule 45 [나]항 위반 누락).
+  2. **`ssl_srv.c:3848`**: `peer_pms[0] = peer_pms[1] = ~0;`에서 8비트 `unsigned char`에 32비트 signed int `-1`(`~0`)을 대입하였음에도 `ast-no-out-of-range-assignment` 경고가 미검출됨 (DRPA Rule 25 [가], 29 [마]항 위반 누락).
+  3. **`cipher.c:780`**: `size_t in_padding = ~0;`에서 64비트 무부호 `size_t`에 32비트 signed int `-1`(`~0`)을 대입하였음에도 `ast-no-out-of-range-assignment` 경고가 미검출됨 (DRPA Rule 29 [마]항 위반 누락).
 
+### 2. 원인 (Root Cause)
+1. **`UnsignedMinusAssignmentCheck.cpp` 최상위 식 단일 검사 한계**:
+   - `checkExpr`에서 `topLevelUnaryMinus(TargetExpr)`만 호출하여, 이항 연산자(`|`, `+` 등)나 캐스트 내부의 자식 노드로 중첩된 `UnaryOperator`(`-diff`)를 재귀 순회하지 못함.
+2. **`NoOutOfRangeAssignmentCheck.cpp` 비트 NOT 연산자 상수 평가 누락 및 비트폭 무차별 화이트리스트 결함**:
+   - `evalIntWithLocals`에 `UO_Minus`(`-`)와 `UO_Plus`(`+`)만 구현되어 있고 단항 비트 반전 연산자 `UO_Not`(`~`)이 누락되어, `~0`을 상수 값(`-1`)으로 평가하지 못하고 `false`를 반환함.
+   - `CVal.isAllOnes()` 화이트리스트가 타깃 타입의 비트폭과 무관하게 무조건 `OutOfRange = false`로 면제하여, 8비트/64비트 변수에 32비트 `~0`(-1)을 대입하는 범위 초과 및 음수 변환 결함을 방치함.
 
+### 3. 해결책 (Resolution)
+1. **`UnsignedMinusAssignmentCheck` 재귀 수식 탐색 및 연쇄 대입 탈출 가드 구축**:
+   - `findAndReportUnsignedMinus` 재귀 탐색 함수를 도입하여 AST 수식 트리의 모든 자식 노드를 순회하고, 피연산자가 `isUnsignedLike`인 `UnaryOperator(UO_Minus)`를 전수 포착.
+   - `if (BO->isAssignmentOp()) return;` 가드를 통해 `a = b = -u` 연쇄 대입문에서의 다중 매처 중복 진단 원천 방지.
+2. **`NoOutOfRangeAssignmentCheck` UO_Not 평가 및 엄격한 비트폭 일치 가드 구축**:
+   - `evalIntWithLocals`에 `if (UO->getOpcode() == UO_Not) { Out = ~Sub; return true; }` 추가 (LLVM `APSInt::operator~` 표준 적용).
+   - 비트마스크 관용구 검사를 `CVal.isAllOnes() && (CVal.getBitWidth() == M.Width)`로 엄격화하여, 동일 비트폭 마스크(예: `uint32_t = ~0U`) 및 명시적 캐스트(`(unsigned char)~0`)는 정상 허용(0 FP)하고, 폭이 다른 축소/음수 대입은 100% 정탐으로 방출.
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM 컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 성공.
+* **신규 단위 회귀 테스트 스위트 (2종 전수 통과)**:
+  - `test_unsigned_minus_nested_suite.c`: TP 3건 100% 검출, Clean 2건 무경고 통과.
+  - `test_out_of_range_bitwise_not_suite.c`: TP 3건 100% 검출, Clean 3건 무경고 통과.
+* **MbedTLS 실전 3대 진성 미탐 Ground Truth 실사**:
+  - `constant_time.c:182` (`diff | (size_t) -diff`): 182행 경고 정확 방출 확인 (TP).
+  - `cipher.c:780` (`size_t in_padding = ~0;`): 780행 경고 정확 방출 확인 (TP).
+  - `ssl_srv.c:3848` (`peer_pms[0] = peer_pms[1] = ~0;`): 3848행 경고 정확 방출 확인 (TP).
+* **이중 계쇄 감사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 Gate 1 Plan Audit 및 Gate 2 QA Audit 2회 연속 **[PASS] 공식 승인**.
