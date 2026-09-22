@@ -245,3 +245,53 @@ related:
    * gRPC 수신 및 AI 수사 시작/완료 알림을 `Application.Current?.Dispatcher?.InvokeAsync(...)`로 안전하게 래핑하여 UI 스레드로 마샬링.
    * 비GUI 환경(헤드리스 러너 및 단위 테스트)에서도 `Application.Current`가 null일 때 안전하게 No-op 통과하는 Null-Safety 방어 구현.
 
+---
+
+## 2026-09-23: [Resolved] Kestrel 백그라운드 스레드의 ObservableCollection 조작으로 인한 gRPC 스트림 단절 및 센서 ON/OFF 무한 루프
+
+### [현상 (Symptom)]
+* WPF 관제 콘솔 UI에서 C++ 센서 연결 상태가 `LIVE`와 `OFFLINE` 사이를 수 초 주기로 계속해서 자동으로 반복 전환(플리핑)됨.
+* 프로세스 트리 화면에 활성 프로세스가 1개 또는 소수만 표시되고 전체 PC 프로세스가 적재되지 못함.
+
+### [원인 (Root Cause)]
+1. **WPF UI 컬렉션 스레드 위반 (`NotSupportedException`)**:
+   * C++ 센서가 접속하여 300+개 활성 프로세스 스냅샷 배치(`snapshot_batch`)를 gRPC로 전송할 때, Kestrel 백그라운드 스레드풀에서 `ProcessTreeProjectionManager.RootNodes.Add(node)`를 호출함.
+   * `ProcessGraphView`의 `TreeView`가 `RootNodes`에 바인딩되어 있는 상태에서 Dispatcher가 아닌 백그라운드 스레드가 `ObservableCollection`을 수정함에 따라 WPF `CollectionView`가 `NotSupportedException`을 발생시킴.
+   * 예외로 인해 `PhalanxGrpcService.StreamTelemetry`가 루프를 탈출하고 `finally` 블록에서 `_uiBridge.NotifySensorConnected(false)`를 호출하여 UI가 `OFFLINE`으로 전환됨.
+   * C++ 센서는 스트림 단절을 감지하고 2초 후 자동 재접속(`LIVE`) ➔ 스냅샷 재전송 ➔ 예외 재발생 ➔ `OFFLINE` 전환을 무한 반복함.
+2. **스냅샷 배치 분할 및 족보 왜곡**:
+   * `PhalanxGrpcService`에서 `foreach (var ev in batch.ProcessEvents)`로 쪼개어 `ApplyDeltaEvent(ev)`를 호출하면서, 300개의 스냅샷 이벤트가 개별 `ApplySnapshotBatch(new[] { ev })`로 분할 전달됨.
+   * `tempMap`이 1개 노드만 갖게 되어 부모-자식 관계를 형성하지 못하고 전원 루트 노드로 편입되는 결함 유발.
+
+### [해결책 (Resolution)]
+1. **WPF 컬렉션 동기화 및 Dispatcher 마샬링 (`ProcessTreeProjectionManager.cs`)**:
+   * `BindingOperations.EnableCollectionSynchronization(RootNodes, _syncLock)` 및 `EnableCollectionSynchronization(AllNodes, _syncLock)` 등록.
+   * `DispatchUI` 헬퍼를 도입하여 `RootNodes`, `AllNodes`, `node.Children` 조작을 UI Dispatcher 스레드로 안전하게 마샬링 (헤드리스/테스트 환경 Null-Safety 보장).
+2. **gRPC 스냅샷 배치 보존 (`PhalanxGrpcService.cs`)**:
+   * `batch.ProcessEvents` 중 `LifecycleSnapshot` 이벤트를 `ApplySnapshotBatch(snapshotEvents)`로 통째로 전달하여 단 1회의 Dispatcher 컨텍스트 스위치로 부모-자식 트리 전체를 0초 완결 투영.
+3. **로컬 OS 프로세스 기저 투영 폴백 (`InitializeFromLocalOsSnapshot`)**:
+   * Win32 `CreateToolhelp32Snapshot` P/Invoke를 구현하여, C++ 커널 센서가 연결되기 전(오프라인 상태)이라도 Cockpit 기동 즉시 로컬 PC의 300여 개 전체 프로세스를 즉각 렌더링.
+
+---
+
+## 2026-09-23: [Resolved] AttackLabWindow 기동 시 XamlParseException ('WindowCloseButtonStyle' 리소스 부재)
+
+### [현상 (Symptom)]
+* 사용자가 관제 화면에서 모의 침해 시뮬레이터 창 열기 버튼(`[ATTACK LAB ➔]` 또는 좌측 레일 `모의 랩`)을 클릭했을 때 WPF 런타임 크래시 발생:
+  `System.Windows.Markup.XamlParseException: 'System.Windows.StaticResourceExtension'에 대한 값 제공에서 예외가 throw되었습니다. 줄 번호 137 ... 이름이 'WindowCloseButtonStyle'인 리소스를 찾을 수 없습니다.`
+
+### [원인 (Root Cause)]
+* [AttackLabWindow.xaml](file:///c:/Users/adg01/Documents/GitHub/Phalanx/src/Phalanx.Cockpit/Views/AttackLabWindow.xaml)의 커스텀 윈도우 캡션 닫기 버튼에서 `Style="{StaticResource WindowCloseButtonStyle}"`을 참조함.
+* [EnterpriseTheme.xaml](file:///c:/Users/adg01/Documents/GitHub/Phalanx/src/Phalanx.Cockpit/Themes/EnterpriseTheme.xaml)에 실제 정의된 리소스 명칭은 `WindowCaptionCloseButtonStyle` (마우스 오버 시 레드 하이라이트 적용 스타일)이었음.
+* 또한 캡션 버튼의 `IconWinMinimize`, `IconWinMaximize`, `IconWinClose` Path 엘리먼트가 `Stroke` 대신 `Fill`을 사용하여 선형 벡터가 렌더링되지 않던 미세 결함 존재.
+* 상단 타이틀바(`ATTACK LAB ➔`)와 좌측 네비게이션 레일(`모의 랩`) 간 명칭 불일치로 인한 사용자 혼선.
+
+### [해결책 (Resolution)]
+1. **정규 리소스 키 바인딩 교정**:
+   * `AttackLabWindow.xaml`의 닫기 버튼 스타일을 `{StaticResource WindowCaptionCloseButtonStyle}`로 수정.
+   * 최소화/최대화/닫기 아이콘 Path에 `Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"` 및 `StrokeThickness="1"` 지정.
+2. **UI 명칭 일원화**:
+   * 상단 타이틀 바 버튼을 `모의 침해 랩 ➔`으로 변경하여 좌측 레일의 `모의 랩`과 동일한 기능의 컴패니언 창임을 직관적으로 명시.
+
+
+
