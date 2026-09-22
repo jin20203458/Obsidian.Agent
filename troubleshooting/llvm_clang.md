@@ -972,4 +972,183 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
   - Clean 5건(TC-06, TC-07, TC-08, TC-12, TC-13) 0건 무경고 클린 통과 (0-FP 방어율 100.0%).
 * **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
 
+---
 
+## 2026-09-21: [Resolved] ast-extern-function-declaration 호스트 MSVC 전처리기 가드 오용 및 컴파일러 내장 함수(__builtin_*) 오탐 해결
+
+### 1. 현상 (Symptom)
+* DAPA 스타일 및 구조 규칙 1조, MISRA C:2012 Rule 8.4 / Rule 8.5, CWE-686 준수 검증용 체커인 `ast-extern-function-declaration`(`ExternFunctionDeclarationCheck.cpp`) 구동 시 MbedTLS 벤치마크에서 2건의 오탐(FP 100%) 검출:
+  1. `bignum.c:756:20`: `return __builtin_bswap32(x);` ➡️ `외부 함수 '__builtin_bswap32'가 선언 없이 사용되었습니다. 사용 전에 선언(예: 'extern unsigned int __builtin_bswap32(...);')하십시오.`
+  2. `bignum.c:758:20`: `return __builtin_bswap64(x);` ➡️ `외부 함수 '__builtin_bswap64'가 선언 없이 사용되었습니다. 사용 전에 선언(예: 'extern unsigned long long __builtin_bswap64(...);')하십시오.`
+
+### 2. 원인 (Root Cause)
+1. **호스트 컴파일러 전처리기 가드 오용 (`#if defined(__clang__)`)**:
+   - `ExternFunctionDeclarationCheck.cpp`의 23~25행에 `isFromSystemOrBuiltin` 헬퍼가 구현되어 있었으나, `FD->getBuiltinID() != 0` 검사문이 `#if defined(__clang__)`으로 감싸져 있었음.
+   - Windows 환경에서 Visual Studio MSVC(`cl.exe`)로 ARQA Clang-Tidy 엔진을 컴파일할 때, 매크로 `__clang__`은 정의되지 않음 (`_MSC_VER`만 정의됨).
+   - 호스트 빌더 매크로와 분석 타겟 AST 라이브러리를 혼동하여 작성된 가드로 인해, MSVC 빌드 시 `FD->getBuiltinID() != 0` 코드가 **컴파일 단계에서 완전히 증발(탈락)**함.
+2. **C 모드 암묵적 선언(implicit declaration) 오인 및 위치 순서 결함**:
+   - Clang 파서는 `__builtin_bswap32` 등을 파싱할 때 `isImplicit() == true` 및 `getBuiltinID() != 0`인 AST 노드로 생성함.
+   - MSVC 빌드에서 내장 심볼 필터링이 누락되어 `if (!LO.CPlusPlus && FD->isImplicit())` 분기로 직행하여 "선언 없는 외부 함수" 오탐을 방출함.
+   - 또한 컴파일러 내장 함수는 가상 위치를 가질 수 있어 `L.isInvalid()` 검사보다 앞서 Builtin 판별이 우선되어야 함에도 순서가 뒤바뀌어 있었음.
+
+### 3. 해결책 (Resolution)
+1. **호스트 컴파일러 가드 `#if defined(__clang__)` 완전 제거**:
+   - 호스트 컴파일러(MSVC, GCC, Clang)와 무관하게 무조건 Clang AST API인 `FD->getBuiltinID() != 0`를 호출하도록 보장.
+2. **컴파일러 내장 함수 최우선 판별 및 식별자 접두사 보조 가드 확립**:
+   - 소스 위치 유효성 검사(`L.isInvalid()`)보다 앞서 `FD->getBuiltinID() != 0` 및 `FD->getDeclName().isIdentifier() && FD->getName().starts_with("__builtin_")`를 최우선 평가하도록 재배치.
+3. **엔진 중립성 수호 (Zero Hardcoding)**:
+   - `bswap32`, `bswap64` 등 특정 함수명을 하드코딩하거나 임의 화이트리스트를 사용하는 땜질 처방을 100% 배제하고, Clang AST의 순수 내장 식별 메커니즘만 적용.
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 컴파일 성공.
+* **MbedTLS 실사 검증 (오탐 100% 소멸)**:
+  - `bignum.c:756`: 기존 1건 ➡️ **0건 (Clean)**
+  - `bignum.c:758`: 기존 1건 ➡️ **0건 (Clean)**
+  - MbedTLS 오탐 제거율 **100.0% (2/2건 전수 소멸)**.
+* **11종 단위 회귀 테스트 (`test_extern_function_declaration_suite_11.c`)**:
+  - TP 3건(TC-01, TC-02, TC-11) 100% 정확 방출 (검출률 100.0%).
+  - Clean 8건(TC-03, TC-04, TC-05, TC-06, TC-07, TC-08, TC-09, TC-10) 0건 무경고 클린 통과 (0-FP 방어율 100.0%).
+* **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
+
+---
+
+## 2026-09-21: [Resolved] lex-macro-defined-before-use 전처리기 내장 연산자(__has_builtin 등) 인자 오인 오탐 및 소스 위치 정규화 해결
+
+### 1. 현상 (Symptom)
+* DAPA 스타일 및 구조 규칙 1조, MISRA C:2012 Rule 20.9 (Required), CWE-1068 준수 검증용 체커인 `lex-macro-defined-before-use`(`MacroDefinedBeforeUseCheck.cpp`) 구동 시 MbedTLS 벤치마크에서 1건의 오탐(FP) 검출:
+  - `bignum.c:747:19`: `#if __has_builtin(__builtin_bswap32) && __has_builtin(__builtin_bswap64)` ➡️ `전처리 조건식에서 매크로 '__builtin_bswap64' 가 정의되지 않았습니다.` (오탐)
+  - 반면 `aes.c:540:34`에서는 `(defined(MBEDTLS_AESNI_C) && MBEDTLS_AESNI_HAVE_CODE == 2)` ➡️ `전처리 조건식에서 매크로 'MBEDTLS_AESNI_HAVE_CODE' 가 정의되지 않았습니다.` (진성 규격 정탐)
+
+### 2. 원인 (Root Cause)
+1. **전처리기 내장 연산자(Preprocessor Operators) 스코프 미인식**:
+   - 기존 `MacroDefinedBeforeUseCheck.cpp`의 `DefinedTracker`는 오직 `defined` 식별자만 감지하도록 하드코딩되어 있었음.
+   - Clang, GCC 및 C23/C++20 표준에 정의된 함수형 전처리기 연산자(`__has_builtin`, `__has_include`, `__has_feature`, `__has_attribute` 등)의 괄호 안 인자는 매크로가 아닌 컴파일러 기능 질의용 심볼 식별자임.
+   - 그러나 엔진이 이들 연산자의 인자 스코프를 인식하지 못하고 일반 매크로 정의 검사(`checkMacroDefinition`)로 직행시켜 `PP.isMacroDefined()` 실패에 따른 허위 경보를 방출함.
+2. **`CondRange` 매크로 확장 위치와 파일 위치 불일치 결함**:
+   - 조건식의 시작 위치가 매크로 확장 위치(`isMacroID()`)를 포함하거나 줄바꿈에 걸쳐 있을 때 `Lexer::getSourceText`가 `StringRef()`를 반환하여 첫 번째 조건식이 조용히 누락되거나 왜곡되는 문제 존재.
+
+### 3. 해결책 (Resolution)
+1. **`isPreprocessorOperator` 판별기 도입**:
+   - `defined`, `__has_builtin`, `__has_include`, `__has_feature`, `__has_extension`, `__has_attribute`, `__has_c_attribute`, `__has_cpp_attribute`, `__has_warning`, `__is_identifier`, `__has_declspec_attribute` 총 11종의 전처리기 연산자를 정확히 식별.
+2. **`DefinedTracker` 괄호 깊이 및 연산자 인자 스코프 격리**:
+   - `OpParenDepth`로 괄호 깊이를 카운팅하여 최외곽 닫는 괄호(`)`) 매칭 시까지 연산자 인자 스코프를 안전하게 격리.
+   - 괄호 없는 형태(`defined X`)도 `ExpectingParenOrIdent` 플래그로 단일 식별자 스코프로 안전하게 제한 후 즉시 리셋.
+   - 단락 평가(`&&`) 보호 셋(`ShortCircuitProtected`)을 보존하여 `defined(X) && X > 0` 패턴 보호.
+3. **`FileCondRange` 소스 위치 정규화**:
+   - `SM.getFileLoc(CondRange.getBegin())` 및 `SM.getFileLoc(CondRange.getEnd())`로 FileLoc 범위를 정규화하여 매크로 확장 토큰 위치 왜곡을 원천 차단.
+4. **엔진 중립성 수호 (Zero Hardcoding)**:
+   - `bswap64`, `bswap32` 등 특정 라이브러리 심볼 하드코딩 0건, 컴파일러 표준 연산자 시맨틱 기반 일반화 설계 확립.
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 컴파일 성공.
+* **MbedTLS 실사 검증**:
+  - `bignum.c:747`: 기존 1건 ➡️ **0건 (Clean, 오탐 100% 소멸)**.
+  - `aes.c:540`: 진성 결함 1건 ➡️ **100% 정상 방출 유지 (TP 100% 보존)**.
+* **12종 단위 회귀 테스트 (`test_macro_defined_before_use_suite_12.c`)**:
+  - TP 4건(TC-01, TC-02, TC-03, TC-12) 100% 정확 방출 (검출률 100.0%).
+  - Clean 8건(TC-04, TC-05, TC-06, TC-07, TC-08, TC-09, TC-10, TC-11) 0건 무경고 클린 통과 (0-FP 방어율 100.0%).
+* **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
+
+---
+
+## 2026-09-21: [Certified] path-sensitive-core.UndefinedBinaryOperatorResult 인라인 복합 에러 반환 제약 소실에 따른 가상 경로 오탐 규명 및 구조적 한계 공인
+
+### 1. 현상 (Symptom)
+* DAPA 초기화 규칙 2조, MISRA C:2012 Rule 9.1 (Mandatory), CWE-457 준수 검증용 CSA 체커인 `path-sensitive-core.UndefinedBinaryOperatorResult`(`UndefResultChecker.cpp`) 구동 시 MbedTLS 벤치마크에서 2건 검출:
+  1. `psa_crypto_cipher.c:414:13`: `*output_length > output_size` ➡️ `'>' 연산자의 왼쪽 피연산자가 초기화되지 않은 쓰레기 값입니다` (**진성 규격 정탐, TP 100%**)
+  2. `rsa.c:2125:16`: `buf[0] >> (8 - siglen * 8 + msb)` ➡️ `'>>' 연산자의 왼쪽 피연산자가 초기화되지 않은 쓰레기 값입니다` (**엔진 제약 소실 오탐, FP 100%**)
+
+### 2. 원인 (Root Cause)
+1. **진성 정탐 (`psa_crypto_cipher.c:414`)**:
+   - `mbedtls_cipher_update` 호출 후 반환값 `status`를 검증하지 않고 `if (*output_length > output_size)`를 즉시 평가.
+   - `mbedtls_cipher_update`는 비정상 인자 유입 시 `*output_length = 0` 초기화 코드를 거치지 않고 조기 에러를 반환하는 실패 경로가 실존하므로, 런타임에 미초기화 스택 쓰레기값을 직접 대소 비교하는 진성 보안 결함.
+2. **엔진 오탐 (`rsa.c:2125`)**:
+   - `rsa.c:2088`에서 `ret = mbedtls_rsa_public(ctx, sig, buf);` 호출.
+   - `mbedtls_rsa_public` 내부(717행)에서 `mbedtls_mpi_read_binary` 실패 경로를 탐색하여 738행 `return MBEDTLS_ERROR_ADD(MBEDTLS_ERR_RSA_PUBLIC_FAILED, ret);`로 빠져나감 (이때 `buf`는 쓰이지 않음).
+   - 호출부인 `rsa.c:2091`로 복귀한 후, 명시적인 방어 코드 `if (ret != 0) return ret;`가 존재함에도 CSA 심볼릭 실행기(`ExprEngineCallAndReturn.cpp`)가 `MBEDTLS_ERROR_ADD` 복합 비트 연산 매크로의 반환값 심볼에 대해 비영(non-zero) 제약을 호출자 컨텍스트로 전달하지 못하고 상실(Constraint Loss)함.
+   - 그 결과 `Assuming the condition is false / 가정함: 'ret' 은(는) 다음과 같음: 0`으로 비실행 가상 경로(Infeasible Path)를 분기하여 2125행에서 `buf[0]`이 쓰레기값이라고 허위 경보를 방출함.
+
+### 3. 트레이드오프 및 아키텍처 결정 (Architectural Decision)
+1. **엔진 중립성 수호 및 Zero Cheating (No-Engine-Touch)**:
+   - `UndefResultChecker.cpp`는 LLVM Upstream의 120줄 순수 코어 체커로, `C.getSVal(B).isUndef()`를 정직하게 감시함.
+   - 특정 변수명(`buf`)이나 함수명(`rsa`)을 하드코딩하여 오탐을 억제하는 것은 Zero Cheating 원칙에 위배됨.
+   - 비트 시프트 연산자(`>>`)나 배열 참조의 `isUndef()` 경고를 완화할 경우, `psa_crypto_cipher.c:414`와 같은 치명적인 보안 취약점(CWE-457) 진성 결함을 놓치는 심각한 미탐(FN) 구멍이 발생함.
+   - 따라서 진성 결함 검출력을 100% 보존하기 위해 엔진 소스코드를 변형하지 않고 원형 그대로 보존함.
+2. **구조적 한계 공인 (Known Structural Limitation)**:
+   - 본 오탐은 체커의 버그가 아니라 Clang Static Analyzer 심볼릭 실행기의 고전적인 인라인 대수적 에러 반환 제약 소실에 의한 것이므로, 상위 아키텍트 승인 하에 **[설계 및 심볼릭 엔진 한계에 따른 공인 구조적 오탐 (Known Limitation, 100.0%)]**으로 공식 공인 완결함.
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 무결점 유지.
+* **MbedTLS 실사 검증**:
+  - `psa_crypto_cipher.c:414`: 진성 결함 1건 ➡️ **100% 정상 방출 유지 (TP 100% 보존)**.
+  - `rsa.c:2125`: 구조적 한계 원인 규명 및 공인 완료.
+* **지식베이스 동기화**: `28_path-sensitive-core.UndefinedBinaryOperatorResult.md v2.1.0` 완결 개정, `00_오탐분석_마스터_계획서.md` 업데이트 완료.
+
+---
+
+## 2026-09-21: [Certified] path-sensitive-core.CallAndMessage 심층 분석 모드(방어적 검사 억제 해제) 및 인라인 널 분기에 따른 가상 경로 오탐 규명 및 구조적 한계 공인
+
+### 1. 현상 (Symptom)
+* DAPA 포인터 규칙, MISRA C:2012 Rule 1.3 (Required), CWE-476 준수 검증용 CSA 코어 체커인 `path-sensitive-core.CallAndMessage`(`CallAndMessageChecker.cpp`) 구동 시 MbedTLS 벤치마크에서 1건 검출:
+  - `debug.c:48:5`: `f_dbg(p_dbg, level, file, line, str)` ➡️ `호출된 함수 포인터가 널(Null)입니다` (**엔진 방어적 검사 분기 오탐, FP 100%**)
+
+### 2. 원인 (Root Cause)
+1. **인라인 방어적 검사(Defensive Check) 널 경로 분기**:
+   - `mbedtls_debug_print_ecp` 180행에 방어적 널 가드 `if (NULL == ssl->conf->f_dbg) return;` 존재.
+   - ArqaStatic의 최고 감도 심층 정적분석 정책(`ClangTidyRunnerService.cs`: `-analyzer-config suppress-inlined-defensive-checks=false`)에 의해, CSA 심볼릭 엔진이 인라인 호출된 `mbedtls_debug_print_ecp`의 방어적 널 검사에서 `ssl->conf->f_dbg == NULL` 상태를 가상 경로로 분기하여 `debug_send_line` 48행까지 전달함.
+2. **Clang 기본 억제 정책과의 대조 (Ground Truth)**:
+   - Clang 기본 설정(`suppress-inlined-defensive-checks=true`)에서는 인라인된 함수의 방어적 널 검사로부터 파생된 널 경로는 노이즈로 간주되어 자동 억제(0건 Clean)됨.
+   - 그러나 ArqaStatic은 철저한 보안 결함 전수 탐지를 위해 해당 억제를 비활성화하고 있어, 실제 런타임에는 도달할 수 없는 비실행 가상 경로(Infeasible Path)에서 함수 포인터 역참조 경고가 방출됨.
+
+### 3. 트레이드오프 및 아키텍처 결정 (Architectural Decision)
+1. **엔진 중립성 수호 및 Zero Cheating (No-Engine-Touch)**:
+   - `CallAndMessageChecker.cpp`는 LLVM Upstream의 84줄 순수 코어 체커로, `State->isNull(Callee)`를 충실하게 판별함.
+   - 특정 함수명(`debug_send_line`)이나 변수명(`f_dbg`)을 화이트리스트로 하드코딩하는 것은 Zero Cheating 원칙에 정면 위배됨.
+   - 체커 코드 레벨에서 널 함수 포인터 판별을 완화할 경우, 실제 치명적인 널 포인터 역참조 및 미정의 동작(CWE-476) 진성 결함을 놓치는 치명적인 미탐(FN) 구멍이 뚫리게 됨.
+   - 따라서 진성 결함 검출력을 100% 보존하기 위해 엔진 코드를 수정하지 않고 원형 그대로 보존함.
+2. **구조적 한계 공인 (Known Structural Limitation)**:
+   - 본 오탐은 체커의 버그가 아니라 Clang Static Analyzer 심층 분석 모드 하에서 인라인 방어적 가드 분기가 야기하는 구조적 가상 경로 현상이므로, 상위 아키텍트 승인 하에 **[설계 및 심볼릭 엔진 한계에 따른 공인 구조적 오탐 (Known Limitation, 100.0%)]**으로 공식 공인 완결함.
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 무결점 유지.
+* **설정별 대조 실사**:
+  - `suppress-inlined-defensive-checks=false` (ArqaStatic 기본): 1건 검출 확인.
+  - `suppress-inlined-defensive-checks=true` (Clang 표준 기본): 0건 무경고 (Clean) 통과 확인.
+* **지식베이스 동기화**: `29_path-sensitive-core.CallAndMessage.md v2.1.0` 완결 개정, `00_오탐분석_마스터_계획서.md` 업데이트 완료.
+
+
+---
+
+## 2026-09-22: [Resolved] LDRA 벤치마크 3대 진성 미탐(FN) 전수 해결 (Unsigned 단항 음수 중첩 수식 미탐 및 UO_Not 범위 초과 상수 평가 결함)
+
+### 1. 현상 (Symptom)
+* 상용 정적분석 도구 LDRA 벤치마크 결과(`C:\LDRA_mbedtls_정오탐분석.xlsx`, 9,987건)와 교차 대조 및 전수 독립 실사 수행 결과, ArqaStatic 엔진에서 실제 결함인 3건의 **진성 미탐 (True False Negative)** 발생 확인:
+  1. **`constant_time.c:182`**: `const size_t diff_msb = (diff | (size_t) -diff);`에서 무부호 정수 `diff`(`size_t`)에 단항 음수 연산자(`-`)가 적용되었음에도 `ast-unsigned-minus-assignment` 경고가 미검출됨 (DRPA Rule 45 [나]항 위반 누락).
+  2. **`ssl_srv.c:3848`**: `peer_pms[0] = peer_pms[1] = ~0;`에서 8비트 `unsigned char`에 32비트 signed int `-1`(`~0`)을 대입하였음에도 `ast-no-out-of-range-assignment` 경고가 미검출됨 (DRPA Rule 25 [가], 29 [마]항 위반 누락).
+  3. **`cipher.c:780`**: `size_t in_padding = ~0;`에서 64비트 무부호 `size_t`에 32비트 signed int `-1`(`~0`)을 대입하였음에도 `ast-no-out-of-range-assignment` 경고가 미검출됨 (DRPA Rule 29 [마]항 위반 누락).
+
+### 2. 원인 (Root Cause)
+1. **`UnsignedMinusAssignmentCheck.cpp` 최상위 식 단일 검사 한계**:
+   - `checkExpr`에서 `topLevelUnaryMinus(TargetExpr)`만 호출하여, 이항 연산자(`|`, `+` 등)나 캐스트 내부의 자식 노드로 중첩된 `UnaryOperator`(`-diff`)를 재귀 순회하지 못함.
+2. **`NoOutOfRangeAssignmentCheck.cpp` 비트 NOT 연산자 상수 평가 누락 및 비트폭 무차별 화이트리스트 결함**:
+   - `evalIntWithLocals`에 `UO_Minus`(`-`)와 `UO_Plus`(`+`)만 구현되어 있고 단항 비트 반전 연산자 `UO_Not`(`~`)이 누락되어, `~0`을 상수 값(`-1`)으로 평가하지 못하고 `false`를 반환함.
+   - `CVal.isAllOnes()` 화이트리스트가 타깃 타입의 비트폭과 무관하게 무조건 `OutOfRange = false`로 면제하여, 8비트/64비트 변수에 32비트 `~0`(-1)을 대입하는 범위 초과 및 음수 변환 결함을 방치함.
+
+### 3. 해결책 (Resolution)
+1. **`UnsignedMinusAssignmentCheck` 재귀 수식 탐색 및 연쇄 대입 탈출 가드 구축**:
+   - `findAndReportUnsignedMinus` 재귀 탐색 함수를 도입하여 AST 수식 트리의 모든 자식 노드를 순회하고, 피연산자가 `isUnsignedLike`인 `UnaryOperator(UO_Minus)`를 전수 포착.
+   - `if (BO->isAssignmentOp()) return;` 가드를 통해 `a = b = -u` 연쇄 대입문에서의 다중 매처 중복 진단 원천 방지.
+2. **`NoOutOfRangeAssignmentCheck` UO_Not 평가 및 엄격한 비트폭 일치 가드 구축**:
+   - `evalIntWithLocals`에 `if (UO->getOpcode() == UO_Not) { Out = ~Sub; return true; }` 추가 (LLVM `APSInt::operator~` 표준 적용).
+   - 비트마스크 관용구 검사를 `CVal.isAllOnes() && (CVal.getBitWidth() == M.Width)`로 엄격화하여, 동일 비트폭 마스크(예: `uint32_t = ~0U`) 및 명시적 캐스트(`(unsigned char)~0`)는 정상 허용(0 FP)하고, 폭이 다른 축소/음수 대입은 100% 정탐으로 방출.
+
+### 4. 검증 결과 (Ground Truth)
+* **LLVM 컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 성공.
+* **신규 단위 회귀 테스트 스위트 (2종 전수 통과)**:
+  - `test_unsigned_minus_nested_suite.c`: TP 3건 100% 검출, Clean 2건 무경고 통과.
+  - `test_out_of_range_bitwise_not_suite.c`: TP 3건 100% 검출, Clean 3건 무경고 통과.
+* **MbedTLS 실전 3대 진성 미탐 Ground Truth 실사**:
+  - `constant_time.c:182` (`diff | (size_t) -diff`): 182행 경고 정확 방출 확인 (TP).
+  - `cipher.c:780` (`size_t in_padding = ~0;`): 780행 경고 정확 방출 확인 (TP).
+  - `ssl_srv.c:3848` (`peer_pms[0] = peer_pms[1] = ~0;`): 3848행 경고 정확 방출 확인 (TP).
+* **이중 계쇄 감사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 Gate 1 Plan Audit 및 Gate 2 QA Audit 2회 연속 **[PASS] 공식 승인**.

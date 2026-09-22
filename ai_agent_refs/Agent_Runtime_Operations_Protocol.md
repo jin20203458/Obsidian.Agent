@@ -1,4 +1,4 @@
-﻿---
+---
 description: >-
   AI 에이전트 코드 수정 후 의무 QA 검증(Exit Code 0 Ground Truth), 3-Strike 서킷 브레이커, 원자적 롤백 및
   휴먼 인수인계(HITL Hand-over) 트러블슈팅을 일원화한 런타임 신뢰성 통합 운영 프로토콜 (SSOT).

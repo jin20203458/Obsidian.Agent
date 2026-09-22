@@ -1,4 +1,4 @@
-﻿---
+---
 description: >-
   WPF 현대적 MVVM 아키텍처 및 Async UI 가이드라인. WPF/C# 데스크톱 애플리케이션 개발 시 참조.
 related:

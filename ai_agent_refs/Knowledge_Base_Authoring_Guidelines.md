@@ -1,4 +1,4 @@
-﻿---
+---
 description: >-
   Obsidian 지식베이스 작성 규격 및 에이전트 라우팅 Frontmatter 표준 지침. 마크다운 문서 작성/수정 시 참조.
 related:
