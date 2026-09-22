@@ -1,4 +1,4 @@
-﻿---
+---
 description: >-
   2025~2026 최신 AI 에이전트 소프트웨어 엔지니어링(Agentic SE) 연구(CodePlan, Agentless, AgentCoder, Magentic-One)에 기반한
   일상 개발용 에이전트 협동 및 이중 계쇄(Dual-Gated: Plan Audit -> Code QA Audit) 오케스트레이션 표준 가이드라인.
