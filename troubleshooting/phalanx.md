@@ -293,5 +293,60 @@ related:
 2. **UI 명칭 일원화**:
    * 상단 타이틀 바 버튼을 `모의 침해 랩 ➔`으로 변경하여 좌측 레일의 `모의 랩`과 동일한 기능의 컴패니언 창임을 직관적으로 명시.
 
+---
+
+## 2026-09-23: [Resolved] 심층 포렌식 조사실 및 프로세스 뷰의 텍스트 겹침(Occlusion) 및 잘림(Clipping) 결함
+
+### [현상 (Symptom)]
+* `InvestigationView` 좌측 패널에서 "부모 PID / 프로세스" 항목의 우측 값이 좌측 라벨 위로 겹쳐 렌더링되어 글자가 가려짐.
+* "대응 및 조치 런북" 항목의 긴 문장이 줄바꿈되지 않고 우측으로 삐져나가면서 문장 뒷부분이 잘려 보이지 않음.
+* ReAct 감사 추적 아코디언 헤더 및 공격 계통도 트리에서도 긴 문자열로 인한 상태 뱃지 밀림 현상 확인.
+
+### [원인 (Root Cause)]
+1. **Grid ColumnDefinitions 누락으로 인한 동일 셀 충돌**:
+   * `Grid`에 열 정의가 없어 좌측 정렬 라벨과 우측 정렬 값(`HorizontalAlignment="Right"`)이 동일한 (Row 0, Col 0) 셀에 배치됨. 패널 가용 공간(~284px)을 초과하는 긴 문자열이 전달될 경우 우측 텍스트가 좌측 라벨을 덮어씌움.
+2. **수평 StackPanel 내 무한 가로 너비 측정 (`Infinite Width Measuring`)**:
+   * WPF `StackPanel Orientation="Horizontal"`은 자식 요소의 너비를 `double.PositiveInfinity`로 측정함.
+   * 이에 따라 `TextWrapping="Wrap"`과 `TextTrimming="CharacterEllipsis"`가 무력화되어 긴 문장이 줄바꿈 없이 뷰포트 밖으로 잘림.
+
+### [해결책 (Resolution)]
+1. **정형 2열 Grid 분할 및 `TextTrimming` 적용**:
+   * `InvestigationView.xaml`의 메타데이터 및 디스크 무결성 카드에 `<ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" />` 명시.
+   * `부모 PID:`와 `부모 프로세스:`를 독립 행으로 분리하고, 긴 경로에 `TextTrimming="CharacterEllipsis"`와 `ToolTip` 부여.
+2. **런북 및 아코디언 헤더의 유한 경계 Grid 전환**:
+   * 런북 항목을 `Grid`로 감싸 `TextWrapping="Wrap"`이 실제 잔여 너비를 기준으로 멀티라인 래핑되도록 교정.
+   * ReAct 아코디언 헤더와 계통도 패널을 3열 Grid(`Auto`, `*`, `Auto`)로 변경하여 가변 텍스트 말줄임 및 상태 뱃지 상시 노출 보장.
+3. **프로세스 경로 2단 계층 분리 (Option 1 적용)**:
+   * 단순 우측 말줄임(`CharacterEllipsis`) 시 가장 중요한 실행 파일명이 잘려나가는 포렌식 정보 왜곡을 원천 해결.
+   * `IncidentItemViewModel`에 `ParentFileName`, `ParentDirectoryPath`, `TargetFileName`, `TargetDirectoryPath`를 추가하고, 상단에 파일명을 굵게 우선 노출한 뒤 하단에 디렉터리 경로를 모노스페이스로 분리 렌더링.
+
+---
+
+## 2026-09-28: [Resolved] 프로세스 트리(TreeView) 리프 노드 클릭 시 화면 좌측 쏠림 및 고착 결함
+
+### [현상 (Symptom)]
+* `ProcessGraphView`(인메모리 프로세스 족보 탐색기)에서 깊이 중첩된 자식/리프 노드를 클릭했을 때, 트리 뷰포트 전체가 우측으로 스크롤되면서 화면 내 프로세스 트리 내용이 좌측으로 밀려 사라짐.
+* 루트 노드와 확장 접기 화살표, 부모 프로세스들이 좌측 화면 밖으로 이탈하며, 다른 노드를 클릭하거나 마우스를 움직여도 원상태(가로 오프셋 0)로 돌아오지 않고 좌측 쏠림 상태로 영구 고착됨.
+
+### [원인 (Root Cause)]
+1. **WPF TreeView의 기본 포커스 BringIntoView() 호출 메커니즘**:
+   * WPF의 `TreeViewItem`은 마우스 클릭 또는 포커스 획득 시 자동으로 `BringIntoView()`를 호출하여 `FrameworkElement.RequestBringIntoViewEvent` 라우티드 이벤트를 발생시킴.
+2. **무제한 수평 측정 pass 및 가로 폭 오프셋 팽창**:
+   * `TreeView` 내부의 기본 템플릿에 내장된 `ScrollViewer`는 기본적으로 `HorizontalScrollBarVisibility="Auto"` 상태로 동작함.
+   * 이에 따라 자식 노드들에 대해 `availableSize.Width = double.PositiveInfinity`로 무한 가로 너비를 부여하며, `TreeViewItem` 템플릿 내의 `<ColumnDefinition Width="*" />`와 결합하여 자식 노드가 깊어질수록(19px * depth 계층 들여쓰기) 항목의 우측 바운딩 박스가 뷰포트 가시 영역 너비를 크게 초과함.
+3. **ScrollViewer의 일방향 수평 스크롤 및 복구 기전 부재**:
+   * `ScrollViewer`는 이벤트의 `TargetRect` 우측 경계가 화면 밖으로 나갔다고 판단하여 이를 화면 안에 넣기 위해 `HorizontalOffset`을 증가시킴 (콘텐츠가 화면 좌측으로 밀려남).
+   * WPF `ScrollViewer`는 항목 가시화 요청에 따른 일방향 스크롤만 수행할 뿐 클릭 완료 후 원점(X=0)으로 복귀시키는 메커니즘이 전무함.
+   * 또한 수평 스크롤바가 숨겨져 있어 사용자가 수동으로 되돌릴 수도 없으며, 다른 자식 노드를 클릭해도 해당 노드의 들여쓰기 바운딩 박스가 타깃이 되므로 수평 오프셋이 유지되거나 더 밀려남.
+
+### [해결책 (Resolution)]
+1. **`ScrollViewer.HorizontalScrollBarVisibility="Disabled"` 명시**:
+   * `ProcessGraphView.xaml`의 `<TreeView>`에 `ScrollViewer.HorizontalScrollBarVisibility="Disabled"` 속성을 선언.
+   * `CanHorizontallyScroll`이 영구적으로 `false`로 고정되어 내부 `ScrollViewer`의 `HorizontalOffset`이 무조건 0으로 잠기며, 가로 너비 측정이 뷰포트 너비로 제한됨.
+2. **`TreeViewItem` 레벨의 `RequestBringIntoView` 이벤트 차단 (`EventSetter`)**:
+   * `TreeView.ItemContainerStyle`에 `<EventSetter Event="RequestBringIntoView" Handler="TreeViewItem_RequestBringIntoView" />`를 등록.
+   * `ProcessGraphView.xaml.cs`의 핸들러에서 `e.Handled = true;`를 설정하여 마우스 선택이나 포커스 이동 시 수평 스크롤 요청이 상위 `ScrollViewer`로 전파되는 것을 원천 차단 (수직 마우스 휠 및 스크롤바 동작은 온전히 유지).
+
+
 
 
