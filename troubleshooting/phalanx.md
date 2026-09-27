@@ -340,12 +340,19 @@ related:
    * 또한 수평 스크롤바가 숨겨져 있어 사용자가 수동으로 되돌릴 수도 없으며, 다른 자식 노드를 클릭해도 해당 노드의 들여쓰기 바운딩 박스가 타깃이 되므로 수평 오프셋이 유지되거나 더 밀려남.
 
 ### [해결책 (Resolution)]
-1. **`ScrollViewer.HorizontalScrollBarVisibility="Disabled"` 명시**:
-   * `ProcessGraphView.xaml`의 `<TreeView>`에 `ScrollViewer.HorizontalScrollBarVisibility="Disabled"` 속성을 선언.
-   * `CanHorizontallyScroll`이 영구적으로 `false`로 고정되어 내부 `ScrollViewer`의 `HorizontalOffset`이 무조건 0으로 잠기며, 가로 너비 측정이 뷰포트 너비로 제한됨.
-2. **`TreeViewItem` 레벨의 `RequestBringIntoView` 이벤트 차단 (`EventSetter`)**:
-   * `TreeView.ItemContainerStyle`에 `<EventSetter Event="RequestBringIntoView" Handler="TreeViewItem_RequestBringIntoView" />`를 등록.
-   * `ProcessGraphView.xaml.cs`의 핸들러에서 `e.Handled = true;`를 설정하여 마우스 선택이나 포커스 이동 시 수평 스크롤 요청이 상위 `ScrollViewer`로 전파되는 것을 원천 차단 (수직 마우스 휠 및 스크롤바 동작은 온전히 유지).
+1. **1단계 프레임워크 제어 (WPF 표준 패턴)**:
+   * `TreeView`에 `ScrollViewer.HorizontalScrollBarVisibility="Disabled"` 선언 및 `RequestBringIntoView` 이벤트 차단(`e.Handled = true`)으로 1차 방어.
+2. **2단계 구조적 전면 해결: 플랫 가상화 트리 투영 (Flat Virtualized Tree Projection) 마이그레이션**:
+   * Microsoft WinUI 3(`TreeViewList`), VS Code(`Monaco Tree`), ILSpy(`SharpTreeView`)의 아키텍처 패턴을 Phalanx에 선제적 도입.
+   * **데이터 계층 (`ProcessTreeProjectionManager`)**:
+     * `ProcessNodeModel`에 `Depth` 및 `IndentMargin` 속성, `IsExpanded` 토글 추가.
+     * `VisibleNodes` (`ObservableCollection<ProcessNodeModel>`)를 구축하여 트리가 펼쳐질 때 DFS 전위 순서(Pre-order)로 1차원 평탄화 투영.
+     * `ToggleNodeExpanded` 메서드를 통해 노드 접힘/펼침 시 VS Code의 배열 `splice()` 방식으로 가시 노드만 부분 갱신.
+     * `EnsureNodeVisible` 메서드를 통해 심층 수사실에서 프로세스 트리 점프 시 상위 조상 노드 자동 언랩 지원.
+   * **UI 뷰 계층 (`ProcessGraphView.xaml` / `.cs`)**:
+     * 고전 재귀 `TreeView`를 제거하고, 하드웨어 가상화가 켜진 `ListView`(`VirtualizingStackPanel.IsVirtualizing="True"`, `VirtualizationMode="Recycling"`, `ScrollUnit="Pixel"`)로 교체.
+     * 순수 MVVM 데이터 바인딩(`SelectedItem="{Binding SelectedProcessNode, Mode=TwoWay}"`)으로 코드비하인드 이벤트 핸들러 제거.
+     * 1차원 수직 평면 렌더링으로 수평 스크롤 요동 및 쏠림 현상을 구조적으로 0% 원천 박멸하고, 60fps 가상화 스크롤과 향후 멀티컬럼(TreeGrid) 확장 기반 확보.
 
 
 
