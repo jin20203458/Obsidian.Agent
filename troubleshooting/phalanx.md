@@ -354,6 +354,27 @@ related:
      * 순수 MVVM 데이터 바인딩(`SelectedItem="{Binding SelectedProcessNode, Mode=TwoWay}"`)으로 코드비하인드 이벤트 핸들러 제거.
      * 1차원 수직 평면 렌더링으로 수평 스크롤 요동 및 쏠림 현상을 구조적으로 0% 원천 박멸하고, 60fps 가상화 스크롤과 향후 멀티컬럼(TreeGrid) 확장 기반 확보.
 
+---
+
+## 2026-09-28: [Resolved] PID 0 프로세스명 표기 표준화 및 심층 수사실 목(Mock) 패널 제거
+
+### [현상 (Symptom)]
+1. 프로세스 트리에서 PID 0의 프로세스명이 `[System Process]`와 같이 대괄호가 포함된 원시 Win32 문자열로 노출되어 타 프로세스명과의 이질감 발생.
+2. 심층 수사실(`InvestigationView`) 좌측 패널에 `디스크 파일 무결성 검증 (FILE INSPECTION)` 카드가 상시 노출되어, 파일 무결성 검증이 수반되지 않은 사건에서도 정적 더미 값(`e3b0c44...`, `6.12`, `Microsoft Windows`)이 표시되는 대회 출품 결함(Mock 데이터 노출) 및 특정 도구 편향 발생.
+
+### [원인 (Root Cause)]
+1. Win32 `CreateToolhelp32Snapshot` API가 PID 0(System Idle Process)에 대해 관례적으로 `szExeFile = "[System Process]"`를 반환함.
+2. 초기 UI 프로토타입 단계에서 `FileInspectionTool` 규격을 가시화하기 위해 좌측 패널에 정적 전용 카드와 뷰모델 기본값을 배치하였으나, 실제 ReAct 엔진은 도구 호출 결과(`DecodePayloadTool`, `ProcessMemoryScanTool`, `ThreatReputationTool` 등)를 중앙 ReAct 추론 아코디언에서 동적으로 표출하도록 설계되어 있어 구조적 불일치 및 불필요한 더미 데이터가 잔존함.
+
+### [해결책 (Resolution)]
+1. **PID 0 명칭 정규화 (`System Idle Process`)**:
+   * C# CQRS 계층(`ProcessTreeProjectionManager.NormalizeProcessImageName`) 및 C++ 센서(`ProcessTree.cpp`) 양측에서 PID 0 및 `[System Process]`를 정식 시스템 명칭인 `System Idle Process`로 일관 변환.
+   * `TestSystemIdleProcessNormalization` 단위 테스트 추가로 영구 회귀 방지.
+2. **정적 목 패널 제거 및 ReAct 추론 스튜디오 단일화**:
+   * `InvestigationView.xaml` 좌측 패널에서 정적 디스크 파일 무결성 카드를 완전 삭제하고, 좌측 워크벤치는 타깃 프로세스 메타데이터와 대응 조치 런북에만 집중하도록 정돈.
+   * `IncidentItemViewModel.cs` 내 더미 속성 5종(`_authenticodeSigner`, `_authenticodeStatus`, `_isPathMasqueraded`, `_entropyScore`, `_fileSha256`) 완전 삭제.
+   * 모든 도구의 관측 및 실행 결과는 중앙 ReAct 추론 아코디언에서 유기적으로 일관되게 확인하도록 UI/UX 단일 진실 공급원(SSOT) 원칙 확립.
+
 
 
 

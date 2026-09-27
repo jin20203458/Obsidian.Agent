@@ -354,7 +354,7 @@ UI 전면 개편(4-View 멀티뷰 아키텍처) 도입에 따라, UI 골격은 �
 | **프로세스 트리** | `ProcessGraphView.xaml` 트리 선택 이벤트 | `TreeView.SelectedItemChanged` 미바인딩 | 트리 노드 클릭 시 `MainViewModel.SelectedProcessNode` 프로퍼티 자동 동기화 | 뷰모델-뷰 간 이벤트 누락 |
 | **프로세스 트리** | `ProcessGraphView.xaml` 프로세스 제어 | 수동 제어(원자적 동결/사살) 액추에이터 버튼 부재 | 선택된 노드에 대해 Win32 `NtSuspendProcess` / `NtTerminateProcess` 명령 즉시 하달 커맨드 제공 | 직접 개입(Manual Actuation) 미구현 |
 | **프로세스 트리** | `ProcessGraphView.xaml` 새로고침 버튼 | `RefreshFromDbCommand`로 잘못 매핑됨 | LiteDB 사건 목록 갱신이 아닌 C++ 센서로부터 프로세스 트리 스냅샷을 재수신하거나 로컬 트리를 리프레시하도록 분리 | 커맨드 의도 불일치 |
-| **위협 분석실** | `IncidentItemViewModel` 파일 검증 슬롯 | `AuthenticodeStatus`, `EntropyScore` 등 5개 속성이 하드코딩 기본값으로 초기화 | `FileInspectionTool` 실행 관측 데이터(`Output`)로부터 실제 서명 주체, SHA256 해시, 섀넌 엔트로피 바인딩 | 백엔드 도구 미구현으로 인한 기본값 노출 |
+| **위협 분석실** | `IncidentItemViewModel` 파일 검증 슬롯 | `AuthenticodeStatus`, `EntropyScore` 등 5개 속성 제거 완료 | 특정 단일 도구에 편향된 좌측 정적 패널을 제거하고, 모든 도구 실행 결과는 중앙 ReAct 추론 아코디언에서 동적으로 표출하도록 단일화 완료 | 대회 요구사항(더미 데이터 배제) 충족 |
 | **위협 분석실** | `InvestigationView.xaml` A4 리포트 버튼 | `Command` 바인딩이 없는 무동작 버튼 | 클릭 시 선택된 사건의 수사 기록 및 CoT 추론 트레이스를 A4 포렌식 PDF로 렌더링/다운로드 (`QuestPDF`) | 백로그 2번 기능 미연동 |
 | **위협 분석실** | `InvestigationView.xaml` 공격 계통도 라벨 | 타깃 노드 옆 `(격리 사살)` 텍스트 무조건 고정 표기 | `VerdictAction`이 `ACTION_KILL`일 때만 `(격리 사살)` 표시, `ACTION_RESUME`일 때는 `(동결 해제/정상)` 표시 | UI 텍스트 하드코딩 버그 |
 | **포렌식 도구** | `FileInspectionTool.cs` | 파일 미생성 (미구현) | WinVerifyTrust P/Invoke, 시스템 경로 위장(T1036.005) 감별, Shannon 엔트로피 연산 수행 | 백로그 1번 기능 |
@@ -387,15 +387,13 @@ UI 전면 개편(4-View 멀티뷰 아키텍처) 도입에 따라, UI 골격은 �
      * 우측 인스펙터 패널에 `SelectedProcessNode` 데이터 템플릿(PID, ParentPID, ImageName, CommandLine, 상태 배지) 및 제어 액션(동결/사살) UI 추가.
 
 3. **`InvestigationView` UI 플레이스홀더 및 고정 라벨**:
-   * **현재 코드**:
-     * 상단 액션 바: `<Button Content="A4 포렌식 리포트 출력" ... />` (Command 속성 없음).
-     * Panel 1: `AuthenticodeStatus`, `AuthenticodeSigner`, `EntropyScore`, `FileSha256`이 `IncidentItemViewModel`의 초기 하드코딩 값(`"Microsoft Windows"`, `6.12` 등)을 그대로 바인딩.
+   * **과거 코드 및 문제점**:
+     * Panel 1: `AuthenticodeStatus`, `AuthenticodeSigner`, `EntropyScore`, `FileSha256`이 `IncidentItemViewModel`의 초기 하드코딩 값(`"Microsoft Windows"`, `6.12` 등)을 그대로 바인딩하여 수사가 이루어지지 않은 사건에도 더미 데이터가 노출되고 특정 도구 편향이 발생.
      * Panel 3 (공격 계통도): `<TextBlock Text="(격리 사살)" />` 하드코딩.
-   * **문제점**: 미구현 기능이 UI에 버튼 및 기본값 형태로 노출되어 사용자 혼선을 유발하며, 정상 복구된 프로세스도 "격리 사살"로 잘못 표시됩니다.
-   * **필요 조치**:
-     * A4 리포트 버튼은 기능 구현 전까지 `IsEnabled="False"` 처리하거나 "준비 중 (QuestPDF 엔진 연동 예정)" 툴팁 적용.
+   * **조치 완료**:
+     * 좌측 Panel 1의 고정된 파일 무결성 카드 및 뷰모델 더미 속성을 전면 제거하고, 모든 도구의 관측 결과는 중앙 ReAct 추론 아코디언에서 동적으로 표출하도록 단일화 완료.
      * 공격 계통도 라벨은 DataTrigger를 통해 `VerdictAction`에 따라 가변 표기 (`ACTION_KILL` ➔ "(격리 사살)", `ACTION_RESUME` ➔ "(정상 복구)").
-     * 파일 무결성 슬롯은 `FileInspectionTool` 구현 전까지 "수사 도구 미호출" 플레이스홀더 상태를 명시적으로 표기.
+     * A4 리포트 버튼은 준비 중 안내 툴팁 적용.
 
 #### B. AI 수사관 및 포렌식 도구 계층 (AI Hunter & Forensic Tools Layer)
 1. **`FileInspectionTool.cs` 미구현**:
