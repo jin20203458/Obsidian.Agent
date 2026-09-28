@@ -17,10 +17,10 @@ related:
 ## 1. 단계별 구현 마일스톤 흐름
 
 ```
-[ Phase 1: Kernel Sensor & Telemetry ] ──▶ [ Phase 1.5: Atomic Freeze ] ──▶ [ Phase 2: In-Memory DAG & Rules ] ──▶ [ Phase 2.5: Defense Profiling Benchmark ] ──▶ [ Phase 3: AI Agent & Forensic Tools ] ──▶ [ Phase 3.5: Full-Chain E2E & Local FSM ] ──▶ [ Phase 4: Cockpit & Presentation ]
-  • ETW 커널 수집 루프 (완료)   • NtSuspendProcess 동결 (완료)  • C++ 인메모리 프로세스 트리 (완료)   • 스크립트 150ms 웜업 vs 0.1ms 차단 (완료)    • Gemini ReAct 루프 (완료)                • C++ ➔ C# ➔ C++ 폐루프 E2E 실증 (완료)    • ModernWpfUI 다크 대시보드
-  • 락-스왑 무손실 버퍼 (완료)  • Toolhelp32 폴백 (완료)        • 로컬 룰 판정 (< 100μs) (완료)       • 네이티브 바이너리 2ms 실행 누수 계측 (완료) • 상용 1티어 5대 OS 도구 (완료)          • 로컬 FSM & 위험도 가중치 스코어링 (완료) • 인터랙티브 프로세스 트리 Canvas
-  • ACTION_SUSPEND 대칭 (완료)  • 10초 세이프티 워치독 (완료)   • 0.1ms 현장 사살 & 24μs 동결 (완료)  • Canary 누수 0 Bytes 실증 (완료)          • 10s/50s SLA 연장 안전망 (완료)         • 정상 관리 족보 화이트리스트 가드 (완료)  • QuestPDF 포렌식 리포트 출력
+[ Phase 1: Kernel Sensor & Telemetry ] ──▶ [ Phase 1.5: Atomic Freeze ] ──▶ [ Phase 2: In-Memory DAG & Rules ] ──▶ [ Phase 2.5: Defense Profiling Benchmark ] ──▶ [ Phase 3: AI Agent & Forensic Tools ] ──▶ [ Phase 3.5: Full-Chain E2E & Local FSM ] ──▶ [ Phase 4: Enterprise Cockpit 4-View ] ──▶ [ Phase 4.1: UAC & Attack Lab ]
+  • ETW 커널 수집 루프 (완료)   • NtSuspendProcess 동결 (완료)  • C++ 인메모리 프로세스 트리 (완료)   • 스크립트 150ms 웜업 vs 0.1ms 차단 (완료)    • Gemini ReAct 루프 (완료)                • C++ ➔ C# ➔ C++ 폐루프 E2E 실증 (완료)    • 4-View 모듈식 관제 아키텍처 (완료)       • 센서 UAC 자동 기동 (완료)
+  • 락-스왑 무손실 버퍼 (완료)  • Toolhelp32 폴백 (완료)        • 로컬 룰 판정 (< 100μs) (완료)       • 네이티브 바이너리 2ms 실행 누수 계측 (완료) • 상용 1티어 5대 OS 도구 (완료)          • 로컬 FSM & 위험도 가중치 스코어링 (완료) • Flat Virtualized Tree 60FPS (완료)     • 7대 침해 시뮬레이터 연동 (완료)
+  • ACTION_SUSPEND 대칭 (완료)  • 10초 세이프티 워치독 (완료)   • 0.1ms 현장 사살 & 24μs 동결 (완료)  • Canary 누수 0 Bytes 실증 (완료)          • 10s/50s SLA 연장 안전망 (완료)         • 정상 관리 족보 화이트리스트 가드 (완료)  • Obsidian 다크 디자인 토큰 (완료)         • Clean-Room 로컬 인증 분리 (완료)
 ```
 
 ---
@@ -89,11 +89,11 @@ related:
 * **주요 개발 내용**:
   * **[실험 1] 관리형 스크립트 공격 윈도우 검증**:
     * 모의 부모 프로세스 ➔ `powershell.exe -enc ...` (카나리 파일 생성 시도) 스폰.
-    * .NET CLR 런타임 웜업 윈도우(약 624.50ms) 대비 Phalanx의 50.8μs 원자적 동결 실측 비교 (+624.45ms 안전 마진).
+    * .NET CLR 런타임 웜업 윈도우(약 646.41ms) 대비 Phalanx의 53.2μs(0.053ms) 원자적 동결 실측 비교 (+646.36ms 안전 마진).
     * 카나리 파일 생성 전 100% 선제 차단(Zero Payload Execution) 성공 검증.
   * **[실험 2] 네이티브 바이너리 공격 윈도우 한계 측정**:
     * C/C++ 네이티브 모의 바이너리(`MockNativeRansomware.exe`, 진입점 0.8ms 윈도우) 실행.
-    * C++ 로컬 룰 엔진(105.1μs 사살)에 의해 디스크 쓰기 전 카나리 파일 생성이 원천 차단(Zero Leak)됨을 실측 (+65.50ms 안전 마진).
+    * C++ 로컬 룰 엔진(95.9μs / 0.096ms 사살)에 의해 디스크 쓰기(공격 윈도우 88.62ms) 전 카나리 파일 생성이 원천 차단(Zero Leak)됨을 실측 (+88.52ms 안전 마진).
   * **벤치마크 보고서 통합 기록**:
     * [04_performance_benchmarks.md](./04_performance_benchmarks.md)에 E2E 타임라인 간트 차트 및 카나리 누수 실측 데이터 기록.
 * **완료 정의 (DoD)**:
@@ -163,18 +163,50 @@ related:
 
 ---
 
-### Phase 4: WPF 관제 콘솔 및 포트폴리오 에셋화 (Cockpit & Presentation)
-* **목표**: SOC 관제 표준 다크 테마 감각을 적용하여 실시간 프로세스 트리와 AI 사고 피드를 시각화하고, 원클릭 PDF 리포트 출력 및 데모 에셋 제작.
+### Phase 4: 엔터프라이즈 4-View 관제 콕핏 및 UI 전면 개편 (Cockpit & Presentation) [완료]
+* **목표**: 상용 EDR 수준의 4-View 모듈식 관제 아키텍처와 60FPS 평탄화 가상화 트리를 구현하고, Obsidian 다크 테마 및 ReAct 추론 스튜디오 완성.
 * **주요 개발 내용**:
-  * `Phalanx.Cockpit` WPF 프로젝트 UI 완성 (ModernWpfUI 다크 테마).
-  * 인터랙티브 프로세스 공격 트리 Canvas 렌더링 (안전 초록, 동결 파랑 펄스, 사살 빨강 배지).
-  * 실시간 AI 에이전트 사고 스트리밍 터미널 패널 구현 (이탤릭 슬레이트 블루 타이포그래피).
-  * `QuestPDF` 기반 공식 침해사고 A4 포렌식 리포트 출력 템플릿 완성.
-  * Windows 토스트 알림 클릭 시 조사실 창으로 바로 진입하는 UX 연결.
-* **완료 정의 (DoD)**:
-  * 전체 공격 및 방어 시나리오가 WPF 화면에 매끄럽게 렌더링되고, 버튼 클릭 시 포렌식 PDF 보고서가 정상 출력.
-  * 모의 시연 영상(MP4) 및 고화질 GIF 에셋 녹화 완료.
-  * GitHub용 영문/국문 README.md 및 아키텍처 다이어그램 게시.
+  * **[태스크 1] 4-View 모듈식 관제 뷰 분할 (`Views/`)**:
+    * `IncidentsView.xaml`: 탐지/동결 침해사고 카드 스트림, 실시간 집계 바, 검색/필터링.
+    * `ProcessGraphView.xaml`: `FlatNodeList` 기반 300여 개 OS 프로세스 트리 60FPS 가상화 렌더링 및 프로세스 메타데이터 인스펙터.
+    * `InvestigationView.xaml`: Gemini ReAct CoT 추론 아코디언, 스텝별 실측 레이턴시(`ElapsedMs`), 가변 공격 계통도.
+    * `AttackLabWindow.xaml`: 7대 실무 침해 시나리오 모의 주입 및 텔레메트리 스트리밍 랩.
+  * **[태스크 2] Flat Virtualized Tree Projection (`ProcessTreeProjectionManager.cs`)**:
+    * 계층형 재귀 `TreeView`의 렌더링 부하를 해소하기 위해 1차원 평탄화 배열(`FlatNodeList`)로 O(K) 슬라이스 갱신 알고리즘 적용.
+    * PID 0 의사 프로세스를 C++/C# 전 계층에서 `System Idle Process`로 정규화.
+  * **[태스크 3] 상용 EDR 룩앤필 및 0 이모지 정책 (`EnterpriseTheme.xaml`)**:
+    * 유니코드 이모티콘을 전면 배제하고 순수 XAML 벡터 지오메트리 아이콘(`IconShield`, `IconTerminal`, `IconKill` 등) 적용.
+    * 회전 셰브론을 적용한 커스텀 Expander 및 모던 캡슐 버튼 스타일 확립.
+* **완료 정의 (DoD) - [2026-09-28 검증 완료]**:
+  * 4개 독립 뷰 분할 및 바인딩 완료, 300+ 프로세스 트리 60FPS 가상화 렌더링 확인 (`ProcessTreeProjectionTests` 통과).
+  * ReAct 단계별 추론 트레이스 및 실측 레이턴시가 UI에 실시간 표출됨을 확인 (`6a010ee`).
+
+---
+
+### Phase 4.1: 센서 UAC 자동 기동 및 모의 공격 시뮬레이터 연동 (Sensor UAC & Attack Lab) [완료]
+* **목표**: 비관리자 관제 콕핏에서 C++ 커널 센서를 UAC 관리자 권한으로 자동 승격 기동하고, 개발/시연 환경을 위한 모의 침해 시뮬레이터를 완비.
+* **주요 개발 내용**:
+  * **[태스크 1] 센서 수명주기 컨트롤러 (`SensorProcessController.cs`)**:
+    * Release/Debug 빌드 바이너리 자동 탐색 및 `runas` 동사 기반 관리자 권한 프로세스 자동 분기.
+    * 콕핏 종료 시 gRPC 종료 명령 ➔ Win32 명명 이벤트(`Local\PhalanxSensorShutdownEvent`) ➔ 프로세스 퇴장 대기 순차 정리(Orderly Teardown).
+  * **[태스크 2] 모의 침해 시뮬레이터 (`tools/Phalanx.AttackSimulator`)**:
+    * 7대 실무 시나리오(LOLBAS C2, 랜섬웨어 vssadmin 삭제, CertUtil 다운로드, HTA 등) 및 텔레메트리 스트리밍 구현.
+    * 원클릭 실행 스크립트(`scripts/run_attack_simulator.ps1`) 및 비대화형 자동화 배치 모드 완비.
+  * **[태스크 3] Clean-Room 로컬 인증 분리 (`GeminiRestClient.cs`)**:
+    * 타 프로젝트 의존 코드를 전면 제거하고 Phalanx 로컬 `Config/google-credentials.json` 및 `AppSettings.json` 독립 탐색 구조 확립.
+* **완료 정의 (DoD) - [2026-09-28 검증 완료]**:
+  * C++ 센서 UAC 기동/종료 수명주기 정상 작동 확인 (`4e3f4a1`).
+  * 7대 시나리오 시뮬레이터 CLI 정상 동작 및 텔레메트리 주입 확인 (`run_attack_simulator.ps1`).
+  * 전체 솔루션 C# 빌드(`dotnet build`) 및 단위 테스트 100% Exit Code 0 통과 확인.
+
+---
+
+### Phase 5 (차기 백로그): 파일 포렌식 고도화 및 공인 리포트 엔진 (Next Backlog)
+* **목표**: 복합 회피 공격(T1036.005) 수사 지연을 극복하기 위한 `FileInspectionTool` 신설 및 QuestPDF A4 포렌식 리포트 실연동.
+* **추진 과제**:
+  1. `FileInspectionTool.cs` 구현: `WinVerifyTrust` Authenticode 서명 검증, 시스템 경로 위장 감별, 섀넌 엔트로피 연산.
+  2. `QuestPDF` 기반 침해사고 A4 포렌식 리포트 출력 엔진 구현 및 UI 원클릭 다운로드 연동.
+  3. `ProcessGraphView.xaml` 선택 노드 동결/사살 수동 액추에이터 커맨드 연동.
 
 ---
 
@@ -186,7 +218,7 @@ related:
 | **C++ 라이브러리** | `Microsoft.krabs-etw`, `asio-grpc`, `Boost.Asio` | 커널 수집, 인메모리 트리, 비동기 gRPC |
 | **C# 런타임** | .NET 10.0 SDK (.NET 9.0 / 10.0 호환) | 관제 콘솔 및 AI 에이전트 스튜디오 |
 | **C# 패키지** | `Grpc.Net.Client`, `LiteDB 5.0.21`, `QuestPDF` | 통신, 포렌식 아카이브, 리포팅 |
-| **WPF UI** | `CommunityToolkit.Mvvm`, `ModernWpfUI` | MVVM 다크 테마 관제 인터페이스 |
+| **WPF UI** | `CommunityToolkit.Mvvm`, `EnterpriseTheme` | MVVM 다크 테마 4-View 관제 인터페이스 |
 | **AI LLM** | `Google.Apis.Auth` / Gemini 3.7 Flash / Ollama | 구조화 JSON 모드 및 Tool Calling |
 
 ---

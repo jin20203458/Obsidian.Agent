@@ -1,4 +1,4 @@
-﻿---
+---
 description: >-
   Phalanx 2계층(2-Tier) EDR 시스템 아키텍처, C++20 네이티브 센서 동시성 모델, 더블 버퍼드 락-스왑 큐, gRPC 통신 규약 및 C# WPF 관제 콘솔 설계 명세. 시스템 토폴로지, 스레드 경계, 프로세스 트리 동기화(CQRS) 및 gRPC 프로토콜 수정/설계 시 참조.
 related:
@@ -74,7 +74,8 @@ flowchart TD
 | **Layer 1** | **세이프티 워치독** | [SafetyWatchdog.h](../../../Phalanx/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h) | 기본 10초 타임아웃, AI 수사 시 +50초 1회 연장 가드, 만료 시 자동 복구 |
 | **Layer 1** | **비동기 gRPC 클라이언트** | [GrpcStreamClient.h](../../../Phalanx/src/Phalanx.Sensor/Ipc/GrpcStreamClient.h) | `asio-grpc` 기반 단방향 텔레메트리 스트리밍 및 대응 명령 수신 |
 | **Layer 2** | **gRPC 수신 서비스** | [PhalanxGrpcService.cs](../../../Phalanx/src/Phalanx.Cockpit/Services/PhalanxGrpcService.cs) | Kestrel HTTP/2 기반 텔레메트리 배치 수신 및 양방향 대응 명령 스트림 |
-| **Layer 2** | **CQRS 트리 프로젝션** | [ProcessTreeProjectionManager.cs](../../../Phalanx/src/Phalanx.Cockpit/CQRS/ProcessTreeProjectionManager.cs) | C++ 덤프 및 델타 이벤트 기반 C# 로컬 RAM 완전 복제본 DAG 유지 (0초 족보 조회) |
+| **Layer 2** | **CQRS 트리 프로젝션** | [ProcessTreeProjectionManager.cs](../../../Phalanx/src/Phalanx.Cockpit/CQRS/ProcessTreeProjectionManager.cs) | C++ 덤프 및 델타 이벤트 기반 C# 로컬 RAM `FlatNodeList` 가상화 트리 유지 (O(K) 슬라이스 갱신, 0초 족보 조회) |
+| **Layer 2** | **엔터프라이즈 4-View 관제 콕핏** | [Views/](../../../Phalanx/src/Phalanx.Cockpit/Views/) | IncidentsView, ProcessGraphView, InvestigationView, AttackLabWindow 4분할 MVVM 관제 UI |
 | **Layer 2** | **자율 AI 위협 헌터** | [AutonomousHunterAgent.cs](../../../Phalanx/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs) | Gemini 3.7 Flash ReAct 루프 기반 5대 OS 도구 자율 호출 및 최종 판결 |
 | **Layer 2** | **포렌식 아카이브 매니저** | [ForensicArchiveManager.cs](../../../Phalanx/src/Phalanx.Cockpit/Storage/ForensicArchiveManager.cs) | 임베디드 `LiteDB 5.0.21` 기반 침해사고 영구 보존 및 서사 관리 |
 
@@ -298,12 +299,17 @@ service PhalanxService {
 
 ## 5. C# WPF 관제 콘솔 및 AI 스튜디오 (`Phalanx.Cockpit`)
 
-### A. WPF 관제 대시보드 (Modern SOC Cockpit)
-* **프레임워크**: `.NET 9.0`, `CommunityToolkit.Mvvm`, `ModernWpfUI` 다크 테마.
+### A. WPF 관제 대시보드 (Modern SOC Cockpit - 4-View Architecture)
+* **프레임워크**: `.NET 9.0` (.NET 10 RollForward 호환), `CommunityToolkit.Mvvm`, `EnterpriseTheme.xaml` Obsidian 다크 테마.
+* **4-View 모듈식 관제 아키텍처**:
+  1. **사건 관제실 (`IncidentsView.xaml`)**: 실시간 탐지/동결 사건 카드 스트림, 검색/필터링 및 상단 텔레메트리 상태 카운터.
+  2. **프로세스 맵 (`ProcessGraphView.xaml`)**: `FlatNodeList` 기반 300여 개 OS 활성 프로세스 트리 60FPS 가상화 렌더링 및 선택 노드 메타데이터 인스펙터.
+  3. **위협 분석실 (`InvestigationView.xaml`)**: Gemini ReAct 다단계 CoT 추론(Thought, Action, Observation) 아코디언, 실측 지연시간(`ElapsedMs`), 동적 공격 계통도.
+  4. **모의 침해 연구실 (`AttackLabWindow.xaml`)**: 7대 실무 침해 시나리오 모의 주입 및 텔레메트리 스트리밍 랩.
 * **CQRS 로컬 트리 프로젝션 ([ProcessTreeProjectionManager.cs](../../../Phalanx/src/Phalanx.Cockpit/CQRS/ProcessTreeProjectionManager.cs))**:
-  * C++ 엔진에서 수신한 초기 스냅샷 및 생명주기 델타 이벤트를 바탕으로 C# 로컬 RAM 상에 완전한 `ObservableCollection` 기반 프로세스 트리 DAG를 실시간 유지합니다.
-  * C++로의 추가 쿼리(RPC) 없이 로컬 메모리에서 즉시 족보를 순회하여 WPF Canvas 60FPS 렌더링 및 Gemini AI 에이전트의 0초 족보 조회를 지원합니다.
-* **인터랙티브 프로세스 트리 Canvas**:
+  * C++ 엔진에서 수신한 초기 스냅샷 및 생명주기 델타 이벤트를 바탕으로 C# 로컬 RAM 상에 O(K) 슬라이스 기반 `FlatNodeList` 가상화 트리 DAG를 실시간 유지합니다.
+  * 계층형 재귀 트리 탐색 대신 1차원 평탄화(Flat Virtualized) 배열을 투영하여 깊은 트리의 렌더링 부하를 원천 배제하고, C++로의 추가 쿼리 없이 로컬 0초 족보 조회를 지원합니다.
+* **인터랙티브 프로세스 상태 시각화**:
   * 안전 프로세스(초록), 동결 수사 중 프로세스(파랑 펄스 애니메이션), 사살 완료 프로세스(빨강 및 `[KILLED]` 배지), 정상 종료 프로세스(회색 톰스톤) 상태 가시화.
 
 ### B. 자율 AI 위협 헌터 ([AutonomousHunterAgent.cs](../../../Phalanx/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs))

