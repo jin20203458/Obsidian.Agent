@@ -163,12 +163,17 @@ Phalanx는 타 저장소(예: MundusVivens)에 대한 런타임 의존성 없이
 | **6** | Benign Admin Script (Known-Good) | `explorer.exe` ➔ `powershell.exe -enc <Get-Service>` | `ACTION_RESUME` | 정상 관리 스크립트 오탐 방지 가드 ➔ 원자적 동결 해제 |
 | **7** | Process Tree DAG Burst | 50개 프로세스 생성/종료 델타 이벤트 연속 주입 | `ACTION_RESUME` | 고부하 인메모리 프로세스 트리 및 관제 콕핏 60FPS 스트레스 검증 |
 
-#### C. 주입 아키텍처 및 듀얼 모드 (Dual Mode)
-1. **gRPC 텔레메트리 스트림 직접 주입 (`--mode grpc`, 기본값)**:
-   * 포트 50051의 Kestrel gRPC 서비스(`PhalanxGrpcService`)로 규격화된 `TelemetryBatch` 프로토콜 버퍼 메시지를 직접 스트리밍.
-   * 실제 악성코드를 OS 상에서 실행하지 않고도 안전하고 완벽하게 커널 텔레메트리 인입 상황을 재현 가능.
-2. **하이브리드 OS 프로세스 스폰 모드 (`GetSafeOsProcessInfo`)**:
-   * 실제 Windows OS 상에서 무해한 안전 프로세스(`cmd.exe /c timeout`, `powershell Start-Sleep`)를 일시 생성하여 실제 PID 및 Win32 핸들 연동을 병행 검증 가능.
+#### C. 주입 아키텍처 및 3-모드 주입 체계 (Injection Modes)
+1. **클린룸 인프로세스 모드 (`CleanRoom`, 기본값)**:
+   * 실제 OS 프로세스를 띄우지 않고, CQRS `ProcessTreeProjectionManager`로 규격화된 `TelemetryBatch`를 인프로세스에서 직접 주입.
+   * 초고속으로 EDR 탐지 파이프라인 및 ReAct AI 헌터의 추론/의사결정을 무해하고 안전하게 검증 가능.
+2. **하이브리드 OS 프로세스 스폰 모드 (`OsHybrid`)**:
+   * 실제 Windows OS 상에서 무해한 안전 프로세스(`cmd.exe /c timeout`, `powershell Start-Sleep`)를 일시 생성하여 실제 PID 및 Win32 핸들 연동을 병행 검증.
+3. **전문가 라이브 모드 (`LiveExpert`)**:
+   * 실제 공격 시그니처와 페이로드를 OS 상에 직접 기동하여 디스크/메모리 상에서 실체화.
+   * **Safe Weaponization**: 랜섬웨어 파괴 명령(`vssadmin delete shadows`)을 안전 조회(`vssadmin list shadows`)로 대체하여 호스트 파괴 원천 차단.
+   * **Phase 5 위장 드로퍼 실체화**: `C:\Windows\Temp\svchost.exe` 더미 페이로드를 물리 생성하여 `FileInspectionTool` 부재로 인한 턴 지연을 실측.
+   * **Teardown Guarantee**: `try-finally`에서 미종료 고아 프로세스 및 드롭된 임시 파일을 100% 자동 삭제.
 
 ---
 
@@ -365,6 +370,7 @@ Phase 4 및 Phase 4.1 UI 전면 개편(4-View 모듈식 아키텍처)이 완료�
 | **시뮬레이션** | `MainViewModel.RunScenarioAsync` | `Task.Delay(350)` 및 고정 로그 문자열 출력 (스텁) | `AttackLabScenarioRunner` 연동을 통한 CQRS 인프로세스 주입, AI 헌터 실시간 수사 및 관제 콘솔 사건 격발 실연동 완료 | Phase 5.2 완료 |
 | **시뮬레이션** | `AttackLabScenarioRunner.cs` | 클래스 부재 (단일 책임 원칙 위배 위험) | 신설 서비스 구축: OS 비동기 프로세스 스폰/종료(`WaitForExitAsync`), SSOT 판결 기반 사살, 고아 프로세스 청소, 시나리오 #7 DAG 스트레스 실측, JSON 감사 리포트 직렬화 | Phase 5.2 완료 |
 | **시뮬레이션** | `AttackScenarioRegistry.cs` 위치 | `tools/Phalanx.AttackSimulator`에 단독 고립 | `src/Phalanx.Cockpit/Scenarios/`로 이관 완료 및 7대 표준 시나리오 + 동적 커스텀 빌더 완비 | Phase 5.2 완료 |
+| **시뮬레이션** | `AttackLabWindow.xaml` 모드 제어 및 안전성 | 단순 2단계 모드 및 라이브 페이로드 미지원 | `AttackLabMode` 3-모드(`CleanRoom`, `OsHybrid`, `LiveExpert`) 체계 확립, `Live` 위험 경고 배너 및 C++ 커널 센서 온라인/오프라인 상태 배지 실시간 연동, Safe Weaponization 및 Teardown 청소 완료 | Phase 5.2.1 완료 |
 
 #### B. 차기 실체화 대기 항목 (Phase 5 Active Backlog / Un-mock Tasks)
 
@@ -380,11 +386,15 @@ Phase 4 및 Phase 4.1 UI 전면 개편(4-View 모듈식 아키텍처)이 완료�
 ### 9.2 계층별 상세 목/스텁 분석
 
 #### A. 관제 콕핏 UI 및 시뮬레이션 계층 (Cockpit UI & Simulation Layer)
-1. **`AttackLabWindow` / `AttackLabScenarioRunner` (조치 완료 - Phase 5.2)**:
-   * **과거 문제점**: UI에 7개의 붉은 버튼이 나열되어 조잡했으며, 시나리오 실행 시 `Task.Delay` 스텁만 동작하여 실제 관제 콘솔에 사건이 연동되지 않음.
+1. **`AttackLabWindow` / `AttackLabScenarioRunner` (조치 완료 - Phase 5.2 / 5.2.1)**:
+   * **과거 문제점**: UI에 7개의 붉은 버튼이 나열되어 조잡했으며, 시나리오 실행 시 `Task.Delay` 스텁만 동작하여 실제 관제 콘솔에 사건이 연동되지 않음. 또한 실제 공격 페이로드를 구동할 수 없어 Phase 5 도구 결핍(FileInspectionTool 부재)을 디스크 레벨에서 실측할 수 없었음.
    * **조치 완료**:
      * Master-Detail 리스트형 레이아웃으로 UI 전면 개편.
      * `AttackLabScenarioRunner`를 DI 싱글톤으로 신설하여 CQRS 인프로세스 주입, AI 수사관 트리거, OS 비동기 실행(`WaitForExitAsync`), SSOT 기반 사살, 감사 리포트 자동 생성 파이프라인 완비.
+     * `AttackLabMode` 3-모드 주입 체계(`CleanRoom`, `OsHybrid`, `LiveExpert`) 도입:
+       * `LiveExpert` 모드에서 시나리오 #5의 `C:\Windows\Temp\svchost.exe` 물리 드롭을 재현하고 `[도구 결핍 감지]` 감사 로그를 기록.
+       * 호스트 파괴 방지(Safe Weaponization - `vssadmin list shadows`) 및 `try-finally` 고아 프로세스/임시 파일 자동 청소 완비.
+       * 붉은색 고시인성 위험 경고 배너 및 C++ 커널 센서 연결 상태(`ONLINE` vs `OFFLINE - UNPROTECTED`) 동적 배지 실시간 표출.
      * `AttackScenarioRegistry.cs`를 Cockpit 내부로 이관하여 격리 해소.
 
 2. **`ProcessGraphView` 우측 인스펙터 및 트리 상호작용 (조치 완료 - 커밋 `6a010ee`)**:

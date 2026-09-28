@@ -1,4 +1,4 @@
-﻿---
+---
 description: >-
   Phalanx C++ ?쇱꽌 諛?C# 肄붿뼱 ?몃윭釉붿뒋???곕턿. Phalanx ?꾨줈?앺듃 踰꾧렇, ETW ?섏쭛 ?ㅻ쪟 諛?gRPC ?μ븷 諛쒖깮 ??李몄“.
 related:
@@ -375,3 +375,34 @@ related:
    * 4-인자 생성자 오버로드를 유지하여 기존 29개 단위 테스트 100% 무손실 통과 보장.
 4. **Master-Detail 리스트형 UI 개편**:
    * 7개 붉은 버튼 공해를 전면 제거하고 좌측 8개 항목 통합 리스트 + 우측 인스펙터/단일 주입 버튼 구조로 전환하여 메인 대시보드와의 100% 디자인 일체감 달성.
+
+---
+
+## 2026-09-28: [Resolved] AttackLab 전문가 라이브 모드(Live Execution Mode) 및 호스트 안전성/위험 경고 배너 구현
+
+### 1. 현상 (Symptom)
+* 어택랩의 2가지 모드(클린룸 인프로세스 주입 vs OS 하이브리드)는 안전한 더미 프로세스(`timeout`, `powershell`)만 기동하여 실제 악성 페이로드의 디스크/메모리 생성 양상을 실측할 수 없었음.
+* 특히 시나리오 #5(T1036.005 Masquerading Dropper)의 핵심 한계인 `FileInspectionTool` 부재로 인한 턴 수 지연(메모리 스캔 우회로 21.7초 낭비)을 실제 OS 디스크 레벨에서 체감하고 테스트할 수 있는 라이브 환경 부재.
+* 실제 호스트 OS 상에서 실프로세스와 스크립트를 기동할 경우, 랜섬웨어 시나리오(섀도우 복사본 삭제 등)에 의한 개발 PC 파괴 위험 및 관제사가 위험 모드 작동 여부를 인지하지 못할 UI 안전장치 결핍.
+
+### 2. 원인 (Root Cause)
+1. `AttackScenario` 내에 실제 OS 공격 페이로드를 스폰하는 실행 정보(`GetLiveProcessInfo`) 델리게이트 부재.
+2. 실행 모드가 단순 `bool isModeOs` 불리언으로 설계되어 3단계(클린룸 / 하이브리드 / 전문가 라이브) 제어 불가능.
+3. 실프로세스 구동 시 호스트 시스템 보호를 위한 무해화(Safe Weaponization) 규칙과 생성 파일 자동 정리(Teardown) 파이프라인 결여.
+4. UI 상에서 실시간 C++ 커널 센서 연결 여부와 결합된 시각적 위험 경고 배너 부재.
+
+### 3. 해결책 (Resolution)
+1. **3-모드 주입 아키텍처 확립 (`AttackLabMode` Enum)**:
+   * `CleanRoom`: 순수 인프로세스 CQRS 텔레메트리 주입 (초고속 단위/파이프라인 검증).
+   * `OsHybrid`: 무해한 표준 프로세스 병행 스폰 및 AI 수사 연동.
+   * `LiveExpert`: 실제 공격 시그니처를 지닌 프로세스/스크립트를 OS 상에 직접 기동하여 디스크/메모리 실체화.
+2. **호스트 안전성 보장 (Safe Weaponization & Teardown Guarantee)**:
+   * **Safe Weaponization**: 시나리오 #2(랜섬웨어)의 볼륨 섀도우 삭제 명령(`vssadmin delete shadows`)을 안전한 조회 명령(`vssadmin list shadows /all`)으로 대체하여 100% TTP 시그니처는 보존하되 호스트 파괴를 원천 차단.
+   * **시나리오 #5 디스크 실체화 및 도구 결핍 감지**: `powershell.exe`를 통해 `C:\Windows\Temp\svchost.exe` 더미 페이로드를 실제 생성하여 디스크 위장 공격을 실체화하고, 감사 로그에 `[도구 결핍 감지] FileInspectionTool 부재로 인한 턴 수 지연`을 명시 기록.
+   * **Teardown Guarantee**: `try-finally` 블록에서 미종료 고아 프로세스(`Kill()`)와 드롭된 임시 파일(`svchost.exe`, `phalanx_test.tmp`)을 100% 자동 삭제하여 파일 잔여물 및 백신 오탐 위험 제거.
+3. **고시인성 위험 경고 배너 및 C++ 커널 센서 연동 UI (`AttackLabWindow.xaml`)**:
+   * 상단에 붉은색 경고 배너를 신설하여 `IsModeLive == true`일 때 즉시 노출.
+   * 호스트 프로세스 실행 및 디스크 쓰기 경고 문구 출력.
+   * `IsSensorConnected` 상태와 연동하여 C++ 커널 센서가 온라인일 때는 녹색 `[KERNEL SENSOR: ONLINE]`, 오프라인일 때는 점멸하는 주황/적색 `[KERNEL SENSOR: OFFLINE - UNPROTECTED]` 배지를 실시간 표출하여 안전한 테스트 환경 조성.
+4. **하위 호환성 유지**:
+   * `ExecuteScenarioAsync(sc, isModeOs, ct)` 오버로드를 유지하여 기존 단위 테스트 및 호출부 호환성 100% 보장 (29/29 Unit Tests Pass).
