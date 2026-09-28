@@ -440,3 +440,30 @@ related:
    * `dotnet build Phalanx.sln -c Release`: Exit Code 0 (경고 0, 에러 0).
    * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"`: 29/29 통과 (Exit Code 0).
 
+---
+
+## 2026-09-28: [Resolved] SettingsWindow 오픈 시 CLR 강제 종료(0xc000041d) 및 MSBuild WPF 동시 빌드 경합
+
+### 1. 현상 (Symptom)
+* 대시보드에서 `SETTINGS` 버튼 클릭 시 `PresentationUI.resources.dll` 로드 직후 `STATUS_FATAL_USER_CALLBACK_EXCEPTION (0xc000041d)` 발생하며 프로세스 비정상 종료.
+* 솔루션 단위 빌드(`dotnet build Phalanx.sln`) 시 간헐적으로 `CS2001: ...Views\*.g.cs 소스 파일을 찾을 수 없습니다` 오류 발생.
+
+### 2. 원인 (Root Cause)
+1. **WPF TwoWay 바인딩 읽기 전용 속성 충돌**:
+   * `SettingsWindow.xaml`의 RadioButton `IsChecked`는 기본 동작이 `TwoWay` 바인딩임.
+   * `SettingsViewModel.cs`의 `IsApiKeyMode`가 getter만 존재하는 읽기 전용 프로퍼티(`=> !UseVertexAi`)로 선언되어 있어 윈도우 초기 렌더링 시 `System.InvalidOperationException` 발생, 네이티브 윈도우 콜백 단계에서 프로세스가 즉시 다운됨.
+2. **MSBuild 병렬 컴파일 간 WPF XAML MarkupCompile 경합**:
+   * 솔루션 내 `Phalanx.Agent.Tests` 및 `Phalanx.AttackSimulator`가 `Phalanx.Cockpit`을 동시 참조하여 빌드할 때, 기본 멀티프로세스(`/m`) 동작으로 인해 중간 생성 파일(`*.g.cs`) 생성 타깃이 경합을 일으켜 파일 누락 오류 유발.
+
+### 3. 해결책 (Resolution)
+1. **`SettingsViewModel.cs` TwoWay 바인딩 완결**:
+   * `IsApiKeyMode`에 setter 및 양방향 상호 갱신 로직 구현 (`set { if (UseVertexAi == value) { UseVertexAi = !value; OnPropertyChanged(); } }`).
+2. **UI 정규화 및 안전장치**:
+   * `SettingsWindow.xaml` 탭 버튼 내 불필요한 장식용 이모지 전면 제거.
+   * `EnterpriseTheme.xaml`에 `ComboBox`, `ComboBoxItem`, `CheckBox`, `RadioButton` 전용 엔터프라이즈 다크 컨트롤 템플릿을 신설하여 Windows 기본 테마의 흰색 팝업/흰색 텍스트 묻힘 현상 완전 해결.
+   * `MainViewModel.AutoStartSensorAsync`에 단위 테스트 환경(`testhost`) 및 헤드리스 가드 추가하여 불필요한 UAC 팝업 차단.
+   * `CockpitUiBridge.Dispatch`에 `app.Dispatcher.Thread.IsAlive` 검사를 추가하여 종료된 스레드로의 큐잉 방지.
+3. **WPF 솔루션 빌드 안정화**:
+   * MSBuild 직렬화 옵션(`-m:1`) 또는 프로젝트 개별 빌드를 통해 XAML 파서 중간 산출물 경합 방지 확인.
+
+
