@@ -406,3 +406,37 @@ related:
    * `IsSensorConnected` 상태와 연동하여 C++ 커널 센서가 온라인일 때는 녹색 `[KERNEL SENSOR: ONLINE]`, 오프라인일 때는 점멸하는 주황/적색 `[KERNEL SENSOR: OFFLINE - UNPROTECTED]` 배지를 실시간 표출하여 안전한 테스트 환경 조성.
 4. **하위 호환성 유지**:
    * `ExecuteScenarioAsync(sc, isModeOs, ct)` 오버로드를 유지하여 기존 단위 테스트 및 호출부 호환성 100% 보장 (29/29 Unit Tests Pass).
+
+---
+
+## 2026-09-28: [Resolved] Enterprise 설정창(SettingsWindow) 신설 및 UI 팔레트 무채색/옵시디언 다크 전면 정규화
+
+### 1. 현상 (Symptom)
+* Google Cloud Vertex AI / AI Studio API 키, gRPC 커널 센서 IPC 주소, SafetyWatchdog 타임아웃, Reflex 사살 정책, LiteDB 저장 경로 등을 관제 대시보드 내에서 변경할 수 없어 설정 조정 시마다 `AppSettings.json` 수동 편집 및 재기동이 강제됨.
+* 사용자 심미적 요구사항(파란색/네이비 배제 및 하이엔드 무채색 옵시디언 다크 테마)에 반하여 일부 UI 뷰(`AttackLabWindow`, `InvestigationView`)에 푸른색 계열 틴트(`#1c2430`, `#388bfd`, `#58a6ff` 등)가 잔존해 통일감 저해.
+* 에이전트 런타임(`AutonomousHunterAgent`)이 앱 시작 시의 클라이언트 설정을 캐싱하여, 설정창에서 키나 모델을 변경하더라도 런타임에 동적 반영되지 않는 한계 존재.
+
+### 2. 원인 (Root Cause)
+1. `SettingsWindow` 및 이를 지원하는 `SettingsViewModel`의 부재.
+2. `AutonomousHunterAgent` 내부에 설정 리로드 메서드(`ReloadConfiguration`) 미구현.
+3. 초기 공격 시뮬레이터 및 프로토타입 작성 시 표준 VS 테마/WPF 기본 브러시(파란색 하이라이트) 산재.
+
+### 3. 해결책 (Resolution)
+1. **설정창(SettingsWindow) 및 뷰모델(SettingsViewModel) 신설**:
+   * `src/Phalanx.Cockpit/Views/SettingsWindow.xaml` 및 `SettingsViewModel.cs` 구현.
+   * 4개 카테고리 탭 제공:
+     - **AI Hunter & Gemini**: Vertex AI(서비스 계정) vs AI Studio(API 키) 모드 전환, 프로젝트 ID/위치/모델 지정, ReAct 최대 턴 수 및 페일 시큐어 옵션, 비동기 즉시 연결 테스트(Ping/Latency 실측).
+     - **Kernel Sensor IPC**: gRPC Host/Port(`127.0.0.1:50051`), C++ SafetyWatchdog 타임아웃, Reflex Kill(0.1ms) 토글, 프로세스 트리 전체 사살 여부.
+     - **Storage & Forensics**: LiteDB DB 경로(`phalanx_forensics.db`), 리포트 출력 경로, 저장된 침해 사고 카운트 현황 조회.
+     - **System Info**: Phalanx 2-Tier 아키텍처 및 버전 정보.
+   * `SaveSettingsCommand` 실행 시 `AppSettings.json` 영구 저장 및 런타임 `AutonomousHunterAgent.ReloadConfiguration` 즉각 호출로 무중단 적용.
+2. **메인 대시보드 접근성 연동**:
+   * 상단 헤더 바 `SETTINGS` 버튼 및 좌측 네비게이션 레일 하단 톱니바퀴(⚙) 버튼 더블 바인딩으로 손쉬운 모달 호출 지원.
+   * DI 컨테이너(`Program.cs`)에 `SettingsViewModel` 싱글톤 등록.
+3. **UI 팔레트 완전 무채색(Zero Blue) 정규화**:
+   * 전역 솔루션 XAML 스캔을 통해 `#1c2430`, `#388bfd`, `#58a6ff`, `#0e1117`, `#253545`, `#181e28`, `#253548` 등 잔류 푸른색을 순수 티타늄/징크 다크 계열(`#1a1d21`, `#21262d`, `#8b949e`, `#ffffff` 등)로 100% 치환.
+   * `EnterpriseTheme.xaml`에 `FormLabelStyle`, `FormInputStyle`, `IconNavSettings` 추가로 폼 스타일 일체감 확보.
+4. **품질 검증 (Mandatory QA)**:
+   * `dotnet build Phalanx.sln -c Release`: Exit Code 0 (경고 0, 에러 0).
+   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"`: 29/29 통과 (Exit Code 0).
+
