@@ -5,26 +5,9 @@ related:
   - ../README.md
   - ../Phalanx/README.md
 ---
-# Phalanx Troubleshooting Runbook
+# Phalanx Troubleshooting
 
 본 문서는 Phalanx EDR 솔루션(C++ 센서, gRPC 스트리밍, C# 코어 및 AI 에이전트) 개발 및 실전 운영 중 발생하는 시스템 예외 현상과 해결 방안을 기록하는 중앙 기술 런북입니다.
-
----
-
-## 트러블슈팅 기록 템플릿 (작성 표준)
-
-```markdown
-## YYYY-MM-DD: [발생 이슈 요약]
-
-### [현상 (Symptom)]
-* 오류 메시지, 로그 내용, 비정상 동작 양상
-
-### [원인 (Root Cause)]
-* 코드, 시스템 콜, 동시성 또는 OS API 동작 메커니즘 차원의 근본 원인 분석
-
-### [해결책 (Resolution)]
-* 적용된 코드 패치, 구조 변경 및 해결 증빙 (Exit Code 0 / 빌드 확인)
-```
 
 ---
 
@@ -46,17 +29,17 @@ related:
 
 ## 2026-09-08: [Resolved] Windows Winsock/NOMINMAX 충돌 및 MSVC UAC 매니페스트 링크 에러
 
-### [현상 (Symptom)]
+### 1. 현상 (Symptom)
 * `ws2ipdef.h` / `ws2tcpip.h` 컴파일 시 `error C2011: 'ip_mreq': 'struct' type redefinition`, `error C2065: 'PADDRINFOA'`, `error C3861: 'WSAIoctl'` 등 100여 건의 Winsock 심볼 충돌 발생.
 * `grpcpp/impl/generic_serialize.h` 및 `grpc/event_engine/memory_request.h`에서 Windows 매크로 `min`/`max` 간섭으로 구문 에러 발생.
 * `Phalanx.Sensor.exe` 링크 시 `manifest authoring error c1010001: Values of attribute "level" not equal in different manifest snippets (LNK1327)` 발생.
 
-### [원인 (Root Cause)]
+### 2. 원인 (Root Cause)
 1. `windows.h`가 `winsock2.h`보다 먼저 인클루드되어 구형 `winsock.h` (Winsock 1)와 `winsock2.h` (Winsock 2)가 중복 로드됨.
 2. `NOMINMAX` 및 `UNICODE` / `_UNICODE` 매크로 부재로 `std::min`/`std::max` 파괴 및 `krabs-etw`의 `KERNEL_LOGGER_NAME` (`TEXT(...)`) 와이드 문자열 불일치 발생.
 3. CMake의 `target_sources`에 `app.manifest`를 직접 전달하면서 MSVC 기본 생성 매니페스트(`asInvoker`)와 병합 충돌 발생.
 
-### [해결책 (Resolution)]
+### 3. 해결책 (Resolution)
 1. 루트 `CMakeLists.txt`에 전역 컴파일 정의 `add_compile_definitions(UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00)` 적용.
 2. 모든 C++ 헤더에서 `<windows.h>` 호출 전 `<winsock2.h>`와 `<ws2tcpip.h>`를 선행 인클루드하도록 구조화.
 3. CMake 링크 플래그에 MSVC 네이티브 UAC 임베딩 지시어 `/MANIFEST:EMBED /MANIFESTUAC:"level='requireAdministrator' uiAccess='false'"` 적용하여 `mt.exe` 충돌 없이 PE 바이너리에 권한 임베딩 완료.
@@ -65,14 +48,14 @@ related:
 
 ## 2026-09-10: [Resolved] 원자적 프로세스 동결 엔진(NtSuspendProcess) 24μs 집행 및 폴백 체계
 
-### [현상 (Symptom)]
+### 1. 현상 (Symptom)
 * 기존 Win32 `CreateToolhelp32Snapshot` + `SuspendThread` 스레드 순회 방식은 스냅샷 생성 및 스레드 오픈 순회 과정에서 수십 ms의 지연이 발생(약 35ms 계측).
 * 순회 도중 타깃 악성 프로세스가 신규 워커 스레드를 즉각 분기(`CreateThread`)하여 페이로드를 실행하고 탈출할 수 있는 미세한 동시성 레이스 컨디션(Race Window) 취약점 존재.
 
-### [원인 (Root Cause)]
+### 2. 원인 (Root Cause)
 * Win32 공개 API군에는 단일 호출로 프로세스 내 모든 스레드를 일괄 정지시키는 표준 인터페이스가 부재하여, 유저모드 스레드 열거 순회 방식에 의존함.
 
-### [해결책 (Resolution)]
+### 3. 해결책 (Resolution)
 1. `ProcessActuator`에 `ntdll.dll`의 미공개 커널 네이티브 API `NtSuspendProcess` 및 `NtResumeProcess`를 동적으로 바인딩하여 1순위 원자적(Atomic) 동결 파이프라인 구축.
 2. 동결 소요 시간이 기존 35,281μs(~35ms)에서 23μs(마이크로초, 1000배 이상 단축)로 단축되어 스레드 탈출 레이스 윈도우 원천 차단.
 3. 권한 부족, 특정 OS 비호환 환경 또는 결함 발생 시 즉시 기존 `Toolhelp32` 방식으로 자동 후퇴(Graceful Fallback)하는 2중 방어선 구현.
@@ -81,14 +64,14 @@ related:
 
 ## 2026-09-10: [Resolved] EtwKernelCollector::Start() 동시성 레이스 컨디션 해결 및 원자적 CAS 적용
 
-### [현상 (Symptom)]
+### 1. 현상 (Symptom)
 * `EtwKernelCollector::Start()`를 복수의 스레드가 동시에 호출할 경우, 이미 가동 중인 스레드가 덮어씌워지며 C++ 런타임에 의해 `std::terminate()` 크래시가 유발될 수 있는 잠재적 취약점 존재.
 * 스레드 기동 중 시스템 자원 부족 예외(`std::system_error` 등) 발생 시 상태 플래그 롤백 로직이 부재하여 `running`이 `true`로 고착되는 상태 불일치 발생.
 
-### [원인 (Root Cause)]
+### 2. 원인 (Root Cause)
 * 기존 코드가 `running.load()`를 확인하고 `running.store(true)`를 호출하는 전형적인 Check-Then-Act (TOCTOU) 비원자적 상태 전이 구조로 작성되어 있었음.
 
-### [해결책 (Resolution)]
+### 3. 해결책 (Resolution)
 1. `impl_->running.compare_exchange_strong(expected, true, std::memory_order_acq_rel)`을 적용하여 복수의 스레드가 동시 진입하더라도 오직 하나의 스레드만 `false -> true` 전이에 성공하도록 원자적 상태 전이 보장.
 2. 스레드 생성부를 `try-catch`로 감싸 `std::thread` 생성 실패 시 `impl_->running.store(false, std::memory_order_release)`로 원자적 롤백 수행 및 `false` 반환하도록 예외 안전성 확보.
 
@@ -96,16 +79,16 @@ related:
 
 ## 2026-09-14: [Resolved] ProcessTree PID 재사용 시 유령 부모(Ghost Parent) 족보 왜곡 방어
 
-### [현상 (Symptom)]
+### 1. 현상 (Symptom)
 * 윈도우 OS는 종료된 프로세스의 PID를 빠른 속도로 재할당함.
 * 부모 프로세스 A(PID: 1000)가 자식 B(PID: 2000, `ppid = 1000`)를 생성한 후 A가 먼저 종료되고 자식 B는 계속 실행 중인 상태에서, OS가 동일한 PID 1000을 전혀 무관한 새 프로세스 C에 재할당하는 경우 발생.
 * 이때 C++ `ProcessTree`가 PID 1000 노드를 새 프로세스 C로 덮어쓰면, 기존 자식 B의 `ppid`가 여전히 1000을 가리키고 있어 B가 엉뚱한 새 프로세스 C를 자기 부모로 오인하고 족보를 거슬러 올라가는 유령 부모(Ghost Parent) 족보 왜곡 발생.
 
-### [원인 (Root Cause)]
+### 2. 원인 (Root Cause)
 * 윈도우 OS 커널은 부모 프로세스가 종료되어도 고아 자식 프로세스의 `ParentProcessId`를 0으로 재설정해주지 않음 (죽은 부모 PPID 영구 보존).
 * 기존 `ProcessTree::InsertOrOverwriteNodeInternal`은 PID 재사용 시 이전 노드의 부모(`old_ppid`)와의 링크만 절단하고, 이전 노드가 낳았던 자식들(`it->second.children_pids`)의 부모 링크(`child.ppid = 0`) 절단 처리가 누락되어 있었음.
 
-### [해결책 (Resolution)]
+### 3. 해결책 (Resolution)
 1. **즉각 재사용 덮어쓰기 (`InsertOrOverwriteNodeInternal`)**: PID 덮어쓰기 직전, 이전 프로세스의 자식 노드들을 순회하여 `child.ppid == pid`인 경우 `ppid = 0`으로 재설정하여 엉뚱한 새 프로세스로의 유령 입양 원천 차단.
 2. **10,000개 상한선 영구 퇴출 (`EvictOldestTombstoneInternal`)**: 톰스톤 노드가 메모리에서 완전히 삭제(Evict)될 때도, 상향 링크(부모의 `children_pids`에서 나를 제거)뿐만 아니라 하향 링크(자식 노드들의 `ppid = 0` 고아 처리)를 양방향으로 원자적 절단.
 3. **C# ProcessTreeProjectionManager 연동**: C# 측에서도 `LIFECYCLE_START` 수신 시 동일 PID의 활성 노드가 존재하면 이전 노드를 즉시 Tombstone 처리하고 신규 GUID 노드로 대체.
@@ -114,14 +97,14 @@ related:
 
 ## 2026-09-14: [Resolved] CQRS 프로젝션 파이프라인 콜드 스타트 및 초기 스냅샷 핸드셰이크
 
-### [현상 (Symptom)]
+### 1. 현상 (Symptom)
 * C# Cockpit이 가동되었을 때 C++ 센서로부터 실시간 증분 이벤트만 수신할 경우, 센서 기동 전이나 Cockpit 기동 전부터 실행 중이던 프로세스(약 300여 개)의 계층 관계를 알지 못해 자식 프로세스 인입 시 족보 추적(`GetAncestry`)이 루트에서 단절되는 콜드 스타트 문제 발생.
 * C++ `EtwKernelCollector`에서 프로세스 종료 이벤트(`ProcessStop`) 발생 시 내부 옵저버에게만 통지하고 gRPC 큐 푸시가 누락되어, C# 프로젝션 트리가 종료된 프로세스를 인지하지 못하고 영구 활성 상태로 방치하는 메모리 누수 존재.
 
-### [원인 (Root Cause)]
+### 2. 원인 (Root Cause)
 * 1단계 프로토콜 설계 시 `ProcessEvent`에 프로세스 생명주기 구분이 없었고, 센서-클라이언트 간 gRPC 스트림 연결 시 초기 상태 동기화 프로토콜 규약이 부재했음.
 
-### [해결책 (Resolution)]
+### 3. 해결책 (Resolution)
 1. **`phalanx.proto` 생명주기 및 GUID 확장**: `ProcessLifecycle` enum 추가(`LIFECYCLE_SNAPSHOT`, `LIFECYCLE_START`, `LIFECYCLE_STOP`, `LIFECYCLE_SUSPENDED`, `LIFECYCLE_TERMINATED`).
 2. **C++ `EtwKernelCollector`의 `ProcessStop` 큐 푸시 연동**: 커널 `ProcessStop` 수신 시 `LIFECYCLE_STOP` 및 종료 코드(`exit_code`)를 포함하여 락-스왑 큐에 푸시.
 3. **초기 스냅샷 핸드셰이크**: `ProcessTree::GetActiveSnapshotEvents()`를 구축하여 gRPC 스트림 연결 직후 활성 프로세스 스냅샷 배치(`LIFECYCLE_SNAPSHOT`)를 C# Cockpit으로 일괄 전송.
@@ -130,15 +113,15 @@ related:
 
 ## 2026-09-15: [Resolved] Google Cloud Vertex AI OAuth2 인증 및 JsonElement 매개변수 언래핑 결함
 
-### [현상 (Symptom)]
+### 1. 현상 (Symptom)
 * Google AI Studio의 단순 API 키 방식 외에, Google Cloud Vertex AI 서비스 어카운트(`Config/google-credentials.json`)를 연동할 때 인증 실패 발생.
 * LLM이 반환한 `ActionArgs` JSON을 `System.Text.Json`으로 역직렬화할 때 딕셔너리 값들이 `JsonElement`로 파싱되어 `DecodePayloadTool` 등의 하위 도구에서 `raw is string` 타입 검사가 실패하고 매개변수 누락 오류가 발생하는 현상.
 
-### [원인 (Root Cause)]
+### 2. 원인 (Root Cause)
 * Vertex AI는 HTTP 헤더에 `x-goog-api-key`가 아닌 OAuth2 Bearer Token(`Google.Apis.Auth.OAuth2`) 인증을 요구하며 엔드포인트 URL 구조가 다름.
 * C# `System.Text.Json`의 `Dictionary<string, object>` 역직렬화 특성상 원시 타입이 네이티브 `string`, `int`가 아닌 `JsonElement` 박싱 객체로 적재됨.
 
-### [해결책 (Resolution)]
+### 3. 해결책 (Resolution)
 1. **`GeminiRestClient.cs` OAuth2 지원**: `ServiceAccountCredential`을 통해 `cloud-platform` 스코프의 Bearer Token을 동적 발급받아 헤더에 주입.
 2. **도구 매개변수 언래핑**: `AutonomousHunterAgent.cs`에서 도구 인자 전달 전 `JsonElement`를 네이티브 C# 타입(`string`, `int`, `double`, `bool`)으로 일괄 언래핑 처리.
 3. `DecodePayloadTool.cs`에서 `JsonElement` 및 다양한 대소문자/별칭(`encodedCommand`, `command`, `payload` 등)을 지원하도록 정규화.
@@ -147,35 +130,23 @@ related:
 
 ## 2026-09-15: [Resolved] Gemini responseSchema CFG 루프/토큰 고갈 결함 및 JSON Mode 최적화
 
-### [현상 (Symptom)]
+### 1. 현상 (Symptom)
 * EDR 환경에서 Gemini API 호출 시 `responseSchema`를 적용했을 때, 간헐적으로 15초 타임아웃에 도달하며 응답이 실패하거나 도구 선택 정확도가 40%로 급락하는 현상 발생.
 
-### [원인 (Root Cause)]
+### 2. 원인 (Root Cause)
 * Gemini 내부 추론 토큰(`thoughtsTokenCount`)이 `MaxOutputTokens`(4096)의 예산을 잠식하고, 필드 설명이 불명확한 필드에서 CFG(Context-Free Grammar) 문법 제약 퇴행 무한 반복 루프가 발생하여 타임아웃 유발.
 * Native Function Calling은 보안 사고 과정(`Thought`)이 90% 이상 누락되어 EDR 포렌식 요구사항에 부적합.
 
-### [해결책 (Resolution)]
+### 3. 해결책 (Resolution)
 * **JSON Mode + 정밀 파서 채택**: 순수 JSON Mode와 견고한 중첩 괄호 균형 탐색 파서(`LlmJsonParser`) 조합을 프로덕션 표준으로 확정.
 * 도구 선택 정확도 100%, 필수 인자 100%, 보안 사고 과정(CoT) 보존 및 단일 왕복 완결 달성.
 
----
-
-## 2026-09-15: [Resolved] SafetyWatchdog 타임아웃 연장 마감시간 누적 가산 수식 불일치 버그
-
-### [현상 (Symptom)]
-* C# AI 에이전트가 수사 개시 즉시 1회성 타임아웃 연장 패킷(`ACTION_EXTEND_TIMEOUT`)을 발송했을 때, C++ 센서 내부에서 기존 마감 기한(30초)에 30초가 가산되어 60초가 되는 것이 아니라, 호출 시점(`steady_clock::now()`)으로부터 30초로 리셋되어 총 동결 시간이 약 30.1초에 머무는 SLA 레이스 위험 발생.
-
-### [원인 (Root Cause)]
-* `SafetyWatchdog.cpp`의 `ExtendTimeout` 메서드 내부에서 `it->second.deadline = std::chrono::steady_clock::now() + extend_by;`로 작성되어, 기존 `deadline`에 가산하지 않고 현재 시각을 기준으로 덮어쓰고 있었음.
-
-### [해결책 (Resolution)]
-* `it->second.deadline = (std::max)(it->second.deadline, std::chrono::steady_clock::now()) + extend_by;`로 수정하여, 수사 개시 직후 패킷이 도착하더라도 기존 마감시간에 연장 시간이 정확히 누적 가산되도록 교정.
 
 ---
 
 ## 2026-09-15: [Resolved] EDR 수사 도구 5대 실무 맹점 해결
 
-### [현상 (Symptom)]
+### 1. 현상 (Symptom)
 * 실전 환경 검증 시 식별된 핵심 수사 도구 결함:
   1. `DecodePayloadTool`: Gzip/Deflate 압축 인코딩(`H4sIA...`)이 결합된 파워셸 드로퍼 미탐.
   2. `ProcessMemoryScanTool`: 0x0부터 선형 50MB만 순회하여 고위 주소 동적 힙(`VirtualAlloc`)의 Cobalt Strike/Reflective DLL 미탐, `PAGE_GUARD` 크래시 위험 및 LOH 파편화.
@@ -183,10 +154,10 @@ related:
   4. `MitreClassifierTool`: 단순 `Contains("c2")` 매칭으로 정상 설치기 `c2rsetup.exe`를 C2 공격으로 오탐.
   5. `SystemFirewallTool`: Netsh 실패 시에도 `true`를 반환하는 Silent Failure 버그, 게이트웨이/DNS 차단 시 엔드포인트 네트워크 먹통(Self-DoS) 위험.
 
-### [원인 (Root Cause)]
+### 2. 원인 (Root Cause)
 * VAD 구조, 엔터프라이즈 사설망 토폴로지, 다단계 압축/난독화 및 인프라 보호 가드가 프로토타입 단계에서 결여되었음.
 
-### [해결책 (Resolution)]
+### 3. 해결책 (Resolution)
 1. **`DecodePayloadTool`**: Gzip 매직 바이트(`0x1F, 0x8B`) 자동 감지 및 `GZipStream`/`DeflateStream` 무손실 압축 해제, Hex 디코더 추가, ReDoS 가드(250ms).
 2. **`ProcessMemoryScanTool`**: `VirtualQueryEx` 기반 VAD 순회로 Unbacked Executable Memory (`MEM_PRIVATE` + `EXECUTE` + `!PAGE_GUARD`)만 선별 스캔, 사설 메모리 첫 2바이트 `MZ` 헤더 감지, `ArrayPool<byte>.Shared` 활용.
 3. **`ThreatReputationTool`**: 비트마스크 사설망 분류기(RFC 1918 A/B/C, 루프백, APIPA, CGNAT 등 0점 처리), 미확인 외부 IP는 30점 중립(`INCONCLUSIVE`) 처리, 포트/디팽 파싱 전처리.
@@ -197,28 +168,28 @@ related:
 
 ## 2026-09-16: [Resolved] C# 생성자 내 Sync-over-Async(GetAwaiter().GetResult()) 스레드풀 데드락 제거
 
-### [현상 (Symptom)]
+### 1. 현상 (Symptom)
 * `AutonomousHunterAgent` 클래스 생성자 내부에서 Vertex AI 서비스 계정 토큰 발급 및 설정 로딩 시 `.GetAwaiter().GetResult()`를 호출하는 동기 블로킹 코드가 잔존하여, 스레드풀 고갈(Thread Pool Starvation) 시 데드락 발생 위험 존재.
 
-### [원인 (Root Cause)]
+### 2. 원인 (Root Cause)
 * 의존성 주입 또는 인스턴스 초기화 시점에서 비동기 초기화 팩토리 패턴을 사용하지 않고 생성자에서 동기 대기함.
 
-### [해결책 (Resolution)]
+### 3. 해결책 (Resolution)
 * `AutonomousHunterAgent.cs` 생성자에서 블로킹 호출을 제거하고, `GeminiRestClient.TryCreateFromLocalConfig()` 동기 팩토리 메서드를 신설하여 Phalanx 로컬 JSON 설정을 안전하게 파싱하도록 리팩토링.
 
 ---
 
 ## 2026-09-16: [Resolved] AI 수사관 판정 왜곡(Decision Hijacking) 및 결정권 침해 결함 해결 (SSOT 아키텍처 확립)
 
-### [현상 (Symptom)]
+### 1. 현상 (Symptom)
 * 정상 관리 스크립트(`explorer.exe ➔ powershell.exe -enc <Get-Service ... *.internal>`) 인입 시, Gemini 모델이 정상 판결(`ACTION_RESUME`, 확신도 98%)을 내렸음에도 C# 호스트 코드가 이를 가로채 `ActionKill`로 변조하고 피싱 기법(`T1566.001`)을 조작 주입하는 치명적 오탐 발생.
 
-### [원인 (Root Cause)]
+### 2. 원인 (Root Cause)
 1. **의미론적 확신도 역전 (Semantic Inversion)**: `ConfidenceScore`(정상 프로세스 확신도 98%)를 `threatScore`(위협 점수 98점)로 오인 바인딩하여 사살 집행.
 2. **정적 시그니처 강제 오버라이드**: 동결 사유였던 `-enc`를 최종 단계에서 `CommandLine.Contains("-enc")`로 재검사하여 LLM 수사 결론을 무시하고 강제 사살.
 3. **증거 조작 및 조기 차단**: 정상 제목을 사살용 제목으로 치환하고, 미확정 상태에서 사내 백업 서버 IP 방화벽 차단 집행.
 
-### [해결책 (Resolution)]
+### 3. 해결책 (Resolution)
 1. **단일 진실 공급원(SSOT) 아키텍처 확립**: ReAct 루프가 정상 종결(`reachedFinal == true && hasValidAction`)된 경우, Gemini AI 수사관의 `VerdictAction`(`ACTION_KILL` vs `ACTION_RESUME`)을 100% 최상위 결정권으로 수용. `Contains("-enc")`, `Contains("http")` 등 정적 오버라이드 코드 완전 삭제.
 2. **Fail-Secure 안전 가드 격리**: C# 시스템 가드는 최대 턴 초과, API 장애 등 '예외 상황'에서만 선제 사살을 집행하도록 관심사 분리(SoC).
 3. **포렌식 무결성 보장**: 정상 프로세스 판정 시 가짜 TTP 주입 차단 및 `blockedIp = ""` 보장, 악성 확정 시에만 `SystemFirewallTool` 집행.
@@ -227,15 +198,15 @@ related:
 
 ## 2026-09-16: [Resolved] WPF 관제 콕핏과 Kestrel gRPC 백그라운드 서버 하이브리드 호스팅 및 STA 스레드 안전성 확보
 
-### [현상 (Symptom)]
+### 1. 현상 (Symptom)
 * Phase 4에서 WPF 관제 콕핏(`Phalanx.Cockpit`)과 C++ 센서와의 통신을 위한 Kestrel gRPC 서버(포트 50051)를 단일 실행 바이너리(`Program.cs`)에 통합할 때, 비동기 `async Task Main`에서 `new MainWindow()`를 인스턴스화할 경우 STA(Single-Threaded Apartment) 스레드 제약 위반으로 `InvalidOperationException`이 발생하거나, 반대로 WPF STA 스레드에서 gRPC 네트워크 IO를 블로킹하여 UI 프리징이 발생하는 아키텍처 충돌 발생.
 * 백그라운드 Kestrel gRPC 및 AI 에이전트 수사관 스레드에서 실시간 이벤트 발생 시 WPF UI 컬렉션(`ObservableCollection`)을 직접 수정하려 하여 `NotSupportedException` 발생 위험.
 
-### [원인 (Root Cause)]
+### 2. 원인 (Root Cause)
 * WPF UI 서브시스템은 엄격한 `[STAThread]` 동기 진입점과 독립된 Dispatcher 메시지 펌프를 요구하는 반면, Kestrel 웹 호스트는 비동기 멀티스레드 스레드풀 워커를 기반으로 동작함.
 * 비UI 스레드에서 UI 바인딩 컬렉션을 조작할 경우 WPF의 스레드 선호도(Thread Affinity) 모델과 충돌함.
 
-### [해결책 (Resolution)]
+### 3. 해결책 (Resolution)
 1. **하이브리드 호스팅 라이프사이클 (`Program.cs`)**:
    * `[STAThread] public static void Main(string[] args)` 동기 진입점을 유지.
    * `webApp.Start()`(동기 비차단)를 통해 Kestrel gRPC 서버를 백그라운드에서 기동한 후, 메인 STA 스레드에서 `wpfApp.Run(mainWindow)`을 실행하여 UI 메시지 펌프를 완벽히 유지.
@@ -247,13 +218,83 @@ related:
 
 ---
 
+## 2026-09-20: [Resolved] gRPC 스트림 다중 클라이언트 세션 덮어쓰기 및 거짓 DISCONNECTED 상태 전이 결함 해결
+
+### 1. 현상 (Symptom)
+* C++ 커널 센서(`Phalanx.Sensor`)가 백그라운드에서 정상 기동되어 gRPC 스트림을 유지하고 있음에도 불구하고, 모의 공격 도구(`Phalanx.AttackSimulator`) 실행 종료 직후 또는 유휴 상태 경과 시 WPF 관제 콘솔의 상단 통신 상태가 주기적으로 빨간색 `[DISCONNECTED]`로 반전되는 현상 발생.
+* 센서 토글 버튼은 `STOP SENSOR`로 가동 상태를 가리키는데 통신 상태는 `[DISCONNECTED]`로 표시되어 관제관에게 혼선을 초래하고, 수동 완화 명령 하달 실패 가능성 유발.
+
+### 2. 원인 (Root Cause)
+1. **단일 응답 스트림 포인터 덮어쓰기 및 조기 폐기**:
+   * `PhalanxGrpcService`가 단일 필드 `private IServerStreamWriter<MitigationCommand>? _responseStream;`로 작성되어 있었음.
+   * C++ 센서가 연결된 상태에서 모의 공격 도구가 추가로 `StreamTelemetry`에 연결하면 해당 필드가 모의 도구의 스트림으로 덮어써짐.
+   * 모의 도구의 시나리오가 끝나 연결이 해제되면 `finally` 블록에서 `_responseStream = null`로 초기화하고 `_uiBridge?.NotifySensorConnected(false)`를 무조건 호출함.
+   * 이로 인해 C++ 센서가 여전히 연결되어 있음에도 UI가 `[DISCONNECTED]`로 반전되고, 백그라운드 센서로 완화 명령을 보낼 수 없는 단절 상태 발생.
+2. **Kestrel HTTP/2 유휴 킵얼라이브 미설정**:
+   * Kestrel gRPC 엔드포인트에 HTTP/2 KeepAlive Ping 설정이 부재하여 유휴 시 소켓 반폐쇄(Half-closed) 상태 진입 가능성 존재.
+
+### 3. 해결책 (Resolution)
+1. **동시성 컬렉션 기반 멀티 클라이언트 세션 관리 (`PhalanxGrpcService.cs`)**:
+   * 단일 포인터를 `ConcurrentDictionary<string, IServerStreamWriter<MitigationCommand>> _activeClients`로 교체.
+   * 클라이언트 접속 시 고유 ID로 등록하고, 연결 해제 시 해당 클라이언트만 제거.
+   * `_activeClients.IsEmpty`가 true(즉, 등록된 모든 클라이언트가 완전히 단절)일 때만 `_uiBridge.NotifySensorConnected(false)`를 호출하도록 통신 수명주기 보정.
+   * `SendCommandAsync` 실행 시 살아있는 모든 스트림으로 완화 명령을 브로드캐스팅하고 죽은 스트림은 안전하게 제거.
+2. **Kestrel HTTP/2 킵얼라이브 활성화 (`Program.cs`)**:
+   * `KeepAlivePingDelay = 30s`, `KeepAlivePingTimeout = 15s`, `KeepAliveTimeout = 5분`을 명시하여 장기 유휴 gRPC 세션의 무중단 연결 유지 보장.
+3. **기존 센서 프로세스 감지 시 이벤트 리스너 바인딩 (`SensorProcessController.cs`)**:
+   * 이미 외부에서 실행 중이던 `Phalanx.Sensor` 프로세스를 감지했을 때도 `EnableRaisingEvents = true` 및 `Exited` 핸들러를 등록하여 비정상 종료 시 가동 상태 플래그가 정확히 동기화되도록 보강.
+
+---
+
+## 2026-09-20: [Resolved] C++ 커널 룰 엔진 0.1ms 즉각 현장 사살(Reflex Kill)의 관제 콕핏 누락 및 포렌식 즉시 등록 구현
+
+### 1. 현상 (Symptom)
+* 랜섬웨어(`vssadmin.exe delete shadows`, `bcdedit /set recoveryenabled no` 등)가 실행될 때 C++ 커널 센서의 `LocalRuleEngine`이 0.1ms(80μs) 이내에 즉각 현장 사살(`NtTerminateProcess`)을 집행하고 `Lifecycle = LIFECYCLE_TERMINATED` 텔레메트리를 C# Cockpit으로 전송함.
+* 그러나 WPF 관제 콕핏 UI 상단의 Monitored Processes 카운트 및 내부 CQRS 트리에서만 프로세스가 비활성화(`IsAlive = false`)될 뿐, 좌측 실시간 인시던트 작업 목록(Incident Worklist)에는 침해 대응 카드가 전혀 생성되지 않는 현상 발생.
+
+### 2. 원인 (Root Cause)
+1. **수사 파이프라인 트리거 조건의 단일화 (`PhalanxGrpcService.cs`)**:
+   * 기존 gRPC 서비스의 텔레메트리 루프는 `if (ev.IsSuspended)` 조건문만 검사하여 동결된 회색지대 프로세스만 `AutonomousHunterAgent.InvestigateThreatAsync`로 라우팅하고 있었음.
+   * C++ 로컬 룰 엔진에 의해 즉각 사살된 이벤트는 이미 종료되었으므로 `IsSuspended = false`, `IsTerminated = true`, `Lifecycle = LIFECYCLE_TERMINATED` 상태로 인입됨.
+   * 이로 인해 C# 에이전트 수사관 및 관제 UI 브리지로 사건 통지가 도달하지 못함.
+2. **사살 후 역전송 불필요 제약과의 결합**:
+   * 이미 C++ 센서가 프로세스를 사살했기 때문에 C#에서 센서로 `MitigationCommand`를 다시 보낼 필요가 없음(오히려 중복 송신 시 오류). 그러나 관제관(SOC) 보고 및 LiteDB 포렌식 아카이빙은 여전히 필수적임.
+
+### 3. 해결책 (Resolution)
+1. **현장 사살 즉각 보고 파이프라인 신설 (`AutonomousHunterAgent.HandleReflexKill`)**:
+   * AI ReAct 루프의 수 초 지연을 거치지 않고, 0.08ms 소요시간 레코드와 `LocalRuleEngine` 사살 사유, MITRE ATT&CK T1490 전술을 담은 `IncidentRecord` 및 1단계 `ReActTraceRecord`를 즉각 생성.
+   * LiteDB 영구 저장소(`ForensicArchiveManager.SaveIncident`)에 즉시 적재.
+   * `OnInvestigationCompleted` 이벤트를 트리거하여 `CockpitUiBridge`를 통해 WPF UI 스레드로 마샬링, 관제 콕핏 인시던트 목록에 빨간색 `CRITICAL` / `SECURED` 카드를 즉시 표시.
+2. **gRPC 인입 라우팅 분기 보강 (`PhalanxGrpcService.cs`)**:
+   * `else if (ev.IsTerminated || ev.Lifecycle == ProcessLifecycle.LifecycleTerminated)` 분기를 추가하여 C++ 현장 사살 수신 시 `_agent.HandleReflexKill(node)`로 직결.
+3. **모의 도구 및 단위 테스트 검증**:
+   * `FullChainSystemTests.cs`의 `TestScenario1_InstantKill_BypassesAiInvestigation`에 포렌식 아카이브 및 인시던트 자동 등록 검증 단계를 추가하여 회귀 방지(26/26 Unit Tests 통과).
+   * `Phalanx.AttackSimulator` 시나리오 2(`vssadmin.exe delete shadows`)의 페이로드를 실제 C++ 센서의 사살 텔레메트리 포맷(`IsSuspended = false, IsTerminated = true, LifecycleTerminated`)으로 동기화.
+4. **적응형 레이턴시(Latency) 포맷터 및 영구 복원 개선 (`IncidentItemViewModel.cs`, `MainViewModel.cs`, `ForensicModels.cs`)**:
+   * 밀리초(`ElapsedMs`)를 무조건 초(`s`) 단위로 변환 후 소수점 둘째 자리(`:F2`)로 포맷팅하여 10ms 미만 초고속 사건이 `0.00s`로 절삭되던 결함 수정 (`80μs (0.08ms, Reflex)` 표기).
+   * 재시작 후 모든 과거 카드가 `Investigating...`으로 초기화되던 원인: `IncidentRecord`에 지연시간 필드가 부재하고 `LoadIncidentsFromDatabase`에서 `ElapsedMs` 바인딩이 누락되어 `0.0`으로 남아있었던 결함.
+   * `IncidentRecord.ElapsedMs` 스키마 필드 추가 및 `traces.Sum(t => t.ElapsedMs)` 복원 파이프라인 구축.
+   * 이미 판결이 종결된 사건(`ACTION_KILL`/`ACTION_RESUME`)은 `ElapsedMs`가 0이더라도 `Investigating...`이 절대 표출되지 않도록 이중 방어.
+5. **현장 사살 후속 대응 런북(Remediation) 정제 (`AutonomousHunterAgent.cs`)**:
+   * 이미 완료된 실행 사실(`사살 완료 (소요시간 0.08ms)`)을 런북에서 완전 제거.
+   * 룰 유형(`vssadmin` 섀도 복사본 무결성 검증, `bcdedit` BCD 부팅 정책 점검, `wbadmin` 백업 카탈로그 감사 등)에 따른 실제 관제관 후속 Action Item으로 세분화.
+6. **수동 개입(Force Terminate / Resume) 버튼 제거 및 관제 UX 단순화 (`MainWindow.xaml`, `MainViewModel.cs`)**:
+   * 이미 C++ 커널 또는 AI 수사관에 의해 종결(`ACTION_KILL`/`ACTION_RESUME`)된 사건에 대해 사후 수동 개입 버튼을 노출하는 논리적 모순 및 관제관 혼선 해소.
+   * 자율 EDR 원칙(Autonomous Execution)에 맞춰 프로세스 강제 종료/재개 버튼 및 불필요한 바인딩 코드를 완전히 제거하고, 향후 실무형 2차 거버넌스 기능(화이트리스트 등록, 포렌식 보고서 복사 등)으로 전환할 수 있도록 UX 정리.
+7. **관제 콕핏 인시던트 검색 필터(`ApplyFilter`) `NullReferenceException` 예외 결함 해결 (`MainViewModel.cs`)**:
+   * 현상: 관제 콕핏 상단 검색창에 키워드 입력 시 `MainViewModel.ApplyFilter()`(줄 340)에서 `NullReferenceException`이 발생하며 콕핏 크래시.
+   * 원인: 과거 사건의 `BlockedIp`, `CommandLine` 등이 null인 상태에서 Null 조건부 연산자 없이 `.Contains()`를 직접 호출하여 발생. 또한 DB 역직렬화 시 null 필드가 뷰모델에 그대로 바인딩됨.
+   * 해결: `TargetImage`, `CommandLine`, `SummaryTitle`, `BlockedIp` 등에 `?.Contains(...) ?? false` 널-세이프 탐색 연산자 적용 및 `LoadIncidentsFromDatabase`에서 `?? string.Empty`로 방어 초기화.
+
+---
+
 ## 2026-09-23: [Resolved] Kestrel 백그라운드 스레드의 ObservableCollection 조작으로 인한 gRPC 스트림 단절 및 센서 ON/OFF 무한 루프
 
-### [현상 (Symptom)]
+### 1. 현상 (Symptom)
 * WPF 관제 콘솔 UI에서 C++ 센서 연결 상태가 `LIVE`와 `OFFLINE` 사이를 수 초 주기로 계속해서 자동으로 반복 전환(플리핑)됨.
 * 프로세스 트리 화면에 활성 프로세스가 1개 또는 소수만 표시되고 전체 PC 프로세스가 적재되지 못함.
 
-### [원인 (Root Cause)]
+### 2. 원인 (Root Cause)
 1. **WPF UI 컬렉션 스레드 위반 (`NotSupportedException`)**:
    * C++ 센서가 접속하여 300+개 활성 프로세스 스냅샷 배치(`snapshot_batch`)를 gRPC로 전송할 때, Kestrel 백그라운드 스레드풀에서 `ProcessTreeProjectionManager.RootNodes.Add(node)`를 호출함.
    * `ProcessGraphView`의 `TreeView`가 `RootNodes`에 바인딩되어 있는 상태에서 Dispatcher가 아닌 백그라운드 스레드가 `ObservableCollection`을 수정함에 따라 WPF `CollectionView`가 `NotSupportedException`을 발생시킴.
@@ -263,7 +304,7 @@ related:
    * `PhalanxGrpcService`에서 `foreach (var ev in batch.ProcessEvents)`로 쪼개어 `ApplyDeltaEvent(ev)`를 호출하면서, 300개의 스냅샷 이벤트가 개별 `ApplySnapshotBatch(new[] { ev })`로 분할 전달됨.
    * `tempMap`이 1개 노드만 갖게 되어 부모-자식 관계를 형성하지 못하고 전원 루트 노드로 편입되는 결함 유발.
 
-### [해결책 (Resolution)]
+### 3. 해결책 (Resolution)
 1. **WPF 컬렉션 동기화 및 Dispatcher 마샬링 (`ProcessTreeProjectionManager.cs`)**:
    * `BindingOperations.EnableCollectionSynchronization(RootNodes, _syncLock)` 및 `EnableCollectionSynchronization(AllNodes, _syncLock)` 등록.
    * `DispatchUI` 헬퍼를 도입하여 `RootNodes`, `AllNodes`, `node.Children` 조작을 UI Dispatcher 스레드로 안전하게 마샬링 (헤드리스/테스트 환경 Null-Safety 보장).
@@ -272,63 +313,16 @@ related:
 3. **로컬 OS 프로세스 기저 투영 폴백 (`InitializeFromLocalOsSnapshot`)**:
    * Win32 `CreateToolhelp32Snapshot` P/Invoke를 구현하여, C++ 커널 센서가 연결되기 전(오프라인 상태)이라도 Cockpit 기동 즉시 로컬 PC의 300여 개 전체 프로세스를 즉각 렌더링.
 
----
-
-## 2026-09-23: [Resolved] AttackLabWindow 기동 시 XamlParseException ('WindowCloseButtonStyle' 리소스 부재)
-
-### [현상 (Symptom)]
-* 사용자가 관제 화면에서 모의 침해 시뮬레이터 창 열기 버튼(`[ATTACK LAB ➔]` 또는 좌측 레일 `모의 랩`)을 클릭했을 때 WPF 런타임 크래시 발생:
-  `System.Windows.Markup.XamlParseException: 'System.Windows.StaticResourceExtension'에 대한 값 제공에서 예외가 throw되었습니다. 줄 번호 137 ... 이름이 'WindowCloseButtonStyle'인 리소스를 찾을 수 없습니다.`
-
-### [원인 (Root Cause)]
-* [AttackLabWindow.xaml](file:///c:/Users/adg01/Documents/GitHub/Phalanx/src/Phalanx.Cockpit/Views/AttackLabWindow.xaml)의 커스텀 윈도우 캡션 닫기 버튼에서 `Style="{StaticResource WindowCloseButtonStyle}"`을 참조함.
-* [EnterpriseTheme.xaml](file:///c:/Users/adg01/Documents/GitHub/Phalanx/src/Phalanx.Cockpit/Themes/EnterpriseTheme.xaml)에 실제 정의된 리소스 명칭은 `WindowCaptionCloseButtonStyle` (마우스 오버 시 레드 하이라이트 적용 스타일)이었음.
-* 또한 캡션 버튼의 `IconWinMinimize`, `IconWinMaximize`, `IconWinClose` Path 엘리먼트가 `Stroke` 대신 `Fill`을 사용하여 선형 벡터가 렌더링되지 않던 미세 결함 존재.
-* 상단 타이틀바(`ATTACK LAB ➔`)와 좌측 네비게이션 레일(`모의 랩`) 간 명칭 불일치로 인한 사용자 혼선.
-
-### [해결책 (Resolution)]
-1. **정규 리소스 키 바인딩 교정**:
-   * `AttackLabWindow.xaml`의 닫기 버튼 스타일을 `{StaticResource WindowCaptionCloseButtonStyle}`로 수정.
-   * 최소화/최대화/닫기 아이콘 Path에 `Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"` 및 `StrokeThickness="1"` 지정.
-2. **UI 명칭 일원화**:
-   * 상단 타이틀 바 버튼을 `모의 침해 랩 ➔`으로 변경하여 좌측 레일의 `모의 랩`과 동일한 기능의 컴패니언 창임을 직관적으로 명시.
-
----
-
-## 2026-09-23: [Resolved] 심층 포렌식 조사실 및 프로세스 뷰의 텍스트 겹침(Occlusion) 및 잘림(Clipping) 결함
-
-### [현상 (Symptom)]
-* `InvestigationView` 좌측 패널에서 "부모 PID / 프로세스" 항목의 우측 값이 좌측 라벨 위로 겹쳐 렌더링되어 글자가 가려짐.
-* "대응 및 조치 런북" 항목의 긴 문장이 줄바꿈되지 않고 우측으로 삐져나가면서 문장 뒷부분이 잘려 보이지 않음.
-* ReAct 감사 추적 아코디언 헤더 및 공격 계통도 트리에서도 긴 문자열로 인한 상태 뱃지 밀림 현상 확인.
-
-### [원인 (Root Cause)]
-1. **Grid ColumnDefinitions 누락으로 인한 동일 셀 충돌**:
-   * `Grid`에 열 정의가 없어 좌측 정렬 라벨과 우측 정렬 값(`HorizontalAlignment="Right"`)이 동일한 (Row 0, Col 0) 셀에 배치됨. 패널 가용 공간(~284px)을 초과하는 긴 문자열이 전달될 경우 우측 텍스트가 좌측 라벨을 덮어씌움.
-2. **수평 StackPanel 내 무한 가로 너비 측정 (`Infinite Width Measuring`)**:
-   * WPF `StackPanel Orientation="Horizontal"`은 자식 요소의 너비를 `double.PositiveInfinity`로 측정함.
-   * 이에 따라 `TextWrapping="Wrap"`과 `TextTrimming="CharacterEllipsis"`가 무력화되어 긴 문장이 줄바꿈 없이 뷰포트 밖으로 잘림.
-
-### [해결책 (Resolution)]
-1. **정형 2열 Grid 분할 및 `TextTrimming` 적용**:
-   * `InvestigationView.xaml`의 메타데이터 및 디스크 무결성 카드에 `<ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" />` 명시.
-   * `부모 PID:`와 `부모 프로세스:`를 독립 행으로 분리하고, 긴 경로에 `TextTrimming="CharacterEllipsis"`와 `ToolTip` 부여.
-2. **런북 및 아코디언 헤더의 유한 경계 Grid 전환**:
-   * 런북 항목을 `Grid`로 감싸 `TextWrapping="Wrap"`이 실제 잔여 너비를 기준으로 멀티라인 래핑되도록 교정.
-   * ReAct 아코디언 헤더와 계통도 패널을 3열 Grid(`Auto`, `*`, `Auto`)로 변경하여 가변 텍스트 말줄임 및 상태 뱃지 상시 노출 보장.
-3. **프로세스 경로 2단 계층 분리 (Option 1 적용)**:
-   * 단순 우측 말줄임(`CharacterEllipsis`) 시 가장 중요한 실행 파일명이 잘려나가는 포렌식 정보 왜곡을 원천 해결.
-   * `IncidentItemViewModel`에 `ParentFileName`, `ParentDirectoryPath`, `TargetFileName`, `TargetDirectoryPath`를 추가하고, 상단에 파일명을 굵게 우선 노출한 뒤 하단에 디렉터리 경로를 모노스페이스로 분리 렌더링.
 
 ---
 
 ## 2026-09-28: [Resolved] 프로세스 트리(TreeView) 리프 노드 클릭 시 화면 좌측 쏠림 및 고착 결함
 
-### [현상 (Symptom)]
+### 1. 현상 (Symptom)
 * `ProcessGraphView`(인메모리 프로세스 족보 탐색기)에서 깊이 중첩된 자식/리프 노드를 클릭했을 때, 트리 뷰포트 전체가 우측으로 스크롤되면서 화면 내 프로세스 트리 내용이 좌측으로 밀려 사라짐.
 * 루트 노드와 확장 접기 화살표, 부모 프로세스들이 좌측 화면 밖으로 이탈하며, 다른 노드를 클릭하거나 마우스를 움직여도 원상태(가로 오프셋 0)로 돌아오지 않고 좌측 쏠림 상태로 영구 고착됨.
 
-### [원인 (Root Cause)]
+### 2. 원인 (Root Cause)
 1. **WPF TreeView의 기본 포커스 BringIntoView() 호출 메커니즘**:
    * WPF의 `TreeViewItem`은 마우스 클릭 또는 포커스 획득 시 자동으로 `BringIntoView()`를 호출하여 `FrameworkElement.RequestBringIntoViewEvent` 라우티드 이벤트를 발생시킴.
 2. **무제한 수평 측정 pass 및 가로 폭 오프셋 팽창**:
@@ -339,7 +333,7 @@ related:
    * WPF `ScrollViewer`는 항목 가시화 요청에 따른 일방향 스크롤만 수행할 뿐 클릭 완료 후 원점(X=0)으로 복귀시키는 메커니즘이 전무함.
    * 또한 수평 스크롤바가 숨겨져 있어 사용자가 수동으로 되돌릴 수도 없으며, 다른 자식 노드를 클릭해도 해당 노드의 들여쓰기 바운딩 박스가 타깃이 되므로 수평 오프셋이 유지되거나 더 밀려남.
 
-### [해결책 (Resolution)]
+### 3. 해결책 (Resolution)
 1. **1단계 프레임워크 제어 (WPF 표준 패턴)**:
    * `TreeView`에 `ScrollViewer.HorizontalScrollBarVisibility="Disabled"` 선언 및 `RequestBringIntoView` 이벤트 차단(`e.Handled = true`)으로 1차 방어.
 2. **2단계 구조적 전면 해결: 플랫 가상화 트리 투영 (Flat Virtualized Tree Projection) 마이그레이션**:
@@ -353,28 +347,3 @@ related:
      * 고전 재귀 `TreeView`를 제거하고, 하드웨어 가상화가 켜진 `ListView`(`VirtualizingStackPanel.IsVirtualizing="True"`, `VirtualizationMode="Recycling"`, `ScrollUnit="Pixel"`)로 교체.
      * 순수 MVVM 데이터 바인딩(`SelectedItem="{Binding SelectedProcessNode, Mode=TwoWay}"`)으로 코드비하인드 이벤트 핸들러 제거.
      * 1차원 수직 평면 렌더링으로 수평 스크롤 요동 및 쏠림 현상을 구조적으로 0% 원천 박멸하고, 60fps 가상화 스크롤과 향후 멀티컬럼(TreeGrid) 확장 기반 확보.
-
----
-
-## 2026-09-28: [Resolved] PID 0 프로세스명 표기 표준화 및 심층 수사실 목(Mock) 패널 제거
-
-### [현상 (Symptom)]
-1. 프로세스 트리에서 PID 0의 프로세스명이 `[System Process]`와 같이 대괄호가 포함된 원시 Win32 문자열로 노출되어 타 프로세스명과의 이질감 발생.
-2. 심층 수사실(`InvestigationView`) 좌측 패널에 `디스크 파일 무결성 검증 (FILE INSPECTION)` 카드가 상시 노출되어, 파일 무결성 검증이 수반되지 않은 사건에서도 정적 더미 값(`e3b0c44...`, `6.12`, `Microsoft Windows`)이 표시되는 대회 출품 결함(Mock 데이터 노출) 및 특정 도구 편향 발생.
-
-### [원인 (Root Cause)]
-1. Win32 `CreateToolhelp32Snapshot` API가 PID 0(System Idle Process)에 대해 관례적으로 `szExeFile = "[System Process]"`를 반환함.
-2. 초기 UI 프로토타입 단계에서 `FileInspectionTool` 규격을 가시화하기 위해 좌측 패널에 정적 전용 카드와 뷰모델 기본값을 배치하였으나, 실제 ReAct 엔진은 도구 호출 결과(`DecodePayloadTool`, `ProcessMemoryScanTool`, `ThreatReputationTool` 등)를 중앙 ReAct 추론 아코디언에서 동적으로 표출하도록 설계되어 있어 구조적 불일치 및 불필요한 더미 데이터가 잔존함.
-
-### [해결책 (Resolution)]
-1. **PID 0 명칭 정규화 (`System Idle Process`)**:
-   * C# CQRS 계층(`ProcessTreeProjectionManager.NormalizeProcessImageName`) 및 C++ 센서(`ProcessTree.cpp`) 양측에서 PID 0 및 `[System Process]`를 정식 시스템 명칭인 `System Idle Process`로 일관 변환.
-   * `TestSystemIdleProcessNormalization` 단위 테스트 추가로 영구 회귀 방지.
-2. **정적 목 패널 제거 및 ReAct 추론 스튜디오 단일화**:
-   * `InvestigationView.xaml` 좌측 패널에서 정적 디스크 파일 무결성 카드를 완전 삭제하고, 좌측 워크벤치는 타깃 프로세스 메타데이터와 대응 조치 런북에만 집중하도록 정돈.
-   * `IncidentItemViewModel.cs` 내 더미 속성 5종(`_authenticodeSigner`, `_authenticodeStatus`, `_isPathMasqueraded`, `_entropyScore`, `_fileSha256`) 완전 삭제.
-   * 모든 도구의 관측 및 실행 결과는 중앙 ReAct 추론 아코디언에서 유기적으로 일관되게 확인하도록 UI/UX 단일 진실 공급원(SSOT) 원칙 확립.
-
-
-
-

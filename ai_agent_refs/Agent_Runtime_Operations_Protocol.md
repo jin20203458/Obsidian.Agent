@@ -104,7 +104,7 @@ flowchart TD
 ### 6.1 트러블슈팅 로그 작성 표준
 [Knowledge_Base_Authoring_Guidelines.md](./Knowledge_Base_Authoring_Guidelines.md) 및 [AI_Project_Integration_Guidelines.md](./AI_Project_Integration_Guidelines.md)에 따라, 해당 프로젝트의 트러블슈팅 문서(`troubleshooting/<project_name>.md`)에 에러 상황 또는 해결 내역을 기록합니다.
 
-모든 트러블슈팅 문서는 탐색 일관성과 목차(TOC) 앵커 링크 보전을 위해 **H2(이슈 단위) + H3(속성 단위)**의 단일 계층 구조를 엄격히 준수합니다. 단일 일자에 복수의 이슈가 발생하더라도 H3로 중첩하지 않고 개별 H2 엔트리로 분리합니다.
+모든 트러블슈팅 문서는 탐색 일관성과 목차(TOC) 앵커 링크 보전을 위해 **H2(이슈 단위) + H3(속성 단위)**의 단일 계층 구조를 엄격히 준수합니다. 단일 일자에 복수의 이슈가 발생하더라도 H3로 중첩하지 않고 개별 H2 엔트리로 분리합니다. 단, 하나의 근본 원인(Root Cause)에서 파생된 복수 증상이 동일 세션에서 함께 해결된 경우(인과 체인)에 한해 단일 H2로 기록할 수 있습니다(판별 기준: `Root Cause` 섹션을 하나의 일관된 서술로 작성할 수 있는가).
 
 #### [Resolved] 표준 트러블슈팅 마크다운 템플릿 (해결 완료 런북)
 ```markdown
