@@ -280,7 +280,7 @@ message MitigationCommand {
         ACTION_KILL = 0;            // 악성 프로세스 즉각 강제 사살
         ACTION_RESUME = 1;          // 동결된 프로세스/스레드 복구 (동결 해제)
         ACTION_BLOCK_IP = 2;        // 네트워크 IP 격리 차단
-        ACTION_EXTEND_TIMEOUT = 3;  // AI 심층 조사를 위한 1회성 타임아웃 연장 (+50초, 최대 1회 제한)
+        ACTION_EXTEND_TIMEOUT = 3;  // AI 심층 조사를 위한 1회성 타임아웃 연장 (최대 1회 제한)
         ACTION_SUSPEND = 4;         // AI 심층 조사를 위한 타깃 프로세스 원자적 동결 (메모리 보존)
     }
     ActionType action = 1;
@@ -304,7 +304,7 @@ service PhalanxService {
 * **4-View 모듈식 관제 아키텍처**:
   1. **사건 관제실 (`IncidentsView.xaml`)**: 실시간 탐지/동결 사건 카드 스트림, 검색/필터링 및 상단 텔레메트리 상태 카운터.
   2. **프로세스 맵 (`ProcessGraphView.xaml`)**: `FlatNodeList` 기반 300여 개 OS 활성 프로세스 트리 60FPS 가상화 렌더링 및 선택 노드 메타데이터 인스펙터.
-  3. **위협 분석실 (`InvestigationView.xaml`)**: Gemini ReAct 다단계 CoT 추론(Thought, Action, Observation) 아코디언, 실측 지연시간(`ElapsedMs`), 동적 공격 계통도.
+  3. **위협 분석실 (`InvestigationView.xaml`)**: Gemini ReAct 다단계 자율 수사 트레이스(Thought, Action, Observation) 아코디언, 실측 지연시간(`ElapsedMs`), 동적 공격 계통도.
   4. **모의 침해 연구실 (`AttackLabWindow.xaml`)**: 7대 실무 침해 시나리오 모의 주입 및 텔레메트리 스트리밍 랩.
 * **CQRS 로컬 트리 프로젝션 ([ProcessTreeProjectionManager.cs](../../../Phalanx/src/Phalanx.Cockpit/CQRS/ProcessTreeProjectionManager.cs))**:
   * C++ 엔진에서 수신한 초기 스냅샷 및 생명주기 델타 이벤트를 바탕으로 C# 로컬 RAM 상에 O(K) 슬라이스 기반 `FlatNodeList` 가상화 트리 DAG를 실시간 유지합니다.

@@ -355,7 +355,7 @@ UI 전면 개편(4-View 멀티뷰 아키텍처) 도입에 따라, UI 골격은 �
 | **프로세스 트리** | `ProcessGraphView.xaml` 프로세스 제어 | 수동 제어(원자적 동결/사살) 액추에이터 버튼 부재 | 선택된 노드에 대해 Win32 `NtSuspendProcess` / `NtTerminateProcess` 명령 즉시 하달 커맨드 제공 | 직접 개입(Manual Actuation) 미구현 |
 | **프로세스 트리** | `ProcessGraphView.xaml` 새로고침 버튼 | `RefreshFromDbCommand`로 잘못 매핑됨 | LiteDB 사건 목록 갱신이 아닌 C++ 센서로부터 프로세스 트리 스냅샷을 재수신하거나 로컬 트리를 리프레시하도록 분리 | 커맨드 의도 불일치 |
 | **위협 분석실** | `IncidentItemViewModel` 파일 검증 슬롯 | `AuthenticodeStatus`, `EntropyScore` 등 5개 속성 제거 완료 | 특정 단일 도구에 편향된 좌측 정적 패널을 제거하고, 모든 도구 실행 결과는 중앙 ReAct 추론 아코디언에서 동적으로 표출하도록 단일화 완료 | 대회 요구사항(더미 데이터 배제) 충족 |
-| **위협 분석실** | `InvestigationView.xaml` A4 리포트 버튼 | `Command` 바인딩이 없는 무동작 버튼 | 클릭 시 선택된 사건의 수사 기록 및 CoT 추론 트레이스를 A4 포렌식 PDF로 렌더링/다운로드 (`QuestPDF`) | 백로그 2번 기능 미연동 |
+| **위협 분석실** | `InvestigationView.xaml` A4 리포트 버튼 | `Command` 바인딩이 없는 무동작 버튼 | 클릭 시 선택된 사건의 수사 기록 및 ReAct 자율 수사 트레이스를 A4 포렌식 PDF로 렌더링/다운로드 (`QuestPDF`) | 백로그 2번 기능 미연동 |
 | **위협 분석실** | `InvestigationView.xaml` 공격 계통도 라벨 | 타깃 노드 옆 `(격리 사살)` 텍스트 무조건 고정 표기 | `VerdictAction`이 `ACTION_KILL`일 때만 `(격리 사살)` 표시, `ACTION_RESUME`일 때는 `(동결 해제/정상)` 표시 | UI 텍스트 하드코딩 버그 |
 | **포렌식 도구** | `FileInspectionTool.cs` | 파일 미생성 (미구현) | WinVerifyTrust P/Invoke, 시스템 경로 위장(T1036.005) 감별, Shannon 엔트로피 연산 수행 | 백로그 1번 기능 |
 | **포렌식 도구** | `ThreatReputationTool.cs` | 로컬 정적 딕셔너리(`KnownThreatDb` 8건) 기반 | 외부 상용 위협 인텔리전스(VT, OTX 등) 연동 없이 고정된 IoC 테이블 및 RFC 1918 사설망 판별에 의존 | 로컬 전용 1차 구현체 |

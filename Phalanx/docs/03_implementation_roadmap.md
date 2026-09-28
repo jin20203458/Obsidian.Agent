@@ -169,7 +169,7 @@ related:
   * **[태스크 1] 4-View 모듈식 관제 뷰 분할 (`Views/`)**:
     * `IncidentsView.xaml`: 탐지/동결 침해사고 카드 스트림, 실시간 집계 바, 검색/필터링.
     * `ProcessGraphView.xaml`: `FlatNodeList` 기반 300여 개 OS 프로세스 트리 60FPS 가상화 렌더링 및 프로세스 메타데이터 인스펙터.
-    * `InvestigationView.xaml`: Gemini ReAct CoT 추론 아코디언, 스텝별 실측 레이턴시(`ElapsedMs`), 가변 공격 계통도.
+    * `InvestigationView.xaml`: Gemini ReAct 단계별 자율 수사 트레이스(Thought-Action-Observation), 스텝별 실측 레이턴시(`ElapsedMs`), 가변 공격 계통도.
     * `AttackLabWindow.xaml`: 7대 실무 침해 시나리오 모의 주입 및 텔레메트리 스트리밍 랩.
   * **[태스크 2] Flat Virtualized Tree Projection (`ProcessTreeProjectionManager.cs`)**:
     * 계층형 재귀 `TreeView`의 렌더링 부하를 해소하기 위해 1차원 평탄화 배열(`FlatNodeList`)로 O(K) 슬라이스 갱신 알고리즘 적용.
