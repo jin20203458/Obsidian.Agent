@@ -350,9 +350,9 @@ Phase 4 및 Phase 4.1 UI 전면 개편(4-View 모듈식 아키텍처)이 완료�
 
 ### 9.1 목/스텁 항목 총괄 요약표
 
-#### A. 조치 완료 항목 (Phase 4 / 4.1 완료 - 커밋 `6a010ee`)
+#### A. 조치 완료 항목 (Phase 4 / 4.1 / 5.2 완료)
 
-| 구분 | 컴포넌트 / 위치 | 과거 상태 (Past Mock State) | 조치 완료 내역 (Resolved Implementation) | 반영 커밋 |
+| 구분 | 컴포넌트 / 위치 | 과거 상태 (Past Mock State) | 조치 완료 내역 (Resolved Implementation) | 반영 커밋 / 상태 |
 |---|---|---|---|---|
 | **프로세스 트리** | `ProcessGraphView.xaml` 우측 인스펙터 | "프로세스를 선택하십시오" 정적 텍스트 고정 | `SelectedProcessNode` 동적 카드 바인딩 (PID, PPID, 세션, UAC 권한 레벨, 명령줄, 침해사고 배너) 완비 | `6a010ee` |
 | **프로세스 트리** | `ProcessGraphView.xaml` 트리 선택 이벤트 | `TreeView.SelectedItemChanged` 미바인딩 | 1차원 평탄화 가상화 `ListView`의 양방향 바인딩 `SelectedItem="{Binding SelectedProcessNode, Mode=TwoWay}"` 연동 완료 | `6a010ee` |
@@ -361,16 +361,17 @@ Phase 4 및 Phase 4.1 UI 전면 개편(4-View 모듈식 아키텍처)이 완료�
 | **위협 분석실** | `InvestigationView.xaml` 공격 계통도 라벨 | 타깃 노드 옆 `(격리 사살)` 텍스트 무조건 고정 표기 | `DataTrigger`를 통해 `CRITICAL` ➔ `(격리 사살)`, `BENIGN` ➔ `(정상 복구)`, 기본 ➔ `(동결 수사 중)` 가변 동적 표출 완료 | `6a010ee` |
 | **위협 분석실** | `IncidentItemViewModel` 파일 검증 슬롯 | 초기 더미 속성(`AuthenticodeStatus` 등) 고정 노출 | 특정 도구 편향 정적 카드를 전면 제거하고 중앙 ReAct 추론 아코디언에서 모든 도구 결과를 동적 표출하도록 단일화 완료 | `6a010ee` |
 | **위협 분석실** | `InvestigationView.xaml` A4 리포트 버튼 | 비활성화 상태 및 툴팁 부재 | `IsEnabled="False"` 및 "준비 중 (QuestPDF 포렌식 리포트 엔진 연동 예정)" 툴팁 적용 완료 | `6a010ee` |
-| **시뮬레이션** | `AttackLabWindow.xaml` 내비게이션 | 주입 완료 후 관제 콘솔 바로가기 링크 부재 | 하단 터미널 영역에 `[관제 콘솔로 이동 ➔]` 버튼 및 `ReturnToIncidentsCommand` 네비게이션 연동 완료 | `6a010ee` |
+| **시뮬레이션** | `AttackLabWindow.xaml` UI 아키텍처 | 7개 붉은 버튼 나열 및 조잡한 레이아웃 | 좌측 360px 8개 항목 통합 레일 + 우측 스펙 인스펙터/단일 주입 버튼 Master-Detail 디자인 전면 개편 | Phase 5.2 완료 |
+| **시뮬레이션** | `MainViewModel.RunScenarioAsync` | `Task.Delay(350)` 및 고정 로그 문자열 출력 (스텁) | `AttackLabScenarioRunner` 연동을 통한 CQRS 인프로세스 주입, AI 헌터 실시간 수사 및 관제 콘솔 사건 격발 실연동 완료 | Phase 5.2 완료 |
+| **시뮬레이션** | `AttackLabScenarioRunner.cs` | 클래스 부재 (단일 책임 원칙 위배 위험) | 신설 서비스 구축: OS 비동기 프로세스 스폰/종료(`WaitForExitAsync`), SSOT 판결 기반 사살, 고아 프로세스 청소, 시나리오 #7 DAG 스트레스 실측, JSON 감사 리포트 직렬화 | Phase 5.2 완료 |
+| **시뮬레이션** | `AttackScenarioRegistry.cs` 위치 | `tools/Phalanx.AttackSimulator`에 단독 고립 | `src/Phalanx.Cockpit/Scenarios/`로 이관 완료 및 7대 표준 시나리오 + 동적 커스텀 빌더 완비 | Phase 5.2 완료 |
 
 #### B. 차기 실체화 대기 항목 (Phase 5 Active Backlog / Un-mock Tasks)
 
 | 구분 | 컴포넌트 / 위치 | 현재 상태 (Mock State) | 실제 기대 동작 (Expected Behavior) | 영향도 / 우선순위 |
 |---|---|---|---|---|
-| **시뮬레이션** | `MainViewModel.RunScenarioAsync` | `Task.Delay(350)` 및 고정 로그 문자열 출력 (스텁) | 실제 `TelemetryBatch` 생성 후 `PhalanxGrpcService`에 주입하여 CQRS 트리 투영 및 Gemini/FSM 자율 수사 가동 | 최우선 과제 (관제 콘솔 실시간 연계) |
-| **시뮬레이션** | `AttackScenarioRegistry.cs` 위치 | `tools/Phalanx.AttackSimulator`에 단독 고립 | `Phalanx.Cockpit` 프로젝트(`Simulator/`)로 공유화하여 Cockpit 내부에서 직접 호출 가능하도록 분리 | 프로젝트 간 의존성 정비 |
-| **포렌식 도구** | `FileInspectionTool.cs` | 파일 미생성 (미구현) | `WinVerifyTrust` P/Invoke, 시스템 경로 위장(T1036.005) 감별, Shannon 엔트로피 연산 수행 | 차기 과제 (복합 회피 턴 단축) |
-| **위협 분석실** | `InvestigationView.xaml` A4 리포트 버튼 | `Command` 미연동 (준비 중 안내 툴팁) | 클릭 시 선택된 사건의 수사 기록 및 ReAct 자율 수사 트레이스를 A4 포렌식 PDF로 렌더링/다운로드 (`QuestPDF`) | 차기 과제 (감사용 보고서 출력) |
+| **포렌식 도구** | `FileInspectionTool.cs` | 파일 미생성 (미구현) | `WinVerifyTrust` P/Invoke, 시스템 경로 위장(T1036.005) 감별, Shannon 엔트로피 연산 수행 | 차기 1순위 과제 (Phase 5.1 - 복합 회피 턴 단축) |
+| **위협 분석실** | `InvestigationView.xaml` A4 리포트 버튼 | `Command` 미연동 (준비 중 안내 툴팁) | 클릭 시 선택된 사건의 수사 기록 및 ReAct 자율 수사 트레이스를 A4 포렌식 PDF로 렌더링/다운로드 (`QuestPDF`) | 차기 2순위 과제 (Phase 5.3 - 감사용 보고서 출력) |
 | **포렌식 도구** | `ThreatReputationTool.cs` | 로컬 정적 딕셔너리(`KnownThreatDb` 8건) 기반 | 외부 상용 위협 인텔리전스(VT, OTX 등) 연동 없이 고정된 IoC 테이블 및 RFC 1918 사설망 판별에 의존 | 로컬 전용 1차 구현체 유지 |
 | **포렌식 도구** | `SystemFirewallTool.cs` | 비관리자(Non-Admin) 환경 시뮬레이션 분기 | 관리자 권한 미달 시 실제 `netsh advfirewall`을 호출하지 않고 가상 차단 성공 문자열만 반환 | 권한 격리 안전 분기 유지 |
 
@@ -378,68 +379,42 @@ Phase 4 및 Phase 4.1 UI 전면 개편(4-View 모듈식 아키텍처)이 완료�
 
 ### 9.2 계층별 상세 목/스텁 분석
 
-#### A. 관제 콕핏 UI 계층 (Cockpit UI Layer)
-1. **`AttackLabWindow` / `MainViewModel.RunScenarioAsync` (현재 스텁)**:
-   * **현재 코드**:
-     ```csharp
-     await Task.Delay(350);
-     SimulatorLog += "\n[커널 센서] 24μs 원자적 동결(NtSuspendProcess) 집행 성공\n" +
-                     "[AI 수사관] ReAct 추론 시작 ➔ 확신도 98% 도출\n" +
-                     "[방어 완결] 판결: ...";
-     ```
-   * **문제점**: 실제 텔레메트리 스트림이 인입되지 않아, 관제 콘솔(`IncidentsView`)에 사건 카드가 생성되지 않고 AI 자율 수사도 격발되지 않습니다.
-   * **필요 조치**: `AttackScenarioRegistry`에서 실제 `TelemetryBatch`를 생성하고 `PhalanxGrpcService.ProcessTelemetryBatchAsync`를 호출하는 실연동 파이프라인 구축.
+#### A. 관제 콕핏 UI 및 시뮬레이션 계층 (Cockpit UI & Simulation Layer)
+1. **`AttackLabWindow` / `AttackLabScenarioRunner` (조치 완료 - Phase 5.2)**:
+   * **과거 문제점**: UI에 7개의 붉은 버튼이 나열되어 조잡했으며, 시나리오 실행 시 `Task.Delay` 스텁만 동작하여 실제 관제 콘솔에 사건이 연동되지 않음.
+   * **조치 완료**:
+     * Master-Detail 리스트형 레이아웃으로 UI 전면 개편.
+     * `AttackLabScenarioRunner`를 DI 싱글톤으로 신설하여 CQRS 인프로세스 주입, AI 수사관 트리거, OS 비동기 실행(`WaitForExitAsync`), SSOT 기반 사살, 감사 리포트 자동 생성 파이프라인 완비.
+     * `AttackScenarioRegistry.cs`를 Cockpit 내부로 이관하여 격리 해소.
 
-2. **`ProcessGraphView` 우측 인스펙터 및 트리 상호작용 (조치 완료)**:
-   * **과거 문제점**: XAML 우측 패널에 정적 텍스트만 고정되고 트리 선택 이벤트가 누락되어 300여 개 프로세스의 상세 메타데이터 조회가 불가능했음.
-   * **조치 완료 (`6a010ee`)**:
-     * Flat Virtualized `ListView`를 통해 `SelectedItem="{Binding SelectedProcessNode, Mode=TwoWay}"`로 뷰모델 자동 동기화.
-     * 우측 인스펙터에 `SelectedProcessNode` 상세 카드(PID, ParentPID, ImageName, CommandLine, SessionId, UAC Elevation 배지, 침해사고 바로가기 배너) 완비.
-     * 원자적 프로세스 수동 제어(`SuspendSelectedProcessCommand`, `TerminateSelectedProcessCommand`) 버튼 연동 완료.
-     * 새로고침 버튼을 `RefreshProcessTreeCommand`로 분리하여 트리 가상화 캐시 리빌드 연동 완료.
+2. **`ProcessGraphView` 우측 인스펙터 및 트리 상호작용 (조치 완료 - 커밋 `6a010ee`)**:
+   * Flat Virtualized `ListView` 기반 양방향 바인딩, 우측 인스펙터 상세 카드 바인딩, 수동 동결/사살 커맨드 연동 완료.
 
-3. **`InvestigationView` UI 플레이스홀더 및 고정 라벨 (조치 완료)**:
-   * **과거 문제점**:
-     * Panel 1: `AuthenticodeStatus`, `EntropyScore` 등 더미 속성이 초기 고정값으로 노출되어 특정 도구 편향 발생.
-     * Panel 3 (공격 계통도): `<TextBlock Text="(격리 사살)" />` 텍스트 고정 표기 버그.
-   * **조치 완료 (`6a010ee`)**:
-     * 좌측 Panel 1의 고정된 파일 무결성 카드 및 뷰모델 더미 속성을 전면 제거하고, 모든 도구의 관측 결과는 중앙 ReAct 추론 아코디언에서 동적으로 표출하도록 단일화 완료.
-     * 공격 계통도 라벨은 `DataTrigger`를 통해 `StatusSeverity`에 따라 가변 표기 (`CRITICAL` ➔ "(격리 사살)", `BENIGN` ➔ "(정상 복구)", 기본 ➔ "(동결 수사 중)").
-     * A4 리포트 버튼은 준비 중 안내 툴팁 및 `IsEnabled="False"` 적용 완료.
-
-4. **`AttackLabWindow` 내비게이션 (조치 완료)**:
-   * **조치 완료 (`6a010ee`)**: 하단 터미널 영역에 `[관제 콘솔로 이동 ➔]` 버튼을 신설하고 `ReturnToIncidentsCommand`를 바인딩하여 시뮬레이션 후 관제 콘솔 화면으로 즉시 전환 지원.
+3. **`InvestigationView` UI 플레이스홀더 및 고정 라벨 (조치 완료 - 커밋 `6a010ee`)**:
+   * 파일 무결성 정적 카드 제거 및 ReAct 아코디언 단일화, 공격 계통도 `DataTrigger` 가변 표출 완비.
 
 #### B. AI 수사관 및 포렌식 도구 계층 (AI Hunter & Forensic Tools Layer)
-1. **`FileInspectionTool.cs` 미구현 (Phase 5.1 과제)**:
+1. **`FileInspectionTool.cs` 미구현 (Phase 5.1 핵심 과제)**:
    * `src/Phalanx.Cockpit/Tools/` 디렉터리에 해당 파일이 아직 생성되지 않았습니다.
    * 복합 회피 공격(T1036.005) 수사 시 파일 무결성을 확증할 수 없어 `ProcessMemoryScanTool`로 우회 호출되는 병목(21.7초 낭비)이 지속되고 있습니다.
 2. **`ThreatReputationTool.cs`의 정적 DB 한계 (장기 과제)**:
    * 8건의 사전 등록된 IoC 외의 새로운 외부 IP 인입 시, 무조건 사살 점수 미달(30점, `INCONCLUSIVE_EXTERNAL_IP`)로 판정되어 복합 증거 수집 단계로 전환됩니다.
 
-#### C. IPC 및 모의 침해 시뮬레이터 계층 (IPC & Simulation Layer)
-1. **`AttackScenarioRegistry.cs`의 프로젝트 격리 (Phase 5.2 선행 과제)**:
-   * 현재 `tools/Phalanx.AttackSimulator/Scenarios/AttackScenarioRegistry.cs`에 위치하여 `Phalanx.Cockpit`에서 직접 참조할 수 없습니다.
-   * `src/Phalanx.Cockpit/Simulator/`로 공유화하여 Cockpit 내부에서 직접 호출 가능하도록 분리해야 합니다.
-
 ---
 
 ### 9.3 후속 작업 우선순위 및 단계별 실행 전략 (Execution Sequence)
 
-Phase 4 및 4.1에서 UI 영역의 바인딩과 레이아웃 개편이 선행 완결되었으므로, 차기 작업은 백엔드 로직의 실체화(Un-mock)를 중심으로 진행합니다:
+Phase 4, 4.1 및 Phase 5.2(어택랩 실연동)가 선행 완결되었으므로, 차기 작업은 포렌식 도구 실체화를 중심으로 진행합니다:
 
 1. **[1단계: UI 전면 개편 및 바인딩 완결] [완료 - 커밋 `6a010ee`]**:
-   * `ProcessGraphView.xaml`: FlatNodeList `ListView` 양방향 바인딩, 우측 프로세스 인스펙터 상세 카드 바인딩, 수동 동결/사살 액추에이터 커맨드 연동, `RefreshProcessTreeCommand` 정비 완료.
-   * `InvestigationView.xaml`: 공격 계통도 `DataTrigger` 동적 라벨 바인딩, A4 리포트 버튼 안내 툴팁/가드 적용, 파일 무결성 슬롯 배제 및 ReAct 아코디언 단일화 완료.
-   * `AttackLabWindow.xaml`: 하단 터미널 영역에 `[관제 콘솔로 이동 ➔]` 네비게이션 버튼 연동 완료.
-2. **[2단계: 모의 침해 시뮬레이터 실연동 (AttackLab Live Un-mock)] [차기 1순위 과제]**:
-   * `AttackScenarioRegistry.cs`를 `src/Phalanx.Cockpit/Simulator/`로 공유화.
-   * `PhalanxGrpcService`에 `ProcessTelemetryBatchAsync` 공용 진입점 노출.
-   * `MainViewModel.RunScenarioAsync`를 실제 텔레메트리 파이프라인으로 연결하여, 모의 침해 주입 시 `IncidentsView`에 실시간 사건 카드가 즉시 생성되도록 폐루프 완성.
-3. **[3단계: `FileInspectionTool.cs` 구현 및 AI 연동] [차기 2순위 과제]**:
-   * `WinVerifyTrust` 기반 서명 검증, 경로 위장 탐지, 섀넌 엔트로피 분석 엔진 신설.
+   * `ProcessGraphView.xaml`: FlatNodeList `ListView` 양방향 바인딩, 우측 인스펙터, 수동 액추에이터 커맨드 완비.
+   * `InvestigationView.xaml`: 공격 계통도 `DataTrigger` 동적 라벨, 파일 무결성 슬롯 배제 및 ReAct 아코디언 단일화 완비.
+2. **[2단계: 모의 침해 시뮬레이터 실연동 (AttackLab Live Un-mock)] [완료 - Phase 5.2]**:
+   * Master-Detail UI 개편, `AttackLabScenarioRunner` 신설, CQRS 인프로세스 주입, OS 비동기 연동, SSOT 사살 완비.
+3. **[3단계: `FileInspectionTool.cs` 구현 및 AI 연동] [차기 1순위 과제 - Phase 5.1]**:
+   * `WinVerifyTrust` 기반 서명 검증, 경로 위장(T1036.005) 탐지, 섀넌 엔트로피 분석 엔진 신설.
    * `AutonomousHunterAgent` 프롬프트 및 수사 루프에 정식 도구로 등록하여 복합 회피 공격 수사 시간을 10초 내외로 단축(72% 압축).
-4. **[4단계: QuestPDF 기반 A4 포렌식 리포트 출력 엔진 구현] [차기 3순위 과제]**:
+4. **[4단계: QuestPDF 기반 A4 포렌식 리포트 출력 엔진 구현] [차기 2순위 과제 - Phase 5.3]**:
    * A4 리포트 버튼 커맨드 연결 및 단일 페이지 PDF 문서 자동 생성 기능 완결.
 
 
