@@ -300,7 +300,10 @@ service PhalanxService {
 ## 5. C# WPF 관제 콘솔 및 AI 스튜디오 (`Phalanx.Cockpit`)
 
 ### A. WPF 관제 대시보드 (Modern SOC Cockpit - 4-View Architecture)
-* **프레임워크**: `.NET 9.0` (.NET 10 RollForward 호환), `CommunityToolkit.Mvvm`, `EnterpriseTheme.xaml` Obsidian 다크 테마.
+* **프레임워크**: `.NET 9.0` (.NET 10 RollForward 호환), `CommunityToolkit.Mvvm`.
+* **실시간 동적 테마 시스템 (Dark / Light / System)**:
+  * ControlTemplate 및 벡터 아이콘은 `EnterpriseTheme.xaml`에 영구 상주시키며, 순수 색상 브러시 36종만 담긴 `DarkPalette.xaml` ↔ `LightPalette.xaml` 단일 딕셔너리만 스왑하는 토큰 분리 아키텍처 (`MergedDictionaries[0]` 팔레트 ↔ `MergedDictionaries[1]` 컨트롤 스타일 순서 계약).
+  * `ThemeManager` 싱글톤 서비스를 통해 Windows OS 테마(`SystemEvents`, `AppsUseLightTheme`)를 실시간 동기화하고, Win32 DWM API(`DWMWA_USE_IMMERSIVE_DARK_MODE`)를 연동하여 타이틀바 크롬까지 0ms 동적 전환.
 * **4-View 모듈식 관제 아키텍처**:
   1. **사건 관제실 (`IncidentsView.xaml`)**: 실시간 탐지/동결 사건 카드 스트림, 검색/필터링 및 상단 텔레메트리 상태 카운터.
   2. **프로세스 맵 (`ProcessGraphView.xaml`)**: `FlatNodeList` 기반 300여 개 OS 활성 프로세스 트리 60FPS 가상화 렌더링 및 선택 노드 메타데이터 인스펙터.

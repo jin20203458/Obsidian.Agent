@@ -374,7 +374,7 @@ related:
    * 새 윈도우 인스턴스가 열릴 때 새 윈도우의 라디오 버튼이 체크되면, WPF 그룹 로직이 기존 닫힌 윈도우의 라디오 버튼에 `IsChecked = false`를 전파함.
 3. **`IsApiKeyMode` 역방향 바운싱 세터에 의한 상호 무한 재귀 (Infinite Ping-Pong Recursion)**:
    * 기존 `IsApiKeyMode` 세터의 `if (UseVertexAi == value)` 비교 로직은 비활성화 시그널(`value = false`)이 주입될 때 `UseVertexAi`가 `false`이면 `false == false`가 되어 참(true)으로 평가되고, `UseVertexAi = !false = true`로 강제 반전시킴.
-   * 이에 따라 [새 창의 라디오버튼 체크 -> 기존 창의 라디오버튼 언체크 -> ViewModel 프로퍼티 변경 -> 새 창의 라디오버튼 언체크 -> 기존 창의 라디오버튼 체크...]가 밀리초 단위로 수만 회 상호 재귀 호출되어 호출 스택이 고갈(StackOverflowException)됨.
+   * 이에 따라 [새 창의 라디오버튼 체크 -> 기존 창의 라디오버튼 언체크 -> ViewModel 프로퍼티 변경 -> 새 창의 라디오버튼 언체크 -> 기존 창의 라디오버튼 체크...]가 밀리초 단위로 수만 회 상호 재귀 호출되어 호출 스택이 고갈됨.
 
 ### 3. 해결책 (Resolution)
 1. **`SettingsViewModel.cs`의 `IsApiKeyMode` 단방향 활성화 가드 적용**:
@@ -404,255 +404,7 @@ related:
 
 ---
 
-## 2026-09-29: [Resolved] 환경설정 커널 센서 카테고리 내 허위(Phantom) 액추에이터 옵션 폐기 및 런타임 진단 체계 일원화
-
-### 1. 현상 (Symptom)
-* 환경설정(`SettingsWindow`) '커널 센서 및 차단 액추에이터' 탭에 표출되던 `ReflexKillEnabled`("커널 룰 즉각 차단") 및 `KillProcessTree`("프로세스 트리 동반 종료") 체크박스가 실제 C++ 커널 센서(`Phalanx.Sensor`)의 런타임 동작과 일치하지 않는 상태로 방치됨.
-* 센서 토글 및 gRPC 제어 파라미터로 동작하는 것처럼 표기되었으나, C++ 센서는 관련 CLI 옵션이나 gRPC 플래그를 수신하지 않고 독자적인 안전 규칙 및 단일 PID 기준 `TerminateProcess`를 집행하고 있었음.
-
-### 2. 원인 (Root Cause)
-1. **`ReflexKillEnabled`의 허위성**:
-   * C++ 센서의 `LocalRuleEngine`은 랜섬웨어 복구 무력화 등 시스템 치명 공격에 대해 0.08ms(80μs) 이내에 무조건적인 현장 즉각 사살을 집행하도록 설계됨.
-   * 이를 외부 설정으로 끄거나 켤 수 있는 인터페이스가 C++ 센서에 구현되어 있지 않았으며, UI 상의 체크박스는 실제 센서에 아무런 영향도 미치지 못하는 100% 사장/허위 코드였음.
-2. **`KillProcessTree`의 스코프 왜곡**:
-   * C++ 커널 센서의 `ProcessActuator`는 커널 핸들을 열어 타깃 프로세스 단일 PID에 대해서만 `TerminateProcess`를 호출함.
-   * `KillProcessTree`는 모의 침해 시나리오 러너(`AttackLabScenarioRunner`)가 테스트용 자식 프로세스를 일괄 회수하기 위한 C# 내부 안전 메커니즘이었으나, UI상에 커널 센서의 액추에이터 동작 옵션인 것처럼 잘못 배치되어 관제관에게 혼선을 초래함.
-
-### 3. 해결책 (Resolution)
-1. **허위 및 레거시 옵션 전면 폐기**:
-   * `AppSettings.json`, `SettingsViewModel.cs`, `SettingsWindow.xaml`, `SettingsViewModelTests.cs`에서 `ReflexKillEnabled` 및 `KillProcessTree`를 완전 제거.
-   * `AttackLabScenarioRunner`의 프로세스 트리 정리 로직은 내부 불변 안전 규약(`KillProcessTree = true`)으로 정상 격리.
-2. **센서 바이너리 및 런타임 연결 상태 실시간 진단 카드로 전환**:
-   * 기존 허위 체크박스 UI 공간을 대체하여, `SensorProcessController`가 탐지한 실제 C++ 센서 바이너리 파일 경로(`SensorBinaryPath`), 바이너리 검출 여부(`SensorBinaryFound`), Kestrel gRPC 클라이언트 활성 연결 상태(`IsSensorConnected`)를 실시간으로 표출하는 진단 카드를 구현.
-3. **네트워크 포트 유효 범위 가드 적용**:
-   * `SensorPort` 저장 및 로드 시 `Math.Clamp(port, 1024, 65535)`를 적용하여 비정상 포트 번호 주입 방어.
-
----
-
-## 2026-09-29: [Resolved] 환경설정 포렌식 스토리지 카테고리 진단 체계 강화 및 파일 탐색/초기화 파이프라인 구축
-
-### 1. 현상 (Symptom)
-* 환경설정(`SettingsWindow`) '포렌식 스토리지' 탭에서 LiteDB 파일명(`DatabasePath`)과 보고서 저장 경로(`ReportExportPath`)가 단순 텍스트 박스로만 제공되어 경로 타이핑 오류 위험이 상존함.
-* 상대 경로 기반으로 동작하여 실제 물리적 디스크 절대 경로, 파일 존재 여부, DB 용량(KB/MB)을 관제관이 파악할 수 없었으며, 누적된 테스트 인시던트를 안전하게 비우거나 탐색기로 열어보는 운영 편의 기능이 부재함.
-
-### 2. 원인 (Root Cause)
-* 초기 프로토타입 단계에서 DB 연결 스트링과 디렉터리 경로만 바인딩하고, 파일/폴더 선택 대화상자(`OpenFileDialog`, `OpenFolderDialog`), 물리 경로 역추적 및 크기 계산 로직이 ViewModel에 누락되었음.
-* `ForensicArchiveManager`에 단일 인시던트 추가/조회만 구현되어 있고 대량 인시던트 일괄 원자적 삭제(`ClearAllIncidents`) API가 부재했음.
-
-### 3. 해결책 (Resolution)
-1. **파일 및 폴더 탐색 대화상자 연동**:
-   * `BrowseDatabaseCommand`(`OpenFileDialog`, `*.db`) 및 `BrowseReportExportCommand`(.NET 9 네이티브 `OpenFolderDialog`) 구현.
-   * `OpenReportFolderCommand` 및 `OpenDatabaseFolderCommand`(`explorer.exe /select`)를 통해 윈도우 파일 탐색기 즉시 팝업 지원.
-2. **물리적 절대 경로 및 실시간 용량 진단 카드 구현**:
-   * 실행 환경(`Directory.GetCurrentDirectory()` vs `AppContext.BaseDirectory`) 기준 실제 DB 파일 존재 여부를 동적 추적(`DatabaseFileExists`).
-   * 파일 크기를 적응형(`Bytes`, `KB`, `MB`)으로 계산하여 표출(`DatabaseFileSizeText`).
-3. **인시던트 원자적 일괄 삭제 및 UI 동기화 (`ClearAllIncidents`)**:
-   * `ForensicArchiveManager.ClearAllIncidents()`를 신설하여 `_incidents.DeleteAll()`과 `_traces.DeleteAll()`을 단일 트랜잭션(`BeginTrans` ➔ `Commit`)으로 안전 집행.
-   * `CockpitUiBridge.IncidentsDatabaseCleared` 이벤트를 신설하여 삭제 즉시 관제 콘솔(`MainViewModel.LoadIncidentsFromDatabase`)이 실시간 리프레시되도록 반응형 파이프라인 결합.
-
----
-
-## 2026-09-29: [Resolved] 환경설정 시스템 정보 카테고리 내 개발자 사족/내부 구현 세부사항 제거 및 엔터프라이즈 명세 체계화
-
-### 1. 현상 (Symptom)
-* 환경설정(`SettingsWindow`) '시스템 정보' 탭에 표출되던 사양이 내부 개발 단계 용어(`Phase 5`), 컴파일러/언어 버전(`C++20`, `C# 13`), 하드코딩된 포트(`:50051`), 내부 알고리즘/자료구조 명칭(`DAG`, `Multi-Turn ReAct Cycle`) 등 관제관 및 사용자 관점에서 불필요한 사족과 개발자 지향적 텍스트로 구성되어 있었음.
-* 또한 사용자가 환경설정에서 변경한 AI 모델/인증 방식, 센서 IPC 엔드포인트, DB 경로가 시스템 정보 탭에 동적으로 연동되지 않고 정적 문자열로 고정되어 설정 불일치가 발생함.
-
-### 2. 원인 (Root Cause)
-* 초기 시스템 정보 페이지가 아키텍처 스펙 메모 용도로 단일 Border 내에 정적 텍스트 5줄로 작성된 채 방치되었음.
-* 런타임 호스트 OS 환경(OS 버전, 프로세스 아키텍처) 및 .NET CLR 런타임 정보, 실시간 활성 컴포넌트(AI 공급자, 센서 주소, 포렌식 DB 절대 경로)를 제공하는 데이터 바인딩 프로퍼티가 ViewModel에 체계화되지 않았음.
-
-### 3. 해결책 (Resolution)
-1. **개발자 사족 및 내부 세부 구현체 명칭 전면 제거**:
-   * 로드맵 스프린트 표기(`(Phase 5)`), 프로그래밍 언어 표준(`C++20`, `C# 13`), 자료구조 명칭(`DAG`) 및 내부 설계용 문구(`시스템 아키텍처`) 등을 사용자 친화적 엔터프라이즈 명세로 정제 및 불필요 항목 완전 삭제.
-   * `제품 및 솔루션 사양` 카드(명칭, 버전, 라이선스 에디션)와 `호스트 플랫폼 및 활성 런타임 환경` 카드의 2개 그룹 카드로 시각적 체계화.
-2. **동적 런타임 환경 바인딩 구현**:
-   * `ProductVersionText`: 솔루션 버전 표출 (`Phalanx EDR v0.5.0-preview`).
-   * `HostPlatformText`: `RuntimeInformation.OSDescription` 및 `ProcessArchitecture` 기반 실행 호스트 정보 제공.
-   * `DotNetRuntimeText`: `.NET Environment.Version` 기반 CLR 런타임 버전 제공.
-   * `ActiveAiModelText`: 클라우드 인증 모드(Vertex AI / AI Studio) 및 선택된 모델명 실시간 동적 포맷팅.
-   * `ActiveSensorEndpointText`: 설정된 센서 호스트 및 포트(`SensorHost:SensorPort`) 동적 바인딩.
-   * `ActiveDatabaseText`: 실제 물리적 디스크 절대 경로(`DatabaseResolvedPath`)와 실시간 동기화.
-3. **단위 테스트 및 빌드 검증**:
-   * `SettingsViewModelTests.TestSettingsViewModel_SystemInformationObservables`를 추가하여 속성 초기화 및 설정 변경 시 실시간 반영 여부 검증 (35/35 통과, Exit Code 0).
-
----
-
-## 2026-09-29: [Resolved] 심층 포렌식 수사실에서 프로세스 트리 포커싱 시 Foreground DependencyProperty.UnsetValue 예외 크래시
-
-### 1. 현상 (Symptom)
-* 심층 포렌식 분석(`InvestigationView`) 화면에서 '전역 프로세스 트리에서 위치 확인 ➔'(`FocusProcessInGraphCommand`) 버튼 클릭 시 WPF 렌더링 파이프라인에서 크래시 발생:
-  ```text
-  System.InvalidOperationException: '{DependencyProperty.UnsetValue}'은(는) 'Foreground' 속성의 유효한 값이 아닙니다.
-  HResult=0x80131509
-  ```
-
-### 2. 원인 (Root Cause)
-* `FocusProcessInGraph` 실행 시 관제 뷰가 `ProcessGraphView`로 전환되며 타깃 프로세스 노드가 `SelectedProcessNode`로 지정됨.
-* `ProcessGraphView.xaml` 내 세 곳에서 WPF 의존성 프로퍼티(DependencyProperty) 스타일링 안티패턴이 존재함:
-  1. **관리자 권한 수준 TextBlock**:
-     * `Foreground="{StaticResource TextSecondaryBrush}"`가 TextBlock 태그의 로컬 속성으로 지정된 상태에서, Style 내부에는 기본 Foreground Setter가 없고 `DataTrigger(TokenElevationType == 2)`에만 `<Setter Property="Foreground" Value="{StaticResource DotCriticalBrush}" />`가 지정됨.
-     * 노드가 선택되어 트리거가 비활성화/해제되거나 조건 평가 시, Style에 기본 Setter가 없으므로 WPF는 Style의 기본값인 `DependencyProperty.UnsetValue`를 복원하려고 시도하여 Brush 타입 검증에 실패함.
-  2. **ListViewItem ItemContainerStyle**:
-     * `ControlTemplate.Triggers` 내부의 `Trigger(IsSelected == True)`에 `TargetName` 없이 `<Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />`가 선언되어 템플릿 부모인 `ListViewItem`의 Foreground를 직접 변경함.
-     * 그러나 `ListViewItem` Style 자체에 기본 Foreground Setter가 정의되어 있지 않아 선택 해제 시 `DependencyProperty.UnsetValue` 할당 충돌이 발생함.
-  3. **동결/사살 뱃지 TextBlock**:
-     * Style 내부에 기본 `Text` 및 `Foreground` Setter가 누락되어 비동결/비사살 일반 프로세스 노드 렌더링 시 잠재적 UnsetValue 복원 위험 존재.
-
-### 3. 해결책 (Resolution)
-1. **관리자 권한 수준 TextBlock Style 리팩토링**:
-   * 로컬 `Foreground` 속성을 제거하고 `<Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />`를 Style 기본 Setter로 이동.
-   * `TokenElevationType == 2` 및 `TokenElevationType == 3` DataTrigger 모두에 명시적 `Foreground` 브러시를 보장하여 UnsetValue 전파 원천 차단.
-2. **`ListViewItem` Foreground 수명주기 안정화**:
-   * `ListViewItem` Style에 기본 `<Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />`를 명시하고, 내부 템플릿 트리거의 중복 부모 Foreground 변경 Setter를 제거하여 `TargetName="Bd"` 배경만 제어하도록 격리.
-3. **상태 뱃지 기본 브러시 보장**:
-   * 동결/사살 뱃지 Style에 기본 `<Setter Property="Text" Value="" />` 및 `<Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />`를 명시.
-4. **단위 테스트 검증**:
-   * `ProcessTreeProjectionTests.TestMainViewModel_FocusProcessInGraphCommand`를 추가하여 `FocusProcessInGraphCommand` 실행 시 뷰 전환, 타깃 PID 탐색, 권한 레벨(TokenElevationType = 2) 노드 정상 바인딩 완결성 검증 (36/36 통과, Exit Code 0).
-
----
-
-## 2026-09-29: [Resolved] 프로세스 트리 노드 상태 점 고정 결함 및 원자적 제어(동결 ↔ 해제) 유동적 토글 구현
-
-### 1. 현상 (Symptom)
-* 프로세스 트리 탐색기(`ProcessGraphView`)에서 사살되거나 원자적 동결된 프로세스의 좌측 원형 상태 점(`<Ellipse>`)이 상태 전이(사살/동결) 후에도 계속 초록색(정상 생존 색상)으로 고정되어 표시되는 결함 발생.
-* 우측 상세 패널의 [원자적 프로세스 제어] 영역에 [원자적 동결 (Suspend)]과 [프로세스 사살 (Kill)]만 존재하고, 관제사가 동결된 프로세스를 수동 복구시키는 [동결 해제 (Resume)] 버튼 및 뷰모델 커맨드가 누락되어 있었음.
-* 관제사 수동 제어(동결/해제/사살) 실행 시 백엔드 gRPC 전송만 수행되고 뷰모델의 `SelectedProcessNode` 상태(`UpdateStatus`)가 즉각 갱신되지 않아 오프라인 또는 지연 상황에서 UI 반응성이 떨어짐.
-
-### 2. 원인 (Root Cause)
-1. `ProcessGraphView.xaml`의 ListView DataTemplate 내 좌측 `<Ellipse>`의 `Fill` 속성이 `{StaticResource DotLiveBrush}`로 정적 하드코딩되어 있어, `IsSuspended`, `IsTerminated`, `IsAlive` 속성 변화에 반응하는 `DataTrigger`가 누락되어 있었음.
-2. 백엔드(C++ `ProcessActuator::ResumeProcess` 및 gRPC `ACTION_RESUME`) 파이프라인은 완비되어 있었으나, WPF 뷰모델(`MainViewModel`) 및 XAML UI에 관제사 수동 호출 커맨드(`ResumeSelectedProcessCommand`)가 연결되지 않았음.
-3. 수동 명령 비동기 전송 핸들러(`SuspendSelectedProcessAsync`, `TerminateSelectedProcessAsync`) 내부에 낙관적 상태 갱신(Optimistic UI Update) 및 이미 종료된 프로세스(`!IsAlive`)에 대한 실행 차단 가드가 부재했음.
-
-### 3. 해결책 (Resolution)
-1. **좌측 상태 점 `<Ellipse>` 동적 스타일 트리거 적용**:
-   * 기본 `Fill`: `{StaticResource DotLiveBrush}` (Green `#10B981`)
-   * `IsSuspended == True`: `{StaticResource DotSuspendedBrush}` (Amber `#D97706`)
-   * `IsTerminated == True` 및 `IsAlive == False`: `{StaticResource DotCriticalBrush}` (Rose Red `#E11D48`)
-2. **원자적 동결 ↔ 동결 해제 유동적 토글 버튼 및 사살 비활성화 가드 구현**:
-   * Column 0 내부에 `[원자적 동결 (Suspend)]` 및 `[동결 해제 (Resume)]` 버튼을 배치하고, `SelectedProcessNode.IsSuspended`에 따라 `Visibility`를 상호 반전(Visible ↔ Collapsed) 토글.
-   * `SelectedProcessNode.IsAlive == False`인 사망 프로세스에 대해 동결, 해제, 사살 3개 버튼 모두 `IsEnabled = False` 트리거를 적용하여 안전 가드 확보.
-3. **`MainViewModel.cs` 수동 제어 로직 보강**:
-   * `ResumeSelectedProcessAsync` [RelayCommand] 신설 및 `ActionType.ActionResume` 전송.
-   * 수동 제어 3종 메서드 모두 `if (SelectedProcessNode == null || !SelectedProcessNode.IsAlive) return;` 방어 가드 추가.
-   * 명령 발송 직후 `SelectedProcessNode.UpdateStatus(...)`를 즉시 호출하여 낙관적 UI 상태 갱신 보장.
-4. **단위 테스트 검증**:
-   * `ProcessTreeProjectionTests.TestMainViewModel_ManualActuation_SuspendResumeTerminateCommands`를 신설하여 Suspend ➔ Resume ➔ Terminate 상태 전이 및 사망 노드 재실행 차단 완결성 검증 (37/37 통과, Exit Code 0).
-
----
-
-## 2026-09-29: [Resolved] 프로세스 트리 시각화 정규화 (정상 종료 회색 분리, NT 디바이스 경로 정제, 종료 프로세스 숨기기 필터)
-
-### 1. 현상 (Symptom)
-* Obsidian의 백그라운드 Git 동기화 루틴 등 정상적인 백그라운드 프로세스가 완료 후 종료되었을 때, 프로세스 트리의 상태 점이 전부 크리티컬 위협 색상인 빨간색(`DotCriticalBrush`)으로 표출되어 마치 침해 사고나 악성 사살이 대량 발생한 것처럼 심각한 시각적 오인 유발.
-* ETW 커널 센서가 수집한 프로세스 이미지가 `\Device\HarddiskVolume3\Program Files\Git\cmd\git.exe` 형태의 원시 NT 디바이스 경로로 노출되어 트리가 과도하게 장황하고 가독성이 저하됨.
-* 과거 정상 종료된 프로세스 이력이 계속 트리에 누적되어 관제사가 현재 살아있는 활성 프로세스만 격리하여 볼 수 있는 필터링 기능이 부재했음.
-
-### 2. 원인 (Root Cause)
-1. `ProcessGraphView.xaml`의 `<Ellipse.Style>` 트리거에서 `IsAlive == False` 조건에 무조건 `DotCriticalBrush`를 할당하여, EDR 사살(`IsTerminated == True`)과 정상 종료(`LifecycleStop`)가 시각적으로 분리되지 않았음.
-2. `NormalizeProcessImageName`이 단순 PID 0 검사만 수행하고 NT 디바이스 경로 또는 DOS 경로 구분자(`\`, `/`)를 파일명 단위로 슬라이싱하지 않고 원본 전체 경로를 그대로 반환했음.
-3. `ProcessTreeProjectionManager` 및 `MainViewModel`에 종료된 프로세스 필터링 속성 및 가시화 노드 목록(`VisibleNodes`) 제외 로직이 부재했음.
-
-### 3. 해결책 (Resolution)
-1. **상태 점 시각화 및 노드 텍스트 딤 정규화**:
-   * `<Ellipse.Style>` 트리거 평가 순서 재정의:
-     * 기본값: `DotLiveBrush` (초록 `#10B981` - 정상 실행 중)
-     * `IsAlive == False`: `DotBenignBrush` (회색 `#71717A` - 정상 종료 프로세스 명확 분리)
-     * `IsSuspended == True`: `DotSuspendedBrush` (호박색 `#D97706` - 원자적 동결)
-     * `IsTerminated == True`: `DotCriticalBrush` (빨강 `#E11D48` - EDR 긴급 사살, 최우선 덮어쓰기)
-   * `ImageName` TextBlock에 `IsAlive == False` 시 `TextMutedBrush` 딤 처리를 적용하고 `ToolTip="{Binding FullImagePath}"`를 연동.
-2. **NT 디바이스 경로 파일명 슬라이싱 및 전체 경로 보존**:
-   * `ProcessNodeModel`에 `FullImagePath` 프로퍼티 신설.
-   * `NormalizeProcessImageName`: `LastIndexOfAny(['\\', '/'])` 기반으로 `\Device\HarddiskVolume3\...\git.exe`를 `git.exe`로 안전하게 슬라이싱.
-   * 우측 인스펙터 패널 제목에 `ToolTip="{Binding SelectedProcessNode.FullImagePath}"` 연동.
-3. **'종료된 프로세스 숨기기' 필터 및 고아 방지(Orphan-Prevention) 로직 구현**:
-   * `ProcessTreeProjectionManager`에 `HideTerminated` 불리언 속성 추가.
-   * `HasAliveDescendants(node)` 재귀 헬퍼를 도입하여 하위에 살아있는 자손이 존재하는 종료 부모 노드는 족보 유지를 위해 보존하고, 자손이 모두 종료된 노드만 가시 목록에서 배제.
-   * `MainViewModel`에 `HideTerminatedProcesses` TwoWay 프로퍼티 추가 및 체크박스 토글 시 `RebuildVisibleNodes()` 즉시 동기화.
-4. **단위 테스트 검증**:
-   * `TestProcessTree_NormalizeProcessImageName_StripsNtAndDosPaths` 및 `TestProcessTree_HideTerminatedProcesses_FilterAndPreserveAncestry`를 추가하여 총 39개 단위 테스트 전원 통과 확인 (Exit Code 0).
-
----
-
-## 2026-09-29: [Resolved] 원자적 동결 버튼 클릭 시 유령 리소스 키(ThreatCriticalBrush)로 인한 Foreground DependencyProperty.UnsetValue 크래시
-
-### 1. 현상 (Symptom)
-* 관제 콘솔(`ProcessGraphView`)에서 프로세스를 선택하고 [원자적 동결 (Suspend)] 버튼을 클릭하는 즉시 프로그램이 비정상 종료되며 예외 발생:
-  ```text
-  System.InvalidOperationException: '{DependencyProperty.UnsetValue}'은(는) 'Foreground' 속성의 유효한 값이 아닙니다.
-  HResult=0x80131509
-  ```
-
-### 2. 원인 (Root Cause)
-* `ProcessGraphView.xaml` 내 상태 배지 `<TextBlock.Style>`에서 `IsSuspended == True` 트리거에 지정된 리소스 키 `{StaticResource ThreatCriticalBrush}`가 테마 사전(`EnterpriseTheme.xaml`)에 존재하지 않는 유령 키(Phantom Resource Key)였음.
-* 과거에는 버튼 클릭 시 뷰모델의 `SelectedProcessNode.IsSuspended`가 UI 스레드에서 즉시 `True`로 전환되지 않아 해당 DataTrigger가 발화되지 않았으나, 낙관적 UI 갱신(`UpdateStatus`)이 추가되면서 클릭 즉시 DataTrigger가 활성화됨.
-* WPF 런타임이 미존재 키를 조회하면서 `DependencyProperty.UnsetValue`를 반환하였고, `TextBlock.Foreground` 속성이 이를 거부하여 즉시 크래시 유발.
-
-### 3. 해결책 (Resolution)
-1. **유령 리소스 키 완전 제거 및 공식 테마 브러시 매핑**:
-   * `[동결]` 트리거: `{StaticResource ThreatCriticalBrush}` ➔ `{StaticResource SeveritySuspendedTextBrush}` (`#FBBF24` Amber Gold)
-   * `[사살]` 트리거: `{StaticResource TextMutedBrush}` ➔ `{StaticResource SeverityCriticalTextBrush}` (`#F87171` Crimson Red)
-2. **XAML 리소스 키 전수 무결성 검증**:
-   * 솔루션 전체에서 `ThreatCriticalBrush` 참조가 0건임을 확인하고, `ProcessGraphView.xaml` 내 모든 `StaticResource`가 `EnterpriseTheme.xaml`에 실재함을 검증 완료.
-3. **단위 테스트 및 빌드 검증**:
-   * `dotnet build Phalanx.sln -c Release -m:1` ➔ Exit Code 0
-   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 39개 전원 통과 확인.
-
----
-
-## 2026-09-29: [Resolved] 메인 대시보드 상단 타이틀바 중복 및 레거시 버튼(REFRESH DB, SETTINGS) 제거
-
-### 1. 현상 및 개선 배경 (Background)
-* 메인 관제 콘솔(`MainWindow.xaml`) 상단 커스텀 윈도우 타이틀바 우측에 `REFRESH DB` 및 `SETTINGS` 버튼이 상주.
-* `SETTINGS`: 좌측 52px 네비게이션 레일 최하단에 동일한 `OpenSettingsCommand`를 호출하는 기어 아이콘(`IconNavSettings`)이 이미 존재하여 명백한 UI 중복 발생.
-* `REFRESH DB`: 기동 시 자동 DB 웜업 및 `CockpitUiBridge` 기반의 실시간 델타 이벤트 동기화(`InvestigationStarted`, `InvestigationCompleted`)가 완비되어 수동 새로고침이 불필요한 초기 디버깅용 레거시 잔재.
-
-### 2. 해결책 (Resolution)
-1. **타이틀바 우측 스택패널 정돈**:
-   * `MainWindow.xaml`: `REFRESH DB` 및 `SETTINGS` 버튼 2개 블록을 제거.
-   * 최소화(`MinimizeButton_Click`), 최대화/복원(`MaximizeButton_Click`), 닫기(`CloseButton_Click`) 캡션 버튼 3종만 보존하여 창 캡션 드래그 영역 확장 및 모던 엔터프라이즈 룩앤필 확립.
-2. **ViewModel 호환성 및 무결성 보존**:
-   * 좌측 네비게이션 레일 하단 `IconNavSettings` 버튼 및 `MainViewModel` 내 커맨드 로직(`OpenSettingsCommand`, `RefreshFromDbCommand`)은 보존하여 타 뷰 및 향후 확장 시 무결성 유지.
-3. **빌드 및 회귀 테스트 검증**:
-   * `dotnet build Phalanx.sln -c Release -m:1` ➔ Exit Code 0 (경고 0건, 오류 0건).
-   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 39/39 통과 (Exit Code 0).
-
----
-
-## 2026-09-29: [Feature & Optimization] 실시간 동적 테마 시스템 (Dark / Light / System) 구현
-
-### 1. 배경 및 설계 요구사항 (Background)
-* 기존 Cockpit 콘솔은 `#0E0E0E` 기반 딥 다크 모드로 고정되어 있어 다양한 조명 환경에서의 가독성 지원 및 엔터프라이즈 테마 확장이 불가했음.
-* 요구사항: 앱 재시작 없이 0ms 실시간 동적 전환(Dynamic Switching), Windows OS 테마 자동 감지/동기화(`SystemEvents`), GitHub/Linear 스타일의 엔터프라이즈 라이트 테마 지원.
-* 레퍼런스(`ArqaStatic`) 분석 및 안티패턴 개선:
-  * ARQA의 테마 딕셔너리마다 컨트롤 스타일 전체를 중복 병합(`ControlStyles.xaml`)하는 안티패턴(GC 부하, UI 깜빡임)을 배제.
-  * ControlTemplate 및 벡터 아이콘은 `EnterpriseTheme.xaml`에 영구 상주시키고, 순수 색상 브러시 36종만 담긴 `DarkPalette.xaml` ↔ `LightPalette.xaml` 단일 딕셔너리만 스왑하는 **모던 토큰 분리 아키텍처** 확립.
-
-### 2. 해결 및 구현 내역 (Resolution)
-1. **토큰 팔레트 분리 및 리소스 순서 계약**:
-   * `Themes/Palettes/DarkPalette.xaml`: 기존 36종 다크 색상 토큰 정의.
-   * `Themes/Palettes/LightPalette.xaml`: 엔터프라이즈 Neutral Zinc 오프화이트(`#F4F4F5`) 및 고대비 라이트 시맨틱 브러시 정의.
-   * `App.xaml`: `MergedDictionaries[0]`(활성 팔레트) ↔ `MergedDictionaries[1]`(공통 컨트롤 스타일) 순서 계약 수립.
-2. **`ThemeManager` 싱글톤 서비스 구축**:
-   * `SystemEvents.UserPreferenceChanged` 및 `HKCU\...\Themes\Personalize\AppsUseLightTheme` 레지스트리를 통한 OS 테마 실시간 추적.
-   * `Application.Current.Dispatcher.InvokeAsync`를 통한 UI 스레드 안전 마샬링.
-   * 단위 테스트 및 백그라운드 환경 방어를 위한 `Application.Current == null` Headless Guard 및 `IDisposable` 누수 방지 완비.
-3. **윈도우 크롬 및 DWM 연동 (`WindowTitleBarBehavior.cs`)**:
-   * `UpdateImmersiveDarkMode`: Win32 DWM API(`DWMWA_USE_IMMERSIVE_DARK_MODE`)를 통해 다크(`1`), 라이트(`0`) 동적 토글.
-   * `Window.SourceInitialized` 수명주기 훅으로 늦게 생성되는 윈도우(`SettingsWindow`, `AttackLabWindow`)의 DWM 동기화 보장.
-4. **XAML 뷰 동적 리소스 바인딩 전수 정규화**:
-   * 7개 XAML 파일 전반의 하드코딩 색상 및 `{StaticResource ...Brush}`를 `{DynamicResource ...Brush}`로 100% 마이그레이션.
-   * `MainWindow.xaml` 및 `AttackLabWindow.xaml`의 중복 로컬 리소스 사전 제거.
-5. **환경 설정(Settings) UI 연동 및 영속화**:
-   * `SettingsViewModel.cs`: `THEME` 카테고리 추가, `SetThemeModeCommand`, `SelectedThemeMode` 양방향 바인딩.
-   * `AppSettings.json`: `"Theme": "System"` 입출력 및 `App.xaml.cs` 기동 시 자동 복원.
-6. **빌드 및 단위 테스트 검증**:
-   * `dotnet build Phalanx.sln -c Release -m:1` ➔ Exit Code 0 (경고 0, 오류 0).
-   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 총 44개 단위 테스트 전원 통과 (Exit Code 0).
-
----
-
-## 2026-09-29: [Resolved] 설정 창(SettingsWindow) 진입 시 WPF RadioButton 읽기 전용 TwoWay 바인딩 충돌 및 0xc000041d 크래시 해결
+## 2026-09-29: [Resolved] 설정 창(SettingsWindow) 진입 시 테마 RadioButton 읽기 전용 속성 바인딩 충돌 및 0xc000041d 크래시
 
 ### 1. 현상 (Symptom)
 * 메인 관제 콘솔 좌측 네비게이션 레일에서 [환경 설정] 버튼 클릭 시 `Phalanx.Cockpit.exe`가 즉각 비정상 종료됨.
@@ -665,22 +417,101 @@ related:
 2. **Win32 네이티브 콜백 내 예외 전파**:
    * 윈도우 생성 및 렌더링 초기화 단계(`HwndSource.SetLayoutSize` ➔ `ContextLayoutManager.UpdateLayout`)에서 WPF 바인딩 엔진의 `PropertyPathWorker.CheckReadOnly`가 호출되며 `System.InvalidOperationException: TwoWay 또는 OneWayToSource 바인딩은 'Phalanx.Cockpit.ViewModels.SettingsViewModel' 형식의 읽기 전용 속성 'IsThemeSystem'에서 작동하지 않습니다.` 예외를 발생시킴.
    * 해당 예외가 Win32 메시지 디스패치 루프(`WM_CREATE` / `WM_SHOWWINDOW`) 내부에서 처리되지 않고 탈출하면서 Windows 커널에 의해 `STATUS_FATAL_USER_CALLBACK_EXCEPTION` (`0xc000041d`)으로 프로세스가 강제 사살됨.
-3. **리소스 Pack URI 상대 경로 취약점**:
-   * `App.xaml` 및 `ThemeManager.cs`에서 사용하던 상대 Pack URI(`/Themes/Palettes/...`)가 외부 테스트 어셈블리 또는 보조 실행 컨텍스트에서 어셈블리 불일치(`IOException`)를 유발할 수 있는 잠재성 식별.
 
 ### 3. 해결책 (Resolution)
 1. **ViewModel 양방향 세터 및 상태 안전성 구축 (`SettingsViewModel.cs`)**:
    * `IsThemeSystem`, `IsThemeDark`, `IsThemeLight`에 명시적 `set` 블록을 구현.
-   * 라디오 버튼 그룹 특성상 비활성화(`value == false`) 시그널이 주입될 때는 상태를 덮어쓰지 않고, 오직 활성화(`value == true`) 시그널일 때만 `SelectedThemeMode`를 원자적으로 변경하도록 방어 로직 적용.
+   * 비활성화(`value == false`) 시그널이 주입될 때는 상태를 덮어쓰지 않고, 오직 활성화(`value == true`) 시그널일 때만 `SelectedThemeMode`를 원자적으로 변경하도록 방어 로직 적용.
 2. **XAML 바인딩 모드 방어 강화 (`SettingsWindow.xaml`)**:
    * 라디오 버튼의 `IsChecked` 바인딩에 `Mode=OneWay`를 명시적으로 부여하여 WPF 바인딩 엔진의 소스 갱신 시도를 원천 차단하고, 변경은 `Command="{Binding SetThemeModeCommand}"`로만 통제하도록 2중 방어선 확립.
-3. **절대 Pack URI 표준화 (`App.xaml`, `ThemeManager.cs`)**:
-   * `pack://application:,,,/Phalanx.Cockpit;component/Themes/...` 형식의 명시적 절대 Pack URI로 전환하여 모든 어셈블리 컨텍스트에서 오차 없는 리소스 로딩 보장.
-4. **DWM 및 네이티브 윈도우 수명주기 방어 (`WindowTitleBarBehavior.cs`, `App.xaml.cs`)**:
-   * `WindowTitleBarBehavior.ApplyCurrentThemeTitleBar` 본문을 `try-catch`로 감싸 `SourceInitialized` 훅 내의 어떠한 예외도 Win32 메시지 루프로 탈출하지 못하도록 완벽 차단.
-   * `App.xaml.cs`에 `DispatcherUnhandledException` 로깅 핸들러를 장착하여 잠재적 UI 예외 가시화.
-5. **STA 윈도우 인스턴스화 및 테마 토글 회귀 테스트 완비 (`SettingsViewModelTests.cs`)**:
+3. **STA 윈도우 인스턴스화 회귀 테스트 완비 (`SettingsViewModelTests.cs`)**:
    * `TestSettingsWindow_InstantiationAndThemeToggle` 단위 테스트 추가: STA 스레드에서 `SettingsWindow`를 실제 생성, 렌더링(`Show()`), 테마 카테고리 전환 및 다크/라이트/시스템 모드 동적 토글 후 정상 종료(`Close()`)까지 전 구간 무결성 검증.
-   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 45/45 전원 통과 (Exit Code 0).
+
+---
+
+## 2026-09-29: [Resolved] ProcessGraphView 내 WPF DataTrigger 기본값 부재 및 유령 리소스 키(ThreatCriticalBrush)로 인한 DependencyProperty.UnsetValue 크래시
+
+### 1. 현상 (Symptom)
+* 심층 포렌식 분석(`InvestigationView`) 화면에서 '전역 프로세스 트리에서 위치 확인 ➔'(`FocusProcessInGraphCommand`) 버튼 클릭 시 크래시 발생.
+* 관제 콘솔(`ProcessGraphView`)에서 프로세스를 선택하고 `[원자적 동결 (Suspend)]` 버튼을 클릭하는 즉시 프로그램이 비정상 종료되며 동일 예외 발생:
+  ```text
+  System.InvalidOperationException: '{DependencyProperty.UnsetValue}'은(는) 'Foreground' 속성의 유효한 값이 아닙니다.
+  HResult=0x80131509
+  ```
+
+### 2. 원인 (Root Cause)
+1. **WPF 의존성 프로퍼티(DependencyProperty) Style 기본 Setter 누락**:
+   * `ProcessGraphView.xaml`의 관리자 권한 수준 TextBlock 및 `ListViewItem` ItemContainerStyle 내부에 기본 `Foreground` Setter가 누락되어 있었음.
+   * `TokenElevationType == 2` DataTrigger 또는 `IsSelected` Trigger가 비활성화/해제될 때, WPF는 Style의 기본값을 복원하려고 시도하나 기본 Setter가 없어 `DependencyProperty.UnsetValue`를 반환하였고, Brush 타입 유효성 검사에 실패함.
+2. **미존재 유령 리소스 키 (Phantom Resource Key)**:
+   * 상태 배지 `<TextBlock.Style>`에서 `IsSuspended == True` 트리거에 지정된 `{StaticResource ThreatCriticalBrush}`가 테마 사전(`EnterpriseTheme.xaml`)에 존재하지 않는 유령 키였음.
+   * 수동 제어 후 낙관적 UI 갱신(`UpdateStatus`)이 추가되면서 버튼 클릭 즉시 DataTrigger가 활성화되어 미존재 키를 조회하였고, `DependencyProperty.UnsetValue`가 반환되어 런타임 크래시를 유발함.
+
+### 3. 해결책 (Resolution)
+1. **Style 기본 Setter 명시 및 템플릿 트리거 격리**:
+   * TextBlock Style 및 `ListViewItem` Style에 기본 `<Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />`를 명시하여 트리거 조건 해제 시 UnsetValue 전파 원천 차단.
+   * `ListViewItem` 내부 템플릿 트리거가 부모의 Foreground를 직접 덮어쓰지 않도록 `TargetName="Bd"` 배경만 제어하도록 스코프 격리.
+2. **유령 리소스 키 완전 제거 및 공식 테마 브러시 매핑**:
+   * `[동결]` 트리거: `{StaticResource ThreatCriticalBrush}` ➔ `{DynamicResource SeveritySuspendedTextBrush}` (`#FBBF24` Amber Gold)
+   * `[사살]` 트리거: `{StaticResource TextMutedBrush}` ➔ `{DynamicResource SeverityCriticalTextBrush}` (`#F87171` Crimson Red)
+3. **단위 테스트 검증**:
+   * `ProcessTreeProjectionTests.TestMainViewModel_FocusProcessInGraphCommand`를 통해 뷰 전환, 타깃 PID 탐색, 권한 레벨 바인딩 무결성을 검증 (Exit Code 0).
+
+---
+
+## 2026-09-29: [Resolved] 프로세스 트리 정상 종료 노드의 EDR 사살(빨간색 DotCriticalBrush) 오표출 시각화 결함 해결 및 4색 상태 정규화
+
+### 1. 현상 (Symptom)
+* Obsidian의 백그라운드 Git 동기화 루틴 등 정상적인 백그라운드 프로세스가 완료 후 종료되었을 때, 프로세스 트리의 상태 점이 전부 크리티컬 위협 색상인 빨간색(`DotCriticalBrush`)으로 표출되어 정상 종료 프로세스가 EDR에 의해 사살된 침해 사고로 심각하게 오인되는 시각화 결함 발생.
+
+### 2. 원인 (Root Cause)
+* `ProcessGraphView.xaml`의 `<Ellipse.Style>` 트리거에서 `IsAlive == False` 조건에 무조건 `DotCriticalBrush`를 할당하여, EDR 긴급 사살(`IsTerminated == True`)과 OS 정상 종료(`LifecycleStop`)의 시각적 상태가 구별되지 않고 동일하게 처리됨.
+
+### 3. 해결책 (Resolution)
+1. **4단계 상태 점 시각화 정규화**:
+   * 기본값: `DotLiveBrush` (초록 `#10B981` - 정상 실행 중)
+   * `IsAlive == False`: `DotBenignBrush` (회색 `#71717A` - 정상 종료 프로세스 명확 분리)
+   * `IsSuspended == True`: `DotSuspendedBrush` (호박색 `#D97706` - 원자적 동결)
+   * `IsTerminated == True`: `DotCriticalBrush` (빨강 `#E11D48` - EDR 긴급 사살 최우선 덮어쓰기)
+   * `ImageName` TextBlock에 `IsAlive == False` 시 `TextMutedBrush` 딤 처리를 적용하여 시각적 가독성 개선.
+2. **회귀 검증**:
+   * `ProcessTreeProjectionTests`를 통해 프로세스 상태별 브러시 매핑 및 족보 가시성 무결성 확인 (Exit Code 0).
+
+---
+
+## 2026-09-29: [Resolved] FullChainSystemTests 동시성 타이밍 결함 및 Category=Live 벤치마크 미분리로 인한 테스트 지연
+
+### 1. 현상 (Symptom)
+* `FullChainSystemTests.TestPhalanxGrpcService_MultiClientConcurrentStreams_MaintainsConnectionState`에서 `Assert.True(lastReportedConnection)` (line 572) 간헐적 실패 (`Expected: True, Actual: False`, 615ms 시점).
+* 카테고리 필터 없이 `dotnet test` 실행 시 콘솔에 아무런 진척 없이 3분 이상 멈춰 있는 현상 발생.
+
+### 2. 원인 (Root Cause)
+1. **gRPC 다중 스트림 테스트의 500ms 협소 타임아웃 및 자원 미회수**:
+   * `for (int i = 0; i < 20; i++) await Task.Delay(25)` 구조로 최대 대기시간이 500ms에 불과하여, CPU 스레드풀 지연 시 이벤트 수신 전에 조기 단언문 실패 발생.
+   * `finally` 블록의 부재로 인해 단언문 실패 시 백그라운드 `StreamTelemetry` 태스크와 채널 리더가 정상 회수되지 않고 잔존.
+   * `MockAsyncStreamReader.Complete()`가 `ChannelWriter.Complete()`를 호출하여 중복 완료 시 `ChannelClosedException` 유발.
+2. **무필터 테스트 실행 시 실제 클라우드 AI 벤치마크 트리거**:
+   * 프로젝트 규약상 기본 단위 테스트는 `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"` (2.8초 소요).
+   * 필터 생략 시 `Category=Live`에 속한 `TestLive_MultiScenario_AverageTurnAndLatencyBenchmark`가 실행됨.
+   * 해당 테스트는 실제 Google Cloud Vertex AI / Gemini 3.7 Flash와 10대 복합 위협 시나리오에 대해 멀티턴 ReAct 통신을 수행하며, RPM 버퍼링(시나리오당 1.5초)을 포함하여 2~3분이 소요되는 대규모 엔드투엔드 AI 벤치마크임.
+   * xUnit 기본 콘솔 출력 정책으로 인해 중간 진행 상황이 보이지 않아 무한 대기/프리징으로 오인됨.
+
+### 3. 해결책 (Resolution)
+1. **`FullChainSystemTests.cs` 동시성 및 진단 내구성 강화**:
+   * `[Fact(Timeout = 10000)]` 10초 타임아웃 속성 부여.
+   * 500ms 하드코딩 루프를 `WaitForConditionAsync` (최대 5초 적응형 폴링 및 실패 컨텍스트 출력)로 교체.
+   * `try ... finally` 블록을 구성하여 `req1.Complete()`, `req2.Complete()`, `cts.Cancel()`, `await Task.WhenAll(task1, task2)`를 통해 모든 백그라운드 태스크의 완벽한 생명주기 회수 보장.
+   * `MockAsyncStreamReader<T>.Complete()`를 멱등한 `ChannelWriter.TryComplete()`로 수정하여 중복 채널 닫힘 예외 방지.
+   * 단계별(1~5단계) 상세 진단 로깅(`_output.WriteLine`) 탑재.
+2. **`AutonomousHunterAgentTests.cs` Live 테스트 방어 및 가시성 개선**:
+   * `agent.IsOnlineGemini`를 검증하여 로컬 인증 정보 부재 시 안전하게 건너뛰도록 방어 가드 장착.
+   * `[Fact(Timeout = 300000)]` 5분 타임아웃 부여 및 각 시나리오별 실시간 진행 상황 및 예외 출력(`try-catch`).
+   * 수사 결과 상세 내역(Trace, Thought, Verdict)을 Assertion 전에 선제 출력하도록 순서 재정렬.
+3. **규약 표준화 및 테스트 가이드 문서화**:
+   * `[`.agents/AGENTS.md`](../../../Phalanx/.agents/AGENTS.md)` 및 `[`Phalanx/README.md`](../../../Phalanx/README.md)`에 Fast QA 단위 테스트 커맨드(`--filter "Category=Unit"`, 2.8s)와 Live 클라우드 벤치마크 커맨드(`--filter "Category=Live" --logger "console;verbosity=normal"`)를 공식 분리 명시.
+4. **검증**:
+   * `dotnet build Phalanx.sln -c Release` ➔ Exit Code 0 (경고 0, 오류 0).
+   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 총 46개 단위 테스트 전원 통과 (2.8초 소요, Exit Code 0).
+   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build` ➔ 총 51개 전체 테스트(Live 벤치마크 포함) 전원 통과 (Exit Code 0).
 
 
