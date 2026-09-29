@@ -46,22 +46,6 @@ related:
 
 ---
 
-## 2026-09-10: [Resolved] 원자적 프로세스 동결 엔진(NtSuspendProcess) 24μs 집행 및 폴백 체계
-
-### 1. 현상 (Symptom)
-* 기존 Win32 `CreateToolhelp32Snapshot` + `SuspendThread` 스레드 순회 방식은 스냅샷 생성 및 스레드 오픈 순회 과정에서 수십 ms의 지연이 발생(약 35ms 계측).
-* 순회 도중 타깃 악성 프로세스가 신규 워커 스레드를 즉각 분기(`CreateThread`)하여 페이로드를 실행하고 탈출할 수 있는 미세한 동시성 레이스 컨디션(Race Window) 취약점 존재.
-
-### 2. 원인 (Root Cause)
-* Win32 공개 API군에는 단일 호출로 프로세스 내 모든 스레드를 일괄 정지시키는 표준 인터페이스가 부재하여, 유저모드 스레드 열거 순회 방식에 의존함.
-
-### 3. 해결책 (Resolution)
-1. `ProcessActuator`에 `ntdll.dll`의 미공개 커널 네이티브 API `NtSuspendProcess` 및 `NtResumeProcess`를 동적으로 바인딩하여 1순위 원자적(Atomic) 동결 파이프라인 구축.
-2. 동결 소요 시간이 기존 35,281μs(~35ms)에서 23μs(마이크로초, 1000배 이상 단축)로 단축되어 스레드 탈출 레이스 윈도우 원천 차단.
-3. 권한 부족, 특정 OS 비호환 환경 또는 결함 발생 시 즉시 기존 `Toolhelp32` 방식으로 자동 후퇴(Graceful Fallback)하는 2중 방어선 구현.
-
----
-
 ## 2026-09-10: [Resolved] EtwKernelCollector::Start() 동시성 레이스 컨디션 해결 및 원자적 CAS 적용
 
 ### 1. 현상 (Symptom)
@@ -241,8 +225,6 @@ related:
    * `SendCommandAsync` 실행 시 살아있는 모든 스트림으로 완화 명령을 브로드캐스팅하고 죽은 스트림은 안전하게 제거.
 2. **Kestrel HTTP/2 킵얼라이브 활성화 (`Program.cs`)**:
    * `KeepAlivePingDelay = 30s`, `KeepAlivePingTimeout = 15s`, `KeepAliveTimeout = 5분`을 명시하여 장기 유휴 gRPC 세션의 무중단 연결 유지 보장.
-3. **기존 센서 프로세스 감지 시 이벤트 리스너 바인딩 (`SensorProcessController.cs`)**:
-   * 이미 외부에서 실행 중이던 `Phalanx.Sensor` 프로세스를 감지했을 때도 `EnableRaisingEvents = true` 및 `Exited` 핸들러를 등록하여 비정상 종료 시 가동 상태 플래그가 정확히 동기화되도록 보강.
 
 ---
 
@@ -255,36 +237,34 @@ related:
 ### 2. 원인 (Root Cause)
 1. **수사 파이프라인 트리거 조건의 단일화 (`PhalanxGrpcService.cs`)**:
    * 기존 gRPC 서비스의 텔레메트리 루프는 `if (ev.IsSuspended)` 조건문만 검사하여 동결된 회색지대 프로세스만 `AutonomousHunterAgent.InvestigateThreatAsync`로 라우팅하고 있었음.
-   * C++ 로컬 룰 엔진에 의해 즉각 사살된 이벤트는 이미 종료되었으므로 `IsSuspended = false`, `IsTerminated = true`, `Lifecycle = LIFECYCLE_TERMINATED` 상태로 인입됨.
-   * 이로 인해 C# 에이전트 수사관 및 관제 UI 브리지로 사건 통지가 도달하지 못함.
-2. **사살 후 역전송 불필요 제약과의 결합**:
-   * 이미 C++ 센서가 프로세스를 사살했기 때문에 C#에서 센서로 `MitigationCommand`를 다시 보낼 필요가 없음(오히려 중복 송신 시 오류). 그러나 관제관(SOC) 보고 및 LiteDB 포렌식 아카이빙은 여전히 필수적임.
+   * C++ 로컬 룰 엔진에 의해 즉각 사살된 이벤트는 이미 종료되었으므로 `IsSuspended = false`, `IsTerminated = true`, `Lifecycle = LIFECYCLE_TERMINATED` 상태로 인입되어 사건 통지가 누락됨.
+2. **초고속 사건 레이턴시 절삭 및 DB 스키마 누락**:
+   * 10ms 미만 초고속 사건이 소수점 둘째 자리 초(`:F2` s) 변환으로 인해 `0.00s`로 절삭 표기됨.
+   * `IncidentRecord`에 `ElapsedMs` 필드가 누락되어 앱 재기동 후 과거 카드가 `Investigating...`으로 잘못 복원됨.
 
 ### 3. 해결책 (Resolution)
 1. **현장 사살 즉각 보고 파이프라인 신설 (`AutonomousHunterAgent.HandleReflexKill`)**:
-   * AI ReAct 루프의 수 초 지연을 거치지 않고, 0.08ms 소요시간 레코드와 `LocalRuleEngine` 사살 사유, MITRE ATT&CK T1490 전술을 담은 `IncidentRecord` 및 1단계 `ReActTraceRecord`를 즉각 생성.
-   * LiteDB 영구 저장소(`ForensicArchiveManager.SaveIncident`)에 즉시 적재.
-   * `OnInvestigationCompleted` 이벤트를 트리거하여 `CockpitUiBridge`를 통해 WPF UI 스레드로 마샬링, 관제 콕핏 인시던트 목록에 빨간색 `CRITICAL` / `SECURED` 카드를 즉시 표시.
+   * AI ReAct 루프의 지연 없이 0.08ms 소요시간 레코드, `LocalRuleEngine` 사살 사유, MITRE ATT&CK T1490 전술을 담은 `IncidentRecord`를 즉각 생성하여 LiteDB 영구 적재 및 관제 UI에 `CRITICAL` / `SECURED` 카드로 즉시 표출.
 2. **gRPC 인입 라우팅 분기 보강 (`PhalanxGrpcService.cs`)**:
    * `else if (ev.IsTerminated || ev.Lifecycle == ProcessLifecycle.LifecycleTerminated)` 분기를 추가하여 C++ 현장 사살 수신 시 `_agent.HandleReflexKill(node)`로 직결.
-3. **모의 도구 및 단위 테스트 검증**:
-   * `FullChainSystemTests.cs`의 `TestScenario1_InstantKill_BypassesAiInvestigation`에 포렌식 아카이브 및 인시던트 자동 등록 검증 단계를 추가하여 회귀 방지(26/26 Unit Tests 통과).
-   * `Phalanx.AttackSimulator` 시나리오 2(`vssadmin.exe delete shadows`)의 페이로드를 실제 C++ 센서의 사살 텔레메트리 포맷(`IsSuspended = false, IsTerminated = true, LifecycleTerminated`)으로 동기화.
-4. **적응형 레이턴시(Latency) 포맷터 및 영구 복원 개선 (`IncidentItemViewModel.cs`, `MainViewModel.cs`, `ForensicModels.cs`)**:
-   * 밀리초(`ElapsedMs`)를 무조건 초(`s`) 단위로 변환 후 소수점 둘째 자리(`:F2`)로 포맷팅하여 10ms 미만 초고속 사건이 `0.00s`로 절삭되던 결함 수정 (`80μs (0.08ms, Reflex)` 표기).
-   * 재시작 후 모든 과거 카드가 `Investigating...`으로 초기화되던 원인: `IncidentRecord`에 지연시간 필드가 부재하고 `LoadIncidentsFromDatabase`에서 `ElapsedMs` 바인딩이 누락되어 `0.0`으로 남아있었던 결함.
-   * `IncidentRecord.ElapsedMs` 스키마 필드 추가 및 `traces.Sum(t => t.ElapsedMs)` 복원 파이프라인 구축.
-   * 이미 판결이 종결된 사건(`ACTION_KILL`/`ACTION_RESUME`)은 `ElapsedMs`가 0이더라도 `Investigating...`이 절대 표출되지 않도록 이중 방어.
-5. **현장 사살 후속 대응 런북(Remediation) 정제 (`AutonomousHunterAgent.cs`)**:
-   * 이미 완료된 실행 사실(`사살 완료 (소요시간 0.08ms)`)을 런북에서 완전 제거.
-   * 룰 유형(`vssadmin` 섀도 복사본 무결성 검증, `bcdedit` BCD 부팅 정책 점검, `wbadmin` 백업 카탈로그 감사 등)에 따른 실제 관제관 후속 Action Item으로 세분화.
-6. **수동 개입(Force Terminate / Resume) 버튼 제거 및 관제 UX 단순화 (`MainWindow.xaml`, `MainViewModel.cs`)**:
-   * 이미 C++ 커널 또는 AI 수사관에 의해 종결(`ACTION_KILL`/`ACTION_RESUME`)된 사건에 대해 사후 수동 개입 버튼을 노출하는 논리적 모순 및 관제관 혼선 해소.
-   * 자율 EDR 원칙(Autonomous Execution)에 맞춰 프로세스 강제 종료/재개 버튼 및 불필요한 바인딩 코드를 완전히 제거하고, 향후 실무형 2차 거버넌스 기능(화이트리스트 등록, 포렌식 보고서 복사 등)으로 전환할 수 있도록 UX 정리.
-7. **관제 콕핏 인시던트 검색 필터(`ApplyFilter`) `NullReferenceException` 예외 결함 해결 (`MainViewModel.cs`)**:
-   * 현상: 관제 콕핏 상단 검색창에 키워드 입력 시 `MainViewModel.ApplyFilter()`(줄 340)에서 `NullReferenceException`이 발생하며 콕핏 크래시.
-   * 원인: 과거 사건의 `BlockedIp`, `CommandLine` 등이 null인 상태에서 Null 조건부 연산자 없이 `.Contains()`를 직접 호출하여 발생. 또한 DB 역직렬화 시 null 필드가 뷰모델에 그대로 바인딩됨.
-   * 해결: `TargetImage`, `CommandLine`, `SummaryTitle`, `BlockedIp` 등에 `?.Contains(...) ?? false` 널-세이프 탐색 연산자 적용 및 `LoadIncidentsFromDatabase`에서 `?? string.Empty`로 방어 초기화.
+3. **적응형 레이턴시 포맷터 및 DB 스키마 정규화**:
+   * 10ms 미만 소요시간은 마이크로초 단위(`80μs (0.08ms, Reflex)`)로 적응형 표기.
+   * `IncidentRecord.ElapsedMs` 스키마 필드를 신설하고 영구 복원 파이프라인 구축.
+
+---
+
+## 2026-09-21: [Resolved] 관제 콕핏 인시던트 검색창 키워드 입력 시 NullReferenceException 크래시 결함
+
+### 1. 현상 (Symptom)
+* 관제 콕핏 상단 검색창에 키워드 입력 시 `MainViewModel.ApplyFilter()`에서 `NullReferenceException`이 발생하며 콕핏 애플리케이션 강제 종료.
+
+### 2. 원인 (Root Cause)
+* 과거 사건 기록 중 `BlockedIp`, `CommandLine` 등이 null인 상태에서 Null 조건부 연산자 없이 `.Contains()`를 직접 호출함.
+* LiteDB 역직렬화 시 null 필드가 뷰모델에 그대로 바인딩되어 필터 탐색 시 예외 발생.
+
+### 3. 해결책 (Resolution)
+* `MainViewModel.cs`의 `ApplyFilter()` 내 `TargetImage`, `CommandLine`, `SummaryTitle`, `BlockedIp` 프로퍼티 탐색에 `?.Contains(...) ?? false` 널-세이프 탐색 연산자 적용.
+* `LoadIncidentsFromDatabase`에서 역직렬화 시 null 필드를 `?? string.Empty`로 방어 초기화.
 
 ---
 
@@ -310,9 +290,6 @@ related:
    * `DispatchUI` 헬퍼를 도입하여 `RootNodes`, `AllNodes`, `node.Children` 조작을 UI Dispatcher 스레드로 안전하게 마샬링 (헤드리스/테스트 환경 Null-Safety 보장).
 2. **gRPC 스냅샷 배치 보존 (`PhalanxGrpcService.cs`)**:
    * `batch.ProcessEvents` 중 `LifecycleSnapshot` 이벤트를 `ApplySnapshotBatch(snapshotEvents)`로 통째로 전달하여 단 1회의 Dispatcher 컨텍스트 스위치로 부모-자식 트리 전체를 0초 완결 투영.
-3. **로컬 OS 프로세스 기저 투영 폴백 (`InitializeFromLocalOsSnapshot`)**:
-   * Win32 `CreateToolhelp32Snapshot` P/Invoke를 구현하여, C++ 커널 센서가 연결되기 전(오프라인 상태)이라도 Cockpit 기동 즉시 로컬 PC의 300여 개 전체 프로세스를 즉각 렌더링.
-
 
 ---
 
@@ -381,21 +358,3 @@ related:
     ```
   * 양방향 통로가 정상 개방됨으로써 윈도우 생성 및 렌더링 시 발생하던 `InvalidOperationException` 및 Win32 네이티브 콜백 Fast-fail(`0xc000041d`) 원천 해소.
 
----
-
-## 2026-09-28: [Resolved] WPF XAML MarkupCompile 중간 산출물 파일 I/O 경합으로 인한 솔루션 병렬 빌드 실패(CS2001)
-
-### 1. 현상 (Symptom)
-* 솔루션 단위 빌드(`dotnet build Phalanx.sln`) 시 간헐적으로 `CS2001: ...Views\*.g.cs 소스 파일을 찾을 수 없습니다` 컴파일 오류 발생.
-* 단일 프로젝트 빌드(`dotnet build src/Phalanx.Cockpit/`) 시에는 항상 정상 컴파일됨.
-
-### 2. 원인 (Root Cause)
-* 솔루션 내 `Phalanx.Agent.Tests` 및 `Phalanx.AttackSimulator` 프로젝트가 `Phalanx.Cockpit` 프로젝트(WPF, `<UseWPF>true</UseWPF>`)를 직접 프로젝트 참조함.
-* MSBuild 기본 멀티프로세스 빌드(`/m`) 동작 시 여러 MSBuild 워커 프로세스가 `Phalanx.Cockpit`의 XAML 컴파일 파이프라인(`MarkupCompilePass1` / `MarkupCompilePass2`)을 동시에 트리거함.
-* 중간 산출물 디렉터리(`obj/`)에 `*.g.cs` 파일이 생성되고 덮어쓰여지는 과정에서 파일 잠금 및 삭제 타이밍 레이스 컨디션(I/O Race)이 발생하여 컴파일러가 해당 소스 파일을 읽지 못함.
-
-### 3. 해결책 (Resolution)
-1. **단기 조치 (빌드 파이프라인 직렬화)**:
-   * 솔루션 빌드 시 MSBuild 단일 프로세스/단일 노드 플래그(`-m:1`)를 명시하여 XAML 컴파일 파이프라인 파일 I/O 경합을 원천 차단함.
-2. **장기 아키텍처 개선 (Core 라이브러리 분리 계획)**:
-   * 테스트 및 시뮬레이터 프로젝트가 WPF UI 어셈블리를 직접 참조하지 않도록, EDR 코어 로직(센서 제어, 에이전트 루프, CQRS 프로젝션)을 순수 .NET 9 클래스 라이브러리(`Phalanx.Core`)로 분리하여 의존성을 정규화하는 구조적 개선 로드맵 수립.
