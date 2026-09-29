@@ -427,5 +427,86 @@ related:
 3. **네트워크 포트 유효 범위 가드 적용**:
    * `SensorPort` 저장 및 로드 시 `Math.Clamp(port, 1024, 65535)`를 적용하여 비정상 포트 번호 주입 방어.
 
+---
 
+## 2026-09-29: [Resolved] 환경설정 포렌식 스토리지 카테고리 진단 체계 강화 및 파일 탐색/초기화 파이프라인 구축
+
+### 1. 현상 (Symptom)
+* 환경설정(`SettingsWindow`) '포렌식 스토리지' 탭에서 LiteDB 파일명(`DatabasePath`)과 보고서 저장 경로(`ReportExportPath`)가 단순 텍스트 박스로만 제공되어 경로 타이핑 오류 위험이 상존함.
+* 상대 경로 기반으로 동작하여 실제 물리적 디스크 절대 경로, 파일 존재 여부, DB 용량(KB/MB)을 관제관이 파악할 수 없었으며, 누적된 테스트 인시던트를 안전하게 비우거나 탐색기로 열어보는 운영 편의 기능이 부재함.
+
+### 2. 원인 (Root Cause)
+* 초기 프로토타입 단계에서 DB 연결 스트링과 디렉터리 경로만 바인딩하고, 파일/폴더 선택 대화상자(`OpenFileDialog`, `OpenFolderDialog`), 물리 경로 역추적 및 크기 계산 로직이 ViewModel에 누락되었음.
+* `ForensicArchiveManager`에 단일 인시던트 추가/조회만 구현되어 있고 대량 인시던트 일괄 원자적 삭제(`ClearAllIncidents`) API가 부재했음.
+
+### 3. 해결책 (Resolution)
+1. **파일 및 폴더 탐색 대화상자 연동**:
+   * `BrowseDatabaseCommand`(`OpenFileDialog`, `*.db`) 및 `BrowseReportExportCommand`(.NET 9 네이티브 `OpenFolderDialog`) 구현.
+   * `OpenReportFolderCommand` 및 `OpenDatabaseFolderCommand`(`explorer.exe /select`)를 통해 윈도우 파일 탐색기 즉시 팝업 지원.
+2. **물리적 절대 경로 및 실시간 용량 진단 카드 구현**:
+   * 실행 환경(`Directory.GetCurrentDirectory()` vs `AppContext.BaseDirectory`) 기준 실제 DB 파일 존재 여부를 동적 추적(`DatabaseFileExists`).
+   * 파일 크기를 적응형(`Bytes`, `KB`, `MB`)으로 계산하여 표출(`DatabaseFileSizeText`).
+3. **인시던트 원자적 일괄 삭제 및 UI 동기화 (`ClearAllIncidents`)**:
+   * `ForensicArchiveManager.ClearAllIncidents()`를 신설하여 `_incidents.DeleteAll()`과 `_traces.DeleteAll()`을 단일 트랜잭션(`BeginTrans` ➔ `Commit`)으로 안전 집행.
+   * `CockpitUiBridge.IncidentsDatabaseCleared` 이벤트를 신설하여 삭제 즉시 관제 콘솔(`MainViewModel.LoadIncidentsFromDatabase`)이 실시간 리프레시되도록 반응형 파이프라인 결합.
+
+---
+
+## 2026-09-29: [Resolved] 환경설정 시스템 정보 카테고리 내 개발자 사족/내부 구현 세부사항 제거 및 엔터프라이즈 명세 체계화
+
+### 1. 현상 (Symptom)
+* 환경설정(`SettingsWindow`) '시스템 정보' 탭에 표출되던 사양이 내부 개발 단계 용어(`Phase 5`), 컴파일러/언어 버전(`C++20`, `C# 13`), 하드코딩된 포트(`:50051`), 내부 알고리즘/자료구조 명칭(`DAG`, `Multi-Turn ReAct Cycle`) 등 관제관 및 사용자 관점에서 불필요한 사족과 개발자 지향적 텍스트로 구성되어 있었음.
+* 또한 사용자가 환경설정에서 변경한 AI 모델/인증 방식, 센서 IPC 엔드포인트, DB 경로가 시스템 정보 탭에 동적으로 연동되지 않고 정적 문자열로 고정되어 설정 불일치가 발생함.
+
+### 2. 원인 (Root Cause)
+* 초기 시스템 정보 페이지가 아키텍처 스펙 메모 용도로 단일 Border 내에 정적 텍스트 5줄로 작성된 채 방치되었음.
+* 런타임 호스트 OS 환경(OS 버전, 프로세스 아키텍처) 및 .NET CLR 런타임 정보, 실시간 활성 컴포넌트(AI 공급자, 센서 주소, 포렌식 DB 절대 경로)를 제공하는 데이터 바인딩 프로퍼티가 ViewModel에 체계화되지 않았음.
+
+### 3. 해결책 (Resolution)
+1. **개발자 사족 및 내부 세부 구현체 명칭 전면 제거**:
+   * 로드맵 스프린트 표기(`(Phase 5)`), 프로그래밍 언어 표준(`C++20`, `C# 13`), 자료구조 명칭(`DAG`) 및 내부 설계용 문구(`시스템 아키텍처`) 등을 사용자 친화적 엔터프라이즈 명세로 정제 및 불필요 항목 완전 삭제.
+   * `제품 및 솔루션 사양` 카드(명칭, 버전, 라이선스 에디션)와 `호스트 플랫폼 및 활성 런타임 환경` 카드의 2개 그룹 카드로 시각적 체계화.
+2. **동적 런타임 환경 바인딩 구현**:
+   * `ProductVersionText`: 솔루션 버전 표출 (`Phalanx EDR v0.5.0-preview`).
+   * `HostPlatformText`: `RuntimeInformation.OSDescription` 및 `ProcessArchitecture` 기반 실행 호스트 정보 제공.
+   * `DotNetRuntimeText`: `.NET Environment.Version` 기반 CLR 런타임 버전 제공.
+   * `ActiveAiModelText`: 클라우드 인증 모드(Vertex AI / AI Studio) 및 선택된 모델명 실시간 동적 포맷팅.
+   * `ActiveSensorEndpointText`: 설정된 센서 호스트 및 포트(`SensorHost:SensorPort`) 동적 바인딩.
+   * `ActiveDatabaseText`: 실제 물리적 디스크 절대 경로(`DatabaseResolvedPath`)와 실시간 동기화.
+3. **단위 테스트 및 빌드 검증**:
+   * `SettingsViewModelTests.TestSettingsViewModel_SystemInformationObservables`를 추가하여 속성 초기화 및 설정 변경 시 실시간 반영 여부 검증 (35/35 통과, Exit Code 0).
+
+---
+
+## 2026-09-29: [Resolved] 심층 포렌식 수사실에서 프로세스 트리 포커싱 시 Foreground DependencyProperty.UnsetValue 예외 크래시
+
+### 1. 현상 (Symptom)
+* 심층 포렌식 분석(`InvestigationView`) 화면에서 '전역 프로세스 트리에서 위치 확인 ➔'(`FocusProcessInGraphCommand`) 버튼 클릭 시 WPF 렌더링 파이프라인에서 크래시 발생:
+  ```text
+  System.InvalidOperationException: '{DependencyProperty.UnsetValue}'은(는) 'Foreground' 속성의 유효한 값이 아닙니다.
+  HResult=0x80131509
+  ```
+
+### 2. 원인 (Root Cause)
+* `FocusProcessInGraph` 실행 시 관제 뷰가 `ProcessGraphView`로 전환되며 타깃 프로세스 노드가 `SelectedProcessNode`로 지정됨.
+* `ProcessGraphView.xaml` 내 세 곳에서 WPF 의존성 프로퍼티(DependencyProperty) 스타일링 안티패턴이 존재함:
+  1. **관리자 권한 수준 TextBlock**:
+     * `Foreground="{StaticResource TextSecondaryBrush}"`가 TextBlock 태그의 로컬 속성으로 지정된 상태에서, Style 내부에는 기본 Foreground Setter가 없고 `DataTrigger(TokenElevationType == 2)`에만 `<Setter Property="Foreground" Value="{StaticResource DotCriticalBrush}" />`가 지정됨.
+     * 노드가 선택되어 트리거가 비활성화/해제되거나 조건 평가 시, Style에 기본 Setter가 없으므로 WPF는 Style의 기본값인 `DependencyProperty.UnsetValue`를 복원하려고 시도하여 Brush 타입 검증에 실패함.
+  2. **ListViewItem ItemContainerStyle**:
+     * `ControlTemplate.Triggers` 내부의 `Trigger(IsSelected == True)`에 `TargetName` 없이 `<Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />`가 선언되어 템플릿 부모인 `ListViewItem`의 Foreground를 직접 변경함.
+     * 그러나 `ListViewItem` Style 자체에 기본 Foreground Setter가 정의되어 있지 않아 선택 해제 시 `DependencyProperty.UnsetValue` 할당 충돌이 발생함.
+  3. **동결/사살 뱃지 TextBlock**:
+     * Style 내부에 기본 `Text` 및 `Foreground` Setter가 누락되어 비동결/비사살 일반 프로세스 노드 렌더링 시 잠재적 UnsetValue 복원 위험 존재.
+
+### 3. 해결책 (Resolution)
+1. **관리자 권한 수준 TextBlock Style 리팩토링**:
+   * 로컬 `Foreground` 속성을 제거하고 `<Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />`를 Style 기본 Setter로 이동.
+   * `TokenElevationType == 2` 및 `TokenElevationType == 3` DataTrigger 모두에 명시적 `Foreground` 브러시를 보장하여 UnsetValue 전파 원천 차단.
+2. **`ListViewItem` Foreground 수명주기 안정화**:
+   * `ListViewItem` Style에 기본 `<Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />`를 명시하고, 내부 템플릿 트리거의 중복 부모 Foreground 변경 Setter를 제거하여 `TargetName="Bd"` 배경만 제어하도록 격리.
+3. **상태 뱃지 기본 브러시 보장**:
+   * 동결/사살 뱃지 Style에 기본 `<Setter Property="Text" Value="" />` 및 `<Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />`를 명시.
+4. **단위 테스트 검증**:
+   * `ProcessTreeProjectionTests.TestMainViewModel_FocusProcessInGraphCommand`를 추가하여 `FocusProcessInGraphCommand` 실행 시 뷰 전환, 타깃 PID 탐색, 권한 레벨(TokenElevationType = 2) 노드 정상 바인딩 완결성 검증 (36/36 통과, Exit Code 0).
 
