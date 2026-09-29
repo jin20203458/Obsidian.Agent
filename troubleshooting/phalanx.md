@@ -1,444 +1,352 @@
 ---
 description: >-
-  Phalanx C++ ?쇱꽌 諛?C# 肄붿뼱 ?몃윭釉붿뒋???곕턿. Phalanx ?꾨줈?앺듃 踰꾧렇, ETW ?섏쭛 ?ㅻ쪟 諛?gRPC ?μ븷 諛쒖깮 ??李몄“.
+  Phalanx C++ 센서 및 C# 코어 트러블슈팅 런북. Phalanx 프로젝트 버그, ETW 수집 오류 및 gRPC 장애 발생 시 참조.
 related:
   - ../README.md
   - ../Phalanx/README.md
 ---
 # Phalanx Troubleshooting
 
-蹂?臾몄꽌??Phalanx EDR ?붾（??C++ ?쇱꽌, gRPC ?ㅽ듃由щ컢, C# 肄붿뼱 諛?AI ?먯씠?꾪듃) 媛쒕컻 諛??ㅼ쟾 ?댁쁺 以?諛쒖깮?섎뒗 ?쒖뒪???덉쇅 ?꾩긽怨??닿껐 諛⑹븞??湲곕줉?섎뒗 以묒븰 湲곗닠 ?곕턿?낅땲??
+본 문서는 Phalanx EDR 솔루션(C++ 센서, gRPC 스트리밍, C# 코어 및 AI 에이전트) 개발 및 실전 운영 중 발생하는 시스템 예외 현상과 해결 방안을 기록하는 중앙 기술 런북입니다.
 
 ---
 
-## ?ъ쟾 二쇱쓽?ы빆 諛??뚮젮吏?湲곗닠???쒖빟 (Known Constraints)
+## 사전 주의사항 및 알려진 기술적 제약 (Known Constraints)
 
-### 1. ETW 而ㅻ꼸 ?몄뀡 ?앹꽦 沅뚰븳 (Administrator Elevation)
-* **?꾩긽**: 愿由ъ옄 沅뚰븳???녿뒗 ?쇰컲 ?ъ슜??沅뚰븳?쇰줈 ?쇱꽌 ?ㅽ뻾 ??`krabs-etw` ?몄뀡 ?앹꽦 ?④퀎?먯꽌 `ACCESS_DENIED (0x5)` ?덉쇅 諛쒖깮.
-* **??묒콉**: `Phalanx.Sensor.exe`??留ㅻ땲?섏뒪???뚯씪(`app.manifest`)??`requireAdministrator` ?ㅽ뻾 ?섏????꾩닔 紐낆떆.
+### 1. ETW 커널 세션 생성 권한 (Administrator Elevation)
+* **현상**: 관리자 권한이 없는 일반 사용자 권한으로 센서 실행 시 `krabs-etw` 세션 생성 단계에서 `ACCESS_DENIED (0x5)` 예외 발생.
+* **대응책**: `Phalanx.Sensor.exe`의 매니페스트 파일(`app.manifest`)에 `requireAdministrator` 실행 수준을 필수 명시.
 
-### 2. ?꾨줈?몄뒪 ?먯옄???숆껐 ?곕뱶??諛⑹뼱 諛??몄씠?꾪떚 ?뚯튂??(Safety Watchdog)
-* **?꾩긽**: ?源??꾨줈?몄뒪媛 ?щ━?곗뺄 ?뱀뀡?대굹 ntdll 濡쒕뜑 ??`LdrpLoaderLock`)??伊먭퀬 ?덈뒗 ?곹깭?먯꽌 鍮꾨룞湲??숆껐 ?몄텧 ???쒖뒪???꾩뿭 由ъ냼??寃쏀빀 ?먮뒗 ?곕뱶??諛쒖깮 媛?μ꽦.
-* **??묒콉**:
-  * ?숆껐 API(`ntdll!NtSuspendProcess` 諛??대갚 `SuspendThread`)???먯껜 ??꾩븘???뚮씪誘명꽣媛 ?놁쑝誘濡? ?쇱꽌 ?대???鍮꾨룞湲??덉쟾 ??대㉧(Safety Watchdog)瑜??댁쁺?섏뿬 怨좎븘 ?숆껐(Orphan Freeze) 媛먯? ???먮룞 蹂듦뎄(`NtResumeProcess`).
-  * **??꾩븘??遺꾪븷 援ъ“**: 湲곕낯 10,000ms(10珥? C# 肄붿뼱 ?섑듃鍮꾪듃 ?뺤씤?? + AI ?섏궗 媛쒖떆 ????1??50,000ms(50珥? ?곗옣 ?곗폆(`ACTION_EXTEND_TIMEOUT`) 諛쒖넚?쇰줈 珥?60珥??섏궗 ?덉궛 ?뺣낫.
-  * **?덈? ?곹븳??(Hard Ceiling)**: ?곕뱶??諛⑹?瑜??꾪빐 ?곗옣? 理쒕? 1?뚮줈 ?꾧꺽 ?쒗븳?섎ŉ, 理쒕? 60珥?珥덇낵 ???먮룞?쇰줈 `NtResumeProcess`(?대갚 ??`ResumeThread`)瑜?媛뺤젣 吏묓뻾.
-  * C# ?곸쐞 ??꾩븘??CTS???듭떊 ?덉씠??李⑤떒???꾪빐 50,000ms(50珥?濡??ㅼ젙.
-
----
-
-## 2026-09-08: [Resolved] Windows Winsock/NOMINMAX 異⑸룎 諛?MSVC UAC 留ㅻ땲?섏뒪??留곹겕 ?먮윭
-
-### 1. ?꾩긽 (Symptom)
-* `ws2ipdef.h` / `ws2tcpip.h` 而댄뙆????`error C2011: 'ip_mreq': 'struct' type redefinition`, `error C2065: 'PADDRINFOA'`, `error C3861: 'WSAIoctl'` ??100??嫄댁쓽 Winsock ?щ낵 異⑸룎 諛쒖깮.
-* `grpcpp/impl/generic_serialize.h` 諛?`grpc/event_engine/memory_request.h`?먯꽌 Windows 留ㅽ겕濡?`min`/`max` 媛꾩꽠?쇰줈 援щЦ ?먮윭 諛쒖깮.
-* `Phalanx.Sensor.exe` 留곹겕 ??`manifest authoring error c1010001: Values of attribute "level" not equal in different manifest snippets (LNK1327)` 諛쒖깮.
-
-### 2. ?먯씤 (Root Cause)
-1. `windows.h`媛 `winsock2.h`蹂대떎 癒쇱? ?명겢猷⑤뱶?섏뼱 援ы삎 `winsock.h` (Winsock 1)? `winsock2.h` (Winsock 2)媛 以묐났 濡쒕뱶??
-2. `NOMINMAX` 諛?`UNICODE` / `_UNICODE` 留ㅽ겕濡?遺?щ줈 `std::min`/`std::max` ?뚭눼 諛?`krabs-etw`??`KERNEL_LOGGER_NAME` (`TEXT(...)`) ??대뱶 臾몄옄??遺덉씪移?諛쒖깮.
-3. CMake??`target_sources`??`app.manifest`瑜?吏곸젒 ?꾨떖?섎㈃??MSVC 湲곕낯 ?앹꽦 留ㅻ땲?섏뒪??`asInvoker`)? 蹂묓빀 異⑸룎 諛쒖깮.
-
-### 3. ?닿껐梨?(Resolution)
-1. 猷⑦듃 `CMakeLists.txt`???꾩뿭 而댄뙆???뺤쓽 `add_compile_definitions(UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00)` ?곸슜.
-2. 紐⑤뱺 C++ ?ㅻ뜑?먯꽌 `<windows.h>` ?몄텧 ??`<winsock2.h>`? `<ws2tcpip.h>`瑜??좏뻾 ?명겢猷⑤뱶?섎룄濡?援ъ“??
-3. CMake 留곹겕 ?뚮옒洹몄뿉 MSVC ?ㅼ씠?곕툕 UAC ?꾨쿋??吏?쒖뼱 `/MANIFEST:EMBED /MANIFESTUAC:"level='requireAdministrator' uiAccess='false'"` ?곸슜?섏뿬 `mt.exe` 異⑸룎 ?놁씠 PE 諛붿씠?덈━??沅뚰븳 ?꾨쿋???꾨즺.
+### 2. 프로세스 원자적 동결 데드락 방어 및 세이프티 워치독 (Safety Watchdog)
+* **현상**: 타깃 프로세스가 크리티컬 섹션이나 ntdll 로더 락(`LdrpLoaderLock`)을 쥐고 있는 상태에서 비동기 동결 호출 시 시스템 전역 리소스 경합 또는 데드락 발생 가능성.
+* **대응책**:
+  * 동결 API(`ntdll!NtSuspendProcess` 및 폴백 `SuspendThread`)는 자체 타임아웃 파라미터가 없으므로, 센서 내부에 비동기 안전 타이머(Safety Watchdog)를 운영하여 고아 동결(Orphan Freeze) 감지 시 자동 복구(`NtResumeProcess`).
+  * **타임아웃 분할 구조**: 기본 10,000ms(10초, C# 코어 하트비트 확인용) + AI 수사 개시 시 단 1회 50,000ms(50초) 연장 티켓(`ACTION_EXTEND_TIMEOUT`) 발송으로 총 60초 수사 예산 확보.
+  * **절대 상한선 (Hard Ceiling)**: 데드락 방지를 위해 연장은 최대 1회로 엄격 제한되며, 최대 60초 초과 시 자동으로 `NtResumeProcess`(폴백 시 `ResumeThread`)를 강제 집행.
+  * C# 상위 타임아웃 CTS는 통신 레이스 차단을 위해 50,000ms(50초)로 설정.
 
 ---
 
-## 2026-09-10: [Resolved] ?먯옄???꾨줈?몄뒪 ?숆껐 ?붿쭊(NtSuspendProcess) 24關s 吏묓뻾 諛??대갚 泥닿퀎
-
-### 1. ?꾩긽 (Symptom)
-* 湲곗〈 Win32 `CreateToolhelp32Snapshot` + `SuspendThread` ?ㅻ젅???쒗쉶 諛⑹떇? ?ㅻ깄???앹꽦 諛??ㅻ젅???ㅽ뵂 ?쒗쉶 怨쇱젙?먯꽌 ?섏떗 ms??吏?곗씠 諛쒖깮(??35ms 怨꾩륫).
-* ?쒗쉶 ?꾩쨷 ?源??낆꽦 ?꾨줈?몄뒪媛 ?좉퇋 ?뚯빱 ?ㅻ젅?쒕? 利됯컖 遺꾧린(`CreateThread`)?섏뿬 ?섏씠濡쒕뱶瑜??ㅽ뻾?섍퀬 ?덉텧?????덈뒗 誘몄꽭???숈떆???덉씠??而⑤뵒??Race Window) 痍⑥빟??議댁옱.
-
-### 2. ?먯씤 (Root Cause)
-* Win32 怨듦컻 API援곗뿉???⑥씪 ?몄텧濡??꾨줈?몄뒪 ??紐⑤뱺 ?ㅻ젅?쒕? ?쇨큵 ?뺤??쒗궎???쒖? ?명꽣?섏씠?ㅺ? 遺?ы븯?? ?좎?紐⑤뱶 ?ㅻ젅???닿굅 ?쒗쉶 諛⑹떇???섏〈??
-
-### 3. ?닿껐梨?(Resolution)
-1. `ProcessActuator`??`ntdll.dll`??誘멸났媛?而ㅻ꼸 ?ㅼ씠?곕툕 API `NtSuspendProcess` 諛?`NtResumeProcess`瑜??숈쟻?쇰줈 諛붿씤?⑺븯??1?쒖쐞 ?먯옄??Atomic) ?숆껐 ?뚯씠?꾨씪??援ъ텞.
-2. ?숆껐 ?뚯슂 ?쒓컙??湲곗〈 35,281關s(~35ms)?먯꽌 23關s(留덉씠?щ줈珥? 1000諛??댁긽 ?⑥텞)濡??⑥텞?섏뼱 ?ㅻ젅???덉텧 ?덉씠???덈룄???먯쿇 李⑤떒.
-3. 沅뚰븳 遺議? ?뱀젙 OS 鍮꾪샇???섍꼍 ?먮뒗 寃고븿 諛쒖깮 ??利됱떆 湲곗〈 `Toolhelp32` 諛⑹떇?쇰줈 ?먮룞 ?꾪눜(Graceful Fallback)?섎뒗 2以?諛⑹뼱??援ы쁽.
-
----
-
-## 2026-09-10: [Resolved] EtwKernelCollector::Start() ?숈떆???덉씠??而⑤뵒???닿껐 諛??먯옄??CAS ?곸슜
-
-### 1. ?꾩긽 (Symptom)
-* `EtwKernelCollector::Start()`瑜?蹂듭닔???ㅻ젅?쒓? ?숈떆???몄텧??寃쎌슦, ?대? 媛??以묒씤 ?ㅻ젅?쒓? ??뼱?뚯썙吏硫?C++ ?고??꾩뿉 ?섑빐 `std::terminate()` ?щ옒?쒓? ?좊컻?????덈뒗 ?좎옱??痍⑥빟??議댁옱.
-* ?ㅻ젅??湲곕룞 以??쒖뒪???먯썝 遺議??덉쇅(`std::system_error` ?? 諛쒖깮 ???곹깭 ?뚮옒洹?濡ㅻ갚 濡쒖쭅??遺?ы븯??`running`??`true`濡?怨좎갑?섎뒗 ?곹깭 遺덉씪移?諛쒖깮.
-
-### 2. ?먯씤 (Root Cause)
-* 湲곗〈 肄붾뱶媛 `running.load()`瑜??뺤씤?섍퀬 `running.store(true)`瑜??몄텧?섎뒗 ?꾪삎?곸씤 Check-Then-Act (TOCTOU) 鍮꾩썝?먯쟻 ?곹깭 ?꾩씠 援ъ“濡??묒꽦?섏뼱 ?덉뿀??
-
-### 3. ?닿껐梨?(Resolution)
-1. `impl_->running.compare_exchange_strong(expected, true, std::memory_order_acq_rel)`???곸슜?섏뿬 蹂듭닔???ㅻ젅?쒓? ?숈떆 吏꾩엯?섎뜑?쇰룄 ?ㅼ쭅 ?섎굹???ㅻ젅?쒕쭔 `false -> true` ?꾩씠???깃났?섎룄濡??먯옄???곹깭 ?꾩씠 蹂댁옣.
-2. ?ㅻ젅???앹꽦遺瑜?`try-catch`濡?媛먯떥 `std::thread` ?앹꽦 ?ㅽ뙣 ??`impl_->running.store(false, std::memory_order_release)`濡??먯옄??濡ㅻ갚 ?섑뻾 諛?`false` 諛섑솚?섎룄濡??덉쇅 ?덉쟾???뺣낫.
-
----
-
-## 2026-09-14: [Resolved] ProcessTree PID ?ъ궗?????좊졊 遺紐?Ghost Parent) 議깅낫 ?쒓끝 諛⑹뼱
-
-### 1. ?꾩긽 (Symptom)
-* ?덈룄??OS??醫낅즺???꾨줈?몄뒪??PID瑜?鍮좊Ⅸ ?띾룄濡??ы븷?뱁븿.
-* 遺紐??꾨줈?몄뒪 A(PID: 1000)媛 ?먯떇 B(PID: 2000, `ppid = 1000`)瑜??앹꽦????A媛 癒쇱? 醫낅즺?섍퀬 ?먯떇 B??怨꾩냽 ?ㅽ뻾 以묒씤 ?곹깭?먯꽌, OS媛 ?숈씪??PID 1000???꾪? 臾닿??????꾨줈?몄뒪 C???ы븷?뱁븯??寃쎌슦 諛쒖깮.
-* ?대븣 C++ `ProcessTree`媛 PID 1000 ?몃뱶瑜????꾨줈?몄뒪 C濡???뼱?곕㈃, 湲곗〈 ?먯떇 B??`ppid`媛 ?ъ쟾??1000??媛由ы궎怨??덉뼱 B媛 ?됰슧?????꾨줈?몄뒪 C瑜??먭린 遺紐⑤줈 ?ㅼ씤?섍퀬 議깅낫瑜?嫄곗뒳???щ씪媛???좊졊 遺紐?Ghost Parent) 議깅낫 ?쒓끝 諛쒖깮.
-
-### 2. ?먯씤 (Root Cause)
-* ?덈룄??OS 而ㅻ꼸? 遺紐??꾨줈?몄뒪媛 醫낅즺?섏뼱??怨좎븘 ?먯떇 ?꾨줈?몄뒪??`ParentProcessId`瑜?0?쇰줈 ?ъ꽕?뺥빐二쇱? ?딆쓬 (二쎌? 遺紐?PPID ?곴뎄 蹂댁〈).
-* 湲곗〈 `ProcessTree::InsertOrOverwriteNodeInternal`? PID ?ъ궗?????댁쟾 ?몃뱶??遺紐?`old_ppid`)???留곹겕留??덈떒?섍퀬, ?댁쟾 ?몃뱶媛 ?녹븯???먯떇??`it->second.children_pids`)??遺紐?留곹겕(`child.ppid = 0`) ?덈떒 泥섎━媛 ?꾨씫?섏뼱 ?덉뿀??
-
-### 3. ?닿껐梨?(Resolution)
-1. **利됯컖 ?ъ궗????뼱?곌린 (`InsertOrOverwriteNodeInternal`)**: PID ??뼱?곌린 吏곸쟾, ?댁쟾 ?꾨줈?몄뒪???먯떇 ?몃뱶?ㅼ쓣 ?쒗쉶?섏뿬 `child.ppid == pid`??寃쎌슦 `ppid = 0`?쇰줈 ?ъ꽕?뺥븯???됰슧?????꾨줈?몄뒪濡쒖쓽 ?좊졊 ?낆뼇 ?먯쿇 李⑤떒.
-2. **10,000媛??곹븳???곴뎄 ?댁텧 (`EvictOldestTombstoneInternal`)**: ?곗뒪???몃뱶媛 硫붾え由ъ뿉???꾩쟾????젣(Evict)???뚮룄, ?곹뼢 留곹겕(遺紐⑥쓽 `children_pids`?먯꽌 ?섎? ?쒓굅)肉먮쭔 ?꾨땲???섑뼢 留곹겕(?먯떇 ?몃뱶?ㅼ쓽 `ppid = 0` 怨좎븘 泥섎━)瑜??묐갑?μ쑝濡??먯옄???덈떒.
-3. **C# ProcessTreeProjectionManager ?곕룞**: C# 痢≪뿉?쒕룄 `LIFECYCLE_START` ?섏떊 ???숈씪 PID???쒖꽦 ?몃뱶媛 議댁옱?섎㈃ ?댁쟾 ?몃뱶瑜?利됱떆 Tombstone 泥섎━?섍퀬 ?좉퇋 GUID ?몃뱶濡??泥?
-
----
-
-## 2026-09-14: [Resolved] CQRS ?꾨줈?앹뀡 ?뚯씠?꾨씪??肄쒕뱶 ?ㅽ???諛?珥덇린 ?ㅻ깄???몃뱶?곗씠??
-### 1. ?꾩긽 (Symptom)
-* C# Cockpit??媛?숇릺?덉쓣 ??C++ ?쇱꽌濡쒕????ㅼ떆媛?利앸텇 ?대깽?몃쭔 ?섏떊??寃쎌슦, ?쇱꽌 湲곕룞 ?꾩씠??Cockpit 湲곕룞 ?꾨????ㅽ뻾 以묒씠???꾨줈?몄뒪(??300??媛???怨꾩링 愿怨꾨? ?뚯? 紐삵빐 ?먯떇 ?꾨줈?몄뒪 ?몄엯 ??議깅낫 異붿쟻(`GetAncestry`)??猷⑦듃?먯꽌 ?⑥젅?섎뒗 肄쒕뱶 ?ㅽ???臾몄젣 諛쒖깮.
-* C++ `EtwKernelCollector`?먯꽌 ?꾨줈?몄뒪 醫낅즺 ?대깽??`ProcessStop`) 諛쒖깮 ???대? ?듭?踰꾩뿉寃뚮쭔 ?듭??섍퀬 gRPC ???몄떆媛 ?꾨씫?섏뼱, C# ?꾨줈?앹뀡 ?몃━媛 醫낅즺???꾨줈?몄뒪瑜??몄??섏? 紐삵븯怨??곴뎄 ?쒖꽦 ?곹깭濡?諛⑹튂?섎뒗 硫붾え由??꾩닔 議댁옱.
-
-### 2. ?먯씤 (Root Cause)
-* 1?④퀎 ?꾨줈?좎퐳 ?ㅺ퀎 ??`ProcessEvent`???꾨줈?몄뒪 ?앸챸二쇨린 援щ텇???놁뿀怨? ?쇱꽌-?대씪?댁뼵??媛?gRPC ?ㅽ듃由??곌껐 ??珥덇린 ?곹깭 ?숆린???꾨줈?좎퐳 洹쒖빟??遺?ы뻽??
-
-### 3. ?닿껐梨?(Resolution)
-1. **`phalanx.proto` ?앸챸二쇨린 諛?GUID ?뺤옣**: `ProcessLifecycle` enum 異붽?(`LIFECYCLE_SNAPSHOT`, `LIFECYCLE_START`, `LIFECYCLE_STOP`, `LIFECYCLE_SUSPENDED`, `LIFECYCLE_TERMINATED`).
-2. **C++ `EtwKernelCollector`??`ProcessStop` ???몄떆 ?곕룞**: 而ㅻ꼸 `ProcessStop` ?섏떊 ??`LIFECYCLE_STOP` 諛?醫낅즺 肄붾뱶(`exit_code`)瑜??ы븿?섏뿬 ???ㅼ솑 ?먯뿉 ?몄떆.
-3. **珥덇린 ?ㅻ깄???몃뱶?곗씠??*: `ProcessTree::GetActiveSnapshotEvents()`瑜?援ъ텞?섏뿬 gRPC ?ㅽ듃由??곌껐 吏곹썑 ?쒖꽦 ?꾨줈?몄뒪 ?ㅻ깄??諛곗튂(`LIFECYCLE_SNAPSHOT`)瑜?C# Cockpit?쇰줈 ?쇨큵 ?꾩넚.
-
----
-
-## 2026-09-15: [Resolved] Google Cloud Vertex AI OAuth2 ?몄쬆 諛?JsonElement 留ㅺ컻蹂???몃옒??寃고븿
-
-### 1. ?꾩긽 (Symptom)
-* Google AI Studio???⑥닚 API ??諛⑹떇 ?몄뿉, Google Cloud Vertex AI ?쒕퉬???댁뭅?댄듃(`Config/google-credentials.json`)瑜??곕룞?????몄쬆 ?ㅽ뙣 諛쒖깮.
-* LLM??諛섑솚??`ActionArgs` JSON??`System.Text.Json`?쇰줈 ??쭅?ы솕?????뺤뀛?덈━ 媛믩뱾??`JsonElement`濡??뚯떛?섏뼱 `DecodePayloadTool` ?깆쓽 ?섏쐞 ?꾧뎄?먯꽌 `raw is string` ???寃?ш? ?ㅽ뙣?섍퀬 留ㅺ컻蹂???꾨씫 ?ㅻ쪟媛 諛쒖깮?섎뒗 ?꾩긽.
-
-### 2. ?먯씤 (Root Cause)
-* Vertex AI??HTTP ?ㅻ뜑??`x-goog-api-key`媛 ?꾨땶 OAuth2 Bearer Token(`Google.Apis.Auth.OAuth2`) ?몄쬆???붽뎄?섎ŉ ?붾뱶?ъ씤??URL 援ъ“媛 ?ㅻ쫫.
-* C# `System.Text.Json`??`Dictionary<string, object>` ??쭅?ы솕 ?뱀꽦???먯떆 ??낆씠 ?ㅼ씠?곕툕 `string`, `int`媛 ?꾨땶 `JsonElement` 諛뺤떛 媛앹껜濡??곸옱??
-
-### 3. ?닿껐梨?(Resolution)
-1. **`GeminiRestClient.cs` OAuth2 吏??*: `ServiceAccountCredential`???듯빐 `cloud-platform` ?ㅼ퐫?꾩쓽 Bearer Token???숈쟻 諛쒓툒諛쏆븘 ?ㅻ뜑??二쇱엯.
-2. **?꾧뎄 留ㅺ컻蹂???몃옒??*: `AutonomousHunterAgent.cs`?먯꽌 ?꾧뎄 ?몄옄 ?꾨떖 ??`JsonElement`瑜??ㅼ씠?곕툕 C# ???`string`, `int`, `double`, `bool`)?쇰줈 ?쇨큵 ?몃옒??泥섎━.
-3. `DecodePayloadTool.cs`?먯꽌 `JsonElement` 諛??ㅼ뼇????뚮Ц??蹂꾩묶(`encodedCommand`, `command`, `payload` ????吏?먰븯?꾨줉 ?뺢퇋??
-
----
-
-## 2026-09-15: [Resolved] Gemini responseSchema CFG 猷⑦봽/?좏겙 怨좉컝 寃고븿 諛?JSON Mode 理쒖쟻??
-### 1. ?꾩긽 (Symptom)
-* EDR ?섍꼍?먯꽌 Gemini API ?몄텧 ??`responseSchema`瑜??곸슜?덉쓣 ?? 媛꾪뿉?곸쑝濡?15珥???꾩븘?껋뿉 ?꾨떖?섎ŉ ?묐떟???ㅽ뙣?섍굅???꾧뎄 ?좏깮 ?뺥솗?꾧? 40%濡?湲됰씫?섎뒗 ?꾩긽 諛쒖깮.
-
-### 2. ?먯씤 (Root Cause)
-* Gemini ?대? 異붾줎 ?좏겙(`thoughtsTokenCount`)??`MaxOutputTokens`(4096)???덉궛???좎떇?섍퀬, ?꾨뱶 ?ㅻ챸??遺덈챸?뺥븳 ?꾨뱶?먯꽌 CFG(Context-Free Grammar) 臾몃쾿 ?쒖빟 ?댄뻾 臾댄븳 諛섎났 猷⑦봽媛 諛쒖깮?섏뿬 ??꾩븘???좊컻.
-* Native Function Calling? 蹂댁븞 ?ш퀬 怨쇱젙(`Thought`)??90% ?댁긽 ?꾨씫?섏뼱 EDR ?щ젋???붽뎄?ы빆??遺?곹빀.
-
-### 3. ?닿껐梨?(Resolution)
-* **JSON Mode + ?뺣? ?뚯꽌 梨꾪깮**: ?쒖닔 JSON Mode? 寃ш퀬??以묒꺽 愿꾪샇 洹좏삎 ?먯깋 ?뚯꽌(`LlmJsonParser`) 議고빀???꾨줈?뺤뀡 ?쒖??쇰줈 ?뺤젙.
-* ?꾧뎄 ?좏깮 ?뺥솗??100%, ?꾩닔 ?몄옄 100%, 蹂댁븞 ?ш퀬 怨쇱젙(CoT) 蹂댁〈 諛??⑥씪 ?뺣났 ?꾧껐 ?ъ꽦.
-
-
----
-
-## 2026-09-15: [Resolved] EDR ?섏궗 ?꾧뎄 5? ?ㅻТ 留뱀젏 ?닿껐
-
-### 1. ?꾩긽 (Symptom)
-* ?ㅼ쟾 ?섍꼍 寃利????앸퀎???듭떖 ?섏궗 ?꾧뎄 寃고븿:
-  1. `DecodePayloadTool`: Gzip/Deflate ?뺤텞 ?몄퐫??`H4sIA...`)??寃고빀???뚯썙???쒕줈??誘명깘.
-  2. `ProcessMemoryScanTool`: 0x0遺???좏삎 50MB留??쒗쉶?섏뿬 怨좎쐞 二쇱냼 ?숈쟻 ??`VirtualAlloc`)??Cobalt Strike/Reflective DLL 誘명깘, `PAGE_GUARD` ?щ옒???꾪뿕 諛?LOH ?뚰렪??
-  3. `ThreatReputationTool`: RFC 1918 B?대옒??`172.16.0.0/12`) ?꾨씫?쇰줈 ?щ궡 ?ъ꽕留앹쓣 ?몃? IP濡??ㅼ씤, 誘명솗??IP??75??遺?щ줈 ?뺤긽 ?듭떊 ?꾨줈?몄뒪 ?ㅽ깘 ?ъ궡 ?꾪뿕.
-  4. `MitreClassifierTool`: ?⑥닚 `Contains("c2")` 留ㅼ묶?쇰줈 ?뺤긽 ?ㅼ튂湲?`c2rsetup.exe`瑜?C2 怨듦꺽?쇰줈 ?ㅽ깘.
-  5. `SystemFirewallTool`: Netsh ?ㅽ뙣 ?쒖뿉??`true`瑜?諛섑솚?섎뒗 Silent Failure 踰꾧렇, 寃뚯씠?몄썾??DNS 李⑤떒 ???붾뱶?ъ씤???ㅽ듃?뚰겕 癒뱁넻(Self-DoS) ?꾪뿕.
-
-### 2. ?먯씤 (Root Cause)
-* VAD 援ъ“, ?뷀꽣?꾨씪?댁쫰 ?ъ꽕留??좏뤃濡쒖?, ?ㅻ떒怨??뺤텞/?쒕룆??諛??명봽??蹂댄샇 媛?쒓? ?꾨줈?좏????④퀎?먯꽌 寃곗뿬?섏뿀??
-
-### 3. ?닿껐梨?(Resolution)
-1. **`DecodePayloadTool`**: Gzip 留ㅼ쭅 諛붿씠??`0x1F, 0x8B`) ?먮룞 媛먯? 諛?`GZipStream`/`DeflateStream` 臾댁넀???뺤텞 ?댁젣, Hex ?붿퐫??異붽?, ReDoS 媛??250ms).
-2. **`ProcessMemoryScanTool`**: `VirtualQueryEx` 湲곕컲 VAD ?쒗쉶濡?Unbacked Executable Memory (`MEM_PRIVATE` + `EXECUTE` + `!PAGE_GUARD`)留??좊퀎 ?ㅼ틪, ?ъ꽕 硫붾え由?泥?2諛붿씠??`MZ` ?ㅻ뜑 媛먯?, `ArrayPool<byte>.Shared` ?쒖슜.
-3. **`ThreatReputationTool`**: 鍮꾪듃留덉뒪???ъ꽕留?遺꾨쪟湲?RFC 1918 A/B/C, 猷⑦봽諛? APIPA, CGNAT ??0??泥섎━), 誘명솗???몃? IP??30??以묐┰(`INCONCLUSIVE`) 泥섎━, ?ы듃/?뷀뙺 ?뚯떛 ?꾩쿂由?
-4. **`MitreClassifierTool`**: ?⑥뼱 寃쎄퀎(`\b`) 而댄뙆???뺢퇋??26醫??곸슜?쇰줈 ?뚯씪紐??ㅽ깘 李⑤떒, 10?④퀎 ?ъ씠踰??ъ껜???쒖꽌 ?뺣젹.
-5. **`SystemFirewallTool`**: `new ToolResult(overallSuccess, ...)` 諛섑솚?쇰줈 Silent Failure 諛⑹?, 濡쒖뺄 IP/湲곕낯 寃뚯씠?몄썾??DNS ?붿씠?몃━?ㅽ듃 蹂댄샇留?援ъ텞.
-
----
-
-## 2026-09-16: [Resolved] C# ?앹꽦????Sync-over-Async(GetAwaiter().GetResult()) ?ㅻ젅?쒗? ?곕뱶???쒓굅
-
-### 1. ?꾩긽 (Symptom)
-* `AutonomousHunterAgent` ?대옒???앹꽦???대??먯꽌 Vertex AI ?쒕퉬??怨꾩젙 ?좏겙 諛쒓툒 諛??ㅼ젙 濡쒕뵫 ??`.GetAwaiter().GetResult()`瑜??몄텧?섎뒗 ?숆린 釉붾줈??肄붾뱶媛 ?붿〈?섏뿬, ?ㅻ젅?쒗? 怨좉컝(Thread Pool Starvation) ???곕뱶??諛쒖깮 ?꾪뿕 議댁옱.
-
-### 2. ?먯씤 (Root Cause)
-* ?섏〈??二쇱엯 ?먮뒗 ?몄뒪?댁뒪 珥덇린???쒖젏?먯꽌 鍮꾨룞湲?珥덇린???⑺넗由??⑦꽩???ъ슜?섏? ?딄퀬 ?앹꽦?먯뿉???숆린 ?湲고븿.
-
-### 3. ?닿껐梨?(Resolution)
-* `AutonomousHunterAgent.cs` ?앹꽦?먯뿉??釉붾줈???몄텧???쒓굅?섍퀬, `GeminiRestClient.TryCreateFromLocalConfig()` ?숆린 ?⑺넗由?硫붿꽌?쒕? ?좎꽕?섏뿬 Phalanx 濡쒖뺄 JSON ?ㅼ젙???덉쟾?섍쾶 ?뚯떛?섎룄濡?由ы뙥?좊쭅.
-
----
-
-## 2026-09-16: [Resolved] AI ?섏궗愿 ?먯젙 ?쒓끝(Decision Hijacking) 諛?寃곗젙沅?移⑦빐 寃고븿 ?닿껐 (SSOT ?꾪궎?띿쿂 ?뺣┰)
-
-### 1. ?꾩긽 (Symptom)
-* ?뺤긽 愿由??ㅽ겕由쏀듃(`explorer.exe ??powershell.exe -enc <Get-Service ... *.internal>`) ?몄엯 ?? Gemini 紐⑤뜽???뺤긽 ?먭껐(`ACTION_RESUME`, ?뺤떊??98%)???대졇?뚯뿉??C# ?몄뒪??肄붾뱶媛 ?대? 媛濡쒖콈 `ActionKill`濡?蹂議고븯怨??쇱떛 湲곕쾿(`T1566.001`)??議곗옉 二쇱엯?섎뒗 移섎챸???ㅽ깘 諛쒖깮.
-
-### 2. ?먯씤 (Root Cause)
-1. **?섎?濡좎쟻 ?뺤떊????쟾 (Semantic Inversion)**: `ConfidenceScore`(?뺤긽 ?꾨줈?몄뒪 ?뺤떊??98%)瑜?`threatScore`(?꾪삊 ?먯닔 98??濡??ㅼ씤 諛붿씤?⑺븯???ъ궡 吏묓뻾.
-2. **?뺤쟻 ?쒓렇?덉쿂 媛뺤젣 ?ㅻ쾭?쇱씠??*: ?숆껐 ?ъ쑀???`-enc`瑜?理쒖쥌 ?④퀎?먯꽌 `CommandLine.Contains("-enc")`濡??ш??ы븯??LLM ?섏궗 寃곕줎??臾댁떆?섍퀬 媛뺤젣 ?ъ궡.
-3. **利앷굅 議곗옉 諛?議곌린 李⑤떒**: ?뺤긽 ?쒕ぉ???ъ궡???쒕ぉ?쇰줈 移섑솚?섍퀬, 誘명솗???곹깭?먯꽌 ?щ궡 諛깆뾽 ?쒕쾭 IP 諛⑺솕踰?李⑤떒 吏묓뻾.
-
-### 3. ?닿껐梨?(Resolution)
-1. **?⑥씪 吏꾩떎 怨듦툒??SSOT) ?꾪궎?띿쿂 ?뺣┰**: ReAct 猷⑦봽媛 ?뺤긽 醫낃껐(`reachedFinal == true && hasValidAction`)??寃쎌슦, Gemini AI ?섏궗愿??`VerdictAction`(`ACTION_KILL` vs `ACTION_RESUME`)??100% 理쒖긽??寃곗젙沅뚯쑝濡??섏슜. `Contains("-enc")`, `Contains("http")` ???뺤쟻 ?ㅻ쾭?쇱씠??肄붾뱶 ?꾩쟾 ??젣.
-2. **Fail-Secure ?덉쟾 媛??寃⑸━**: C# ?쒖뒪??媛?쒕뒗 理쒕? ??珥덇낵, API ?μ븷 ??'?덉쇅 ?곹솴'?먯꽌留??좎젣 ?ъ궡??吏묓뻾?섎룄濡?愿?ъ궗 遺꾨━(SoC).
-3. **?щ젋??臾닿껐??蹂댁옣**: ?뺤긽 ?꾨줈?몄뒪 ?먯젙 ??媛吏?TTP 二쇱엯 李⑤떒 諛?`blockedIp = ""` 蹂댁옣, ?낆꽦 ?뺤젙 ?쒖뿉留?`SystemFirewallTool` 吏묓뻾.
-
----
-
-## 2026-09-16: [Resolved] WPF 愿??肄뺥븦怨?Kestrel gRPC 諛깃렇?쇱슫???쒕쾭 ?섏씠釉뚮━???몄뒪??諛?STA ?ㅻ젅???덉쟾???뺣낫
-
-### 1. ?꾩긽 (Symptom)
-* Phase 4?먯꽌 WPF 愿??肄뺥븦(`Phalanx.Cockpit`)怨?C++ ?쇱꽌????듭떊???꾪븳 Kestrel gRPC ?쒕쾭(?ы듃 50051)瑜??⑥씪 ?ㅽ뻾 諛붿씠?덈━(`Program.cs`)???듯빀???? 鍮꾨룞湲?`async Task Main`?먯꽌 `new MainWindow()`瑜??몄뒪?댁뒪?뷀븷 寃쎌슦 STA(Single-Threaded Apartment) ?ㅻ젅???쒖빟 ?꾨컲?쇰줈 `InvalidOperationException`??諛쒖깮?섍굅?? 諛섎?濡?WPF STA ?ㅻ젅?쒖뿉??gRPC ?ㅽ듃?뚰겕 IO瑜?釉붾줈?뱁븯??UI ?꾨━吏뺤씠 諛쒖깮?섎뒗 ?꾪궎?띿쿂 異⑸룎 諛쒖깮.
-* 諛깃렇?쇱슫??Kestrel gRPC 諛?AI ?먯씠?꾪듃 ?섏궗愿 ?ㅻ젅?쒖뿉???ㅼ떆媛??대깽??諛쒖깮 ??WPF UI 而щ젆??`ObservableCollection`)??吏곸젒 ?섏젙?섎젮 ?섏뿬 `NotSupportedException` 諛쒖깮 ?꾪뿕.
-
-### 2. ?먯씤 (Root Cause)
-* WPF UI ?쒕툕?쒖뒪?쒖? ?꾧꺽??`[STAThread]` ?숆린 吏꾩엯?먭낵 ?낅┰??Dispatcher 硫붿떆吏 ?뚰봽瑜??붽뎄?섎뒗 諛섎㈃, Kestrel ???몄뒪?몃뒗 鍮꾨룞湲?硫?곗뒪?덈뱶 ?ㅻ젅?쒗? ?뚯빱瑜?湲곕컲?쇰줈 ?숈옉??
-* 鍮꼀I ?ㅻ젅?쒖뿉??UI 諛붿씤??而щ젆?섏쓣 議곗옉??寃쎌슦 WPF???ㅻ젅???좏샇??Thread Affinity) 紐⑤뜽怨?異⑸룎??
-
-### 3. ?닿껐梨?(Resolution)
-1. **?섏씠釉뚮━???몄뒪???쇱씠?꾩궗?댄겢 (`Program.cs`)**:
-   * `[STAThread] public static void Main(string[] args)` ?숆린 吏꾩엯?먯쓣 ?좎?.
-   * `webApp.Start()`(?숆린 鍮꾩감??瑜??듯빐 Kestrel gRPC ?쒕쾭瑜?諛깃렇?쇱슫?쒖뿉??湲곕룞???? 硫붿씤 STA ?ㅻ젅?쒖뿉??`wpfApp.Run(mainWindow)`???ㅽ뻾?섏뿬 UI 硫붿떆吏 ?뚰봽瑜??꾨꼍???좎?.
-   * `mainWindow.Closed` ?대깽???몃뱾?ъ뿉??`await webApp.StopAsync()` 諛?`DisposeAsync()`瑜??몄텧?섏뿬 李?醫낅즺 ??諛깃렇?쇱슫??gRPC ?쒕쾭媛 ?덉쟾?섍쾶 Graceful Shutdown?섎룄濡?寃고빀.
-   * CI 諛??泥댁씤 E2E ?뚯뒪???ㅽ겕由쏀듃瑜??꾪븳 `--headless` 紐⑤뱶 吏??遺꾧린 異붽?.
-2. **?대깽??釉뚮━吏 諛?UI ?ㅻ젅??留덉꺃留?(`CockpitUiBridge`)**:
-   * gRPC ?섏떊 諛?AI ?섏궗 ?쒖옉/?꾨즺 ?뚮┝??`Application.Current?.Dispatcher?.InvokeAsync(...)`濡??덉쟾?섍쾶 ?섑븨?섏뿬 UI ?ㅻ젅?쒕줈 留덉꺃留?
-   * 鍮껯UI ?섍꼍(?ㅻ뱶由ъ뒪 ?щ꼫 諛??⑥쐞 ?뚯뒪???먯꽌??`Application.Current`媛 null?????덉쟾?섍쾶 No-op ?듦낵?섎뒗 Null-Safety 諛⑹뼱 援ы쁽.
-
----
-
-## 2026-09-20: [Resolved] gRPC ?ㅽ듃由??ㅼ쨷 ?대씪?댁뼵???몄뀡 ??뼱?곌린 諛?嫄곗쭞 DISCONNECTED ?곹깭 ?꾩씠 寃고븿 ?닿껐
-
-### 1. ?꾩긽 (Symptom)
-* C++ 而ㅻ꼸 ?쇱꽌(`Phalanx.Sensor`)媛 諛깃렇?쇱슫?쒖뿉???뺤긽 湲곕룞?섏뼱 gRPC ?ㅽ듃由쇱쓣 ?좎??섍퀬 ?덉쓬?먮룄 遺덇뎄?섍퀬, 紐⑥쓽 怨듦꺽 ?꾧뎄(`Phalanx.AttackSimulator`) ?ㅽ뻾 醫낅즺 吏곹썑 ?먮뒗 ?좏쑕 ?곹깭 寃쎄낵 ??WPF 愿??肄섏넄???곷떒 ?듭떊 ?곹깭媛 二쇨린?곸쑝濡?鍮④컙??`[DISCONNECTED]`濡?諛섏쟾?섎뒗 ?꾩긽 諛쒖깮.
-* ?쇱꽌 ?좉? 踰꾪듉? `STOP SENSOR`濡?媛???곹깭瑜?媛由ы궎?붾뜲 ?듭떊 ?곹깭??`[DISCONNECTED]`濡??쒖떆?섏뼱 愿?쒓??먭쾶 ?쇱꽑??珥덈옒?섍퀬, ?섎룞 ?꾪솕 紐낅졊 ?섎떖 ?ㅽ뙣 媛?μ꽦 ?좊컻.
-
-### 2. ?먯씤 (Root Cause)
-1. **?⑥씪 ?묐떟 ?ㅽ듃由??ъ씤????뼱?곌린 諛?議곌린 ?먭린**:
-   * `PhalanxGrpcService`媛 ?⑥씪 ?꾨뱶 `private IServerStreamWriter<MitigationCommand>? _responseStream;`濡??묒꽦?섏뼱 ?덉뿀??
-   * C++ ?쇱꽌媛 ?곌껐???곹깭?먯꽌 紐⑥쓽 怨듦꺽 ?꾧뎄媛 異붽?濡?`StreamTelemetry`???곌껐?섎㈃ ?대떦 ?꾨뱶媛 紐⑥쓽 ?꾧뎄???ㅽ듃由쇱쑝濡???뼱?⑥쭚.
-   * 紐⑥쓽 ?꾧뎄???쒕굹由ъ삤媛 ?앸굹 ?곌껐???댁젣?섎㈃ `finally` 釉붾줉?먯꽌 `_responseStream = null`濡?珥덇린?뷀븯怨?`_uiBridge?.NotifySensorConnected(false)`瑜?臾댁“嫄??몄텧??
-   * ?대줈 ?명빐 C++ ?쇱꽌媛 ?ъ쟾???곌껐?섏뼱 ?덉쓬?먮룄 UI媛 `[DISCONNECTED]`濡?諛섏쟾?섍퀬, 諛깃렇?쇱슫???쇱꽌濡??꾪솕 紐낅졊??蹂대궪 ???녿뒗 ?⑥젅 ?곹깭 諛쒖깮.
-2. **Kestrel HTTP/2 ?좏쑕 ?듭뼹?쇱씠釉?誘몄꽕??*:
-   * Kestrel gRPC ?붾뱶?ъ씤?몄뿉 HTTP/2 KeepAlive Ping ?ㅼ젙??遺?ы븯???좏쑕 ???뚯폆 諛섑룓??Half-closed) ?곹깭 吏꾩엯 媛?μ꽦 議댁옱.
-
-### 3. ?닿껐梨?(Resolution)
-1. **?숈떆??而щ젆??湲곕컲 硫???대씪?댁뼵???몄뀡 愿由?(`PhalanxGrpcService.cs`)**:
-   * ?⑥씪 ?ъ씤?곕? `ConcurrentDictionary<string, IServerStreamWriter<MitigationCommand>> _activeClients`濡?援먯껜.
-   * ?대씪?댁뼵???묒냽 ??怨좎쑀 ID濡??깅줉?섍퀬, ?곌껐 ?댁젣 ???대떦 ?대씪?댁뼵?몃쭔 ?쒓굅.
-   * `_activeClients.IsEmpty`媛 true(利? ?깅줉??紐⑤뱺 ?대씪?댁뼵?멸? ?꾩쟾???⑥젅)???뚮쭔 `_uiBridge.NotifySensorConnected(false)`瑜??몄텧?섎룄濡??듭떊 ?섎챸二쇨린 蹂댁젙.
-   * `SendCommandAsync` ?ㅽ뻾 ???댁븘?덈뒗 紐⑤뱺 ?ㅽ듃由쇱쑝濡??꾪솕 紐낅졊??釉뚮줈?쒖틦?ㅽ똿?섍퀬 二쎌? ?ㅽ듃由쇱? ?덉쟾?섍쾶 ?쒓굅.
-2. **Kestrel HTTP/2 ?듭뼹?쇱씠釉??쒖꽦??(`Program.cs`)**:
-   * `KeepAlivePingDelay = 30s`, `KeepAlivePingTimeout = 15s`, `KeepAliveTimeout = 5遺???紐낆떆?섏뿬 ?κ린 ?좏쑕 gRPC ?몄뀡??臾댁쨷???곌껐 ?좎? 蹂댁옣.
-3. **湲곗〈 ?쇱꽌 ?꾨줈?몄뒪 媛먯? ???대깽??由ъ뒪??諛붿씤??(`SensorProcessController.cs`)**:
-   * ?대? ?몃??먯꽌 ?ㅽ뻾 以묒씠??`Phalanx.Sensor` ?꾨줈?몄뒪瑜?媛먯??덉쓣 ?뚮룄 `EnableRaisingEvents = true` 諛?`Exited` ?몃뱾?щ? ?깅줉?섏뿬 鍮꾩젙??醫낅즺 ??媛???곹깭 ?뚮옒洹멸? ?뺥솗???숆린?붾릺?꾨줉 蹂닿컯.
-
----
-
-## 2026-09-20: [Resolved] C++ 而ㅻ꼸 猷??붿쭊 0.1ms 利됯컖 ?꾩옣 ?ъ궡(Reflex Kill)??愿??肄뺥븦 ?꾨씫 諛??щ젋??利됱떆 ?깅줉 援ы쁽
-
-### 1. ?꾩긽 (Symptom)
-* ?쒖꽟?⑥뼱(`vssadmin.exe delete shadows`, `bcdedit /set recoveryenabled no` ??媛 ?ㅽ뻾????C++ 而ㅻ꼸 ?쇱꽌??`LocalRuleEngine`??0.1ms(80關s) ?대궡??利됯컖 ?꾩옣 ?ъ궡(`NtTerminateProcess`)??吏묓뻾?섍퀬 `Lifecycle = LIFECYCLE_TERMINATED` ?붾젅硫뷀듃由щ? C# Cockpit?쇰줈 ?꾩넚??
-* 洹몃윭??WPF 愿??肄뺥븦 UI ?곷떒??Monitored Processes 移댁슫??諛??대? CQRS ?몃━?먯꽌留??꾨줈?몄뒪媛 鍮꾪솢?깊솕(`IsAlive = false`)??肉? 醫뚯륫 ?ㅼ떆媛??몄떆?섑듃 ?묒뾽 紐⑸줉(Incident Worklist)?먮뒗 移⑦빐 ???移대뱶媛 ?꾪? ?앹꽦?섏? ?딅뒗 ?꾩긽 諛쒖깮.
-
-### 2. ?먯씤 (Root Cause)
-1. **?섏궗 ?뚯씠?꾨씪???몃━嫄?議곌굔???⑥씪??(`PhalanxGrpcService.cs`)**:
-   * 湲곗〈 gRPC ?쒕퉬?ㅼ쓽 ?붾젅硫뷀듃由?猷⑦봽??`if (ev.IsSuspended)` 議곌굔臾몃쭔 寃?ы븯???숆껐???뚯깋吏? ?꾨줈?몄뒪留?`AutonomousHunterAgent.InvestigateThreatAsync`濡??쇱슦?낇븯怨??덉뿀??
-   * C++ 濡쒖뺄 猷??붿쭊???섑빐 利됯컖 ?ъ궡???대깽?몃뒗 ?대? 醫낅즺?섏뿀?쇰?濡?`IsSuspended = false`, `IsTerminated = true`, `Lifecycle = LIFECYCLE_TERMINATED` ?곹깭濡??몄엯??
-   * ?대줈 ?명빐 C# ?먯씠?꾪듃 ?섏궗愿 諛?愿??UI 釉뚮━吏濡??ш굔 ?듭?媛 ?꾨떖?섏? 紐삵븿.
-2. **?ъ궡 ????쟾??遺덊븘???쒖빟怨쇱쓽 寃고빀**:
-   * ?대? C++ ?쇱꽌媛 ?꾨줈?몄뒪瑜??ъ궡?덇린 ?뚮Ц??C#?먯꽌 ?쇱꽌濡?`MitigationCommand`瑜??ㅼ떆 蹂대궪 ?꾩슂媛 ?놁쓬(?ㅽ엳??以묐났 ?≪떊 ???ㅻ쪟). 洹몃윭??愿?쒓?(SOC) 蹂닿퀬 諛?LiteDB ?щ젋???꾩뭅?대튃? ?ъ쟾???꾩닔?곸엫.
-
-### 3. ?닿껐梨?(Resolution)
-1. **?꾩옣 ?ъ궡 利됯컖 蹂닿퀬 ?뚯씠?꾨씪???좎꽕 (`AutonomousHunterAgent.HandleReflexKill`)**:
-   * AI ReAct 猷⑦봽????珥?吏?곗쓣 嫄곗튂吏 ?딄퀬, 0.08ms ?뚯슂?쒓컙 ?덉퐫?쒖? `LocalRuleEngine` ?ъ궡 ?ъ쑀, MITRE ATT&CK T1490 ?꾩닠???댁? `IncidentRecord` 諛?1?④퀎 `ReActTraceRecord`瑜?利됯컖 ?앹꽦.
-   * LiteDB ?곴뎄 ??μ냼(`ForensicArchiveManager.SaveIncident`)??利됱떆 ?곸옱.
-   * `OnInvestigationCompleted` ?대깽?몃? ?몃━嫄고븯??`CockpitUiBridge`瑜??듯빐 WPF UI ?ㅻ젅?쒕줈 留덉꺃留? 愿??肄뺥븦 ?몄떆?섑듃 紐⑸줉??鍮④컙??`CRITICAL` / `SECURED` 移대뱶瑜?利됱떆 ?쒖떆.
-2. **gRPC ?몄엯 ?쇱슦??遺꾧린 蹂닿컯 (`PhalanxGrpcService.cs`)**:
-   * `else if (ev.IsTerminated || ev.Lifecycle == ProcessLifecycle.LifecycleTerminated)` 遺꾧린瑜?異붽??섏뿬 C++ ?꾩옣 ?ъ궡 ?섏떊 ??`_agent.HandleReflexKill(node)`濡?吏곴껐.
-3. **紐⑥쓽 ?꾧뎄 諛??⑥쐞 ?뚯뒪??寃利?*:
-   * `FullChainSystemTests.cs`??`TestScenario1_InstantKill_BypassesAiInvestigation`???щ젋???꾩뭅?대툕 諛??몄떆?섑듃 ?먮룞 ?깅줉 寃利??④퀎瑜?異붽??섏뿬 ?뚭? 諛⑹?(26/26 Unit Tests ?듦낵).
-   * `Phalanx.AttackSimulator` ?쒕굹由ъ삤 2(`vssadmin.exe delete shadows`)???섏씠濡쒕뱶瑜??ㅼ젣 C++ ?쇱꽌???ъ궡 ?붾젅硫뷀듃由??щ㎎(`IsSuspended = false, IsTerminated = true, LifecycleTerminated`)?쇰줈 ?숆린??
-4. **?곸쓳???덉씠?댁떆(Latency) ?щ㎎??諛??곴뎄 蹂듭썝 媛쒖꽑 (`IncidentItemViewModel.cs`, `MainViewModel.cs`, `ForensicModels.cs`)**:
-   * 諛由ъ큹(`ElapsedMs`)瑜?臾댁“嫄?珥?`s`) ?⑥쐞濡?蹂?????뚯닔???섏㎏ ?먮━(`:F2`)濡??щ㎎?낇븯??10ms 誘몃쭔 珥덇퀬???ш굔??`0.00s`濡??덉궘?섎뜕 寃고븿 ?섏젙 (`80關s (0.08ms, Reflex)` ?쒓린).
-   * ?ъ떆????紐⑤뱺 怨쇨굅 移대뱶媛 `Investigating...`?쇰줈 珥덇린?붾릺???먯씤: `IncidentRecord`??吏?곗떆媛??꾨뱶媛 遺?ы븯怨?`LoadIncidentsFromDatabase`?먯꽌 `ElapsedMs` 諛붿씤?⑹씠 ?꾨씫?섏뼱 `0.0`?쇰줈 ?⑥븘?덉뿀??寃고븿.
-   * `IncidentRecord.ElapsedMs` ?ㅽ궎留??꾨뱶 異붽? 諛?`traces.Sum(t => t.ElapsedMs)` 蹂듭썝 ?뚯씠?꾨씪??援ъ텞.
-   * ?대? ?먭껐??醫낃껐???ш굔(`ACTION_KILL`/`ACTION_RESUME`)? `ElapsedMs`媛 0?대뜑?쇰룄 `Investigating...`???덈? ?쒖텧?섏? ?딅룄濡??댁쨷 諛⑹뼱.
-5. **?꾩옣 ?ъ궡 ?꾩냽 ????곕턿(Remediation) ?뺤젣 (`AutonomousHunterAgent.cs`)**:
-   * ?대? ?꾨즺???ㅽ뻾 ?ъ떎(`?ъ궡 ?꾨즺 (?뚯슂?쒓컙 0.08ms)`)???곕턿?먯꽌 ?꾩쟾 ?쒓굅.
-   * 猷??좏삎(`vssadmin` ???蹂듭궗蹂?臾닿껐??寃利? `bcdedit` BCD 遺???뺤콉 ?먭?, `wbadmin` 諛깆뾽 移댄깉濡쒓렇 媛먯궗 ?????곕Ⅸ ?ㅼ젣 愿?쒓? ?꾩냽 Action Item?쇰줈 ?몃텇??
-6. **?섎룞 媛쒖엯(Force Terminate / Resume) 踰꾪듉 ?쒓굅 諛?愿??UX ?⑥닚??(`MainWindow.xaml`, `MainViewModel.cs`)**:
-   * ?대? C++ 而ㅻ꼸 ?먮뒗 AI ?섏궗愿???섑빐 醫낃껐(`ACTION_KILL`/`ACTION_RESUME`)???ш굔??????ы썑 ?섎룞 媛쒖엯 踰꾪듉???몄텧?섎뒗 ?쇰━??紐⑥닚 諛?愿?쒓? ?쇱꽑 ?댁냼.
-   * ?먯쑉 EDR ?먯튃(Autonomous Execution)??留욎떠 ?꾨줈?몄뒪 媛뺤젣 醫낅즺/?ш컻 踰꾪듉 諛?遺덊븘?뷀븳 諛붿씤??肄붾뱶瑜??꾩쟾???쒓굅?섍퀬, ?ν썑 ?ㅻТ??2李?嫄곕쾭?뚯뒪 湲곕뒫(?붿씠?몃━?ㅽ듃 ?깅줉, ?щ젋??蹂닿퀬??蹂듭궗 ???쇰줈 ?꾪솚?????덈룄濡?UX ?뺣━.
-7. **愿??肄뺥븦 ?몄떆?섑듃 寃???꾪꽣(`ApplyFilter`) `NullReferenceException` ?덉쇅 寃고븿 ?닿껐 (`MainViewModel.cs`)**:
-   * ?꾩긽: 愿??肄뺥븦 ?곷떒 寃?됱갹???ㅼ썙???낅젰 ??`MainViewModel.ApplyFilter()`(以?340)?먯꽌 `NullReferenceException`??諛쒖깮?섎ŉ 肄뺥븦 ?щ옒??
-   * ?먯씤: 怨쇨굅 ?ш굔??`BlockedIp`, `CommandLine` ?깆씠 null???곹깭?먯꽌 Null 議곌굔遺 ?곗궛???놁씠 `.Contains()`瑜?吏곸젒 ?몄텧?섏뿬 諛쒖깮. ?먰븳 DB ??쭅?ы솕 ??null ?꾨뱶媛 酉곕え?몄뿉 洹몃?濡?諛붿씤?⑸맖.
-   * ?닿껐: `TargetImage`, `CommandLine`, `SummaryTitle`, `BlockedIp` ?깆뿉 `?.Contains(...) ?? false` ???몄씠???먯깋 ?곗궛???곸슜 諛?`LoadIncidentsFromDatabase`?먯꽌 `?? string.Empty`濡?諛⑹뼱 珥덇린??
-
----
-
-## 2026-09-23: [Resolved] Kestrel 諛깃렇?쇱슫???ㅻ젅?쒖쓽 ObservableCollection 議곗옉?쇰줈 ?명븳 gRPC ?ㅽ듃由??⑥젅 諛??쇱꽌 ON/OFF 臾댄븳 猷⑦봽
-
-### 1. ?꾩긽 (Symptom)
-* WPF 愿??肄섏넄 UI?먯꽌 C++ ?쇱꽌 ?곌껐 ?곹깭媛 `LIVE`? `OFFLINE` ?ъ씠瑜???珥?二쇨린濡?怨꾩냽?댁꽌 ?먮룞?쇰줈 諛섎났 ?꾪솚(?뚮━????
-* ?꾨줈?몄뒪 ?몃━ ?붾㈃???쒖꽦 ?꾨줈?몄뒪媛 1媛??먮뒗 ?뚯닔留??쒖떆?섍퀬 ?꾩껜 PC ?꾨줈?몄뒪媛 ?곸옱?섏? 紐삵븿.
-
-### 2. ?먯씤 (Root Cause)
-1. **WPF UI 而щ젆???ㅻ젅???꾨컲 (`NotSupportedException`)**:
-   * C++ ?쇱꽌媛 ?묒냽?섏뿬 300+媛??쒖꽦 ?꾨줈?몄뒪 ?ㅻ깄??諛곗튂(`snapshot_batch`)瑜?gRPC濡??꾩넚???? Kestrel 諛깃렇?쇱슫???ㅻ젅?쒗??먯꽌 `ProcessTreeProjectionManager.RootNodes.Add(node)`瑜??몄텧??
-   * `ProcessGraphView`??`TreeView`媛 `RootNodes`??諛붿씤?⑸릺???덈뒗 ?곹깭?먯꽌 Dispatcher媛 ?꾨땶 諛깃렇?쇱슫???ㅻ젅?쒓? `ObservableCollection`???섏젙?⑥뿉 ?곕씪 WPF `CollectionView`媛 `NotSupportedException`??諛쒖깮?쒗궡.
-   * ?덉쇅濡??명빐 `PhalanxGrpcService.StreamTelemetry`媛 猷⑦봽瑜??덉텧?섍퀬 `finally` 釉붾줉?먯꽌 `_uiBridge.NotifySensorConnected(false)`瑜??몄텧?섏뿬 UI媛 `OFFLINE`?쇰줈 ?꾪솚??
-   * C++ ?쇱꽌???ㅽ듃由??⑥젅??媛먯??섍퀬 2珥????먮룞 ?ъ젒??`LIVE`) ???ㅻ깄???ъ쟾?????덉쇅 ?щ컻????`OFFLINE` ?꾪솚??臾댄븳 諛섎났??
-2. **?ㅻ깄??諛곗튂 遺꾪븷 諛?議깅낫 ?쒓끝**:
-   * `PhalanxGrpcService`?먯꽌 `foreach (var ev in batch.ProcessEvents)`濡?履쇨컻??`ApplyDeltaEvent(ev)`瑜??몄텧?섎㈃?? 300媛쒖쓽 ?ㅻ깄???대깽?멸? 媛쒕퀎 `ApplySnapshotBatch(new[] { ev })`濡?遺꾪븷 ?꾨떖??
-   * `tempMap`??1媛??몃뱶留?媛뽮쾶 ?섏뼱 遺紐??먯떇 愿怨꾨? ?뺤꽦?섏? 紐삵븯怨??꾩썝 猷⑦듃 ?몃뱶濡??몄엯?섎뒗 寃고븿 ?좊컻.
-
-### 3. ?닿껐梨?(Resolution)
-1. **WPF 而щ젆???숆린??諛?Dispatcher 留덉꺃留?(`ProcessTreeProjectionManager.cs`)**:
-   * `BindingOperations.EnableCollectionSynchronization(RootNodes, _syncLock)` 諛?`EnableCollectionSynchronization(AllNodes, _syncLock)` ?깅줉.
-   * `DispatchUI` ?ы띁瑜??꾩엯?섏뿬 `RootNodes`, `AllNodes`, `node.Children` 議곗옉??UI Dispatcher ?ㅻ젅?쒕줈 ?덉쟾?섍쾶 留덉꺃留?(?ㅻ뱶由ъ뒪/?뚯뒪???섍꼍 Null-Safety 蹂댁옣).
-2. **gRPC ?ㅻ깄??諛곗튂 蹂댁〈 (`PhalanxGrpcService.cs`)**:
-   * `batch.ProcessEvents` 以?`LifecycleSnapshot` ?대깽?몃? `ApplySnapshotBatch(snapshotEvents)`濡??듭㎏濡??꾨떖?섏뿬 ??1?뚯쓽 Dispatcher 而⑦뀓?ㅽ듃 ?ㅼ쐞移섎줈 遺紐??먯떇 ?몃━ ?꾩껜瑜?0珥??꾧껐 ?ъ쁺.
-3. **濡쒖뺄 OS ?꾨줈?몄뒪 湲곗? ?ъ쁺 ?대갚 (`InitializeFromLocalOsSnapshot`)**:
-   * Win32 `CreateToolhelp32Snapshot` P/Invoke瑜?援ы쁽?섏뿬, C++ 而ㅻ꼸 ?쇱꽌媛 ?곌껐?섍린 ???ㅽ봽?쇱씤 ?곹깭)?대씪??Cockpit 湲곕룞 利됱떆 濡쒖뺄 PC??300??媛??꾩껜 ?꾨줈?몄뒪瑜?利됯컖 ?뚮뜑留?
-
-
----
-
-## 2026-09-28: [Resolved] ?꾨줈?몄뒪 ?몃━(TreeView) 由ы봽 ?몃뱶 ?대┃ ???붾㈃ 醫뚯륫 ?좊┝ 諛?怨좎갑 寃고븿
-
-### 1. ?꾩긽 (Symptom)
-* `ProcessGraphView`(?몃찓紐⑤━ ?꾨줈?몄뒪 議깅낫 ?먯깋湲??먯꽌 源딆씠 以묒꺽???먯떇/由ы봽 ?몃뱶瑜??대┃?덉쓣 ?? ?몃━ 酉고룷???꾩껜媛 ?곗륫?쇰줈 ?ㅽ겕濡ㅻ릺硫댁꽌 ?붾㈃ ???꾨줈?몄뒪 ?몃━ ?댁슜??醫뚯륫?쇰줈 諛???щ씪吏?
-* 猷⑦듃 ?몃뱶? ?뺤옣 ?묎린 ?붿궡?? 遺紐??꾨줈?몄뒪?ㅼ씠 醫뚯륫 ?붾㈃ 諛뽰쑝濡??댄깉?섎ŉ, ?ㅻⅨ ?몃뱶瑜??대┃?섍굅??留덉슦?ㅻ? ?吏곸뿬???먯긽??媛濡??ㅽ봽??0)濡??뚯븘?ㅼ? ?딄퀬 醫뚯륫 ?좊┝ ?곹깭濡??곴뎄 怨좎갑??
-
-### 2. ?먯씤 (Root Cause)
-1. **WPF TreeView??湲곕낯 ?ъ빱??BringIntoView() ?몄텧 硫붿빱?덉쬁**:
-   * WPF??`TreeViewItem`? 留덉슦???대┃ ?먮뒗 ?ъ빱???띾뱷 ???먮룞?쇰줈 `BringIntoView()`瑜??몄텧?섏뿬 `FrameworkElement.RequestBringIntoViewEvent` ?쇱슦?곕뱶 ?대깽?몃? 諛쒖깮?쒗궡.
-2. **臾댁젣???섑룊 痢≪젙 pass 諛?媛濡????ㅽ봽???쎌갹**:
-   * `TreeView` ?대???湲곕낯 ?쒗뵆由우뿉 ?댁옣??`ScrollViewer`??湲곕낯?곸쑝濡?`HorizontalScrollBarVisibility="Auto"` ?곹깭濡??숈옉??
-   * ?댁뿉 ?곕씪 ?먯떇 ?몃뱶?ㅼ뿉 ???`availableSize.Width = double.PositiveInfinity`濡?臾댄븳 媛濡??덈퉬瑜?遺?ы븯硫? `TreeViewItem` ?쒗뵆由??댁쓽 `<ColumnDefinition Width="*" />`? 寃고빀?섏뿬 ?먯떇 ?몃뱶媛 源딆뼱吏덉닔濡?19px * depth 怨꾩링 ?ㅼ뿬?곌린) ??ぉ???곗륫 諛붿슫??諛뺤뒪媛 酉고룷??媛???곸뿭 ?덈퉬瑜??ш쾶 珥덇낵??
-3. **ScrollViewer???쇰갑???섑룊 ?ㅽ겕濡?諛?蹂듦뎄 湲곗쟾 遺??*:
-   * `ScrollViewer`???대깽?몄쓽 `TargetRect` ?곗륫 寃쎄퀎媛 ?붾㈃ 諛뽰쑝濡??섍컮?ㅺ퀬 ?먮떒?섏뿬 ?대? ?붾㈃ ?덉뿉 ?ｊ린 ?꾪빐 `HorizontalOffset`??利앷??쒗궡 (肄섑뀗痢좉? ?붾㈃ 醫뚯륫?쇰줈 諛?ㅻ궓).
-   * WPF `ScrollViewer`????ぉ 媛?쒗솕 ?붿껌???곕Ⅸ ?쇰갑???ㅽ겕濡ㅻ쭔 ?섑뻾??肉??대┃ ?꾨즺 ???먯젏(X=0)?쇰줈 蹂듦??쒗궎??硫붿빱?덉쬁???꾨Т??
-   * ?먰븳 ?섑룊 ?ㅽ겕濡ㅻ컮媛 ?④꺼???덉뼱 ?ъ슜?먭? ?섎룞?쇰줈 ?섎룎由??섎룄 ?놁쑝硫? ?ㅻⅨ ?먯떇 ?몃뱶瑜??대┃?대룄 ?대떦 ?몃뱶???ㅼ뿬?곌린 諛붿슫??諛뺤뒪媛 ?源껋씠 ?섎?濡??섑룊 ?ㅽ봽?뗭씠 ?좎??섍굅????諛?ㅻ궓.
-
-### 3. ?닿껐梨?(Resolution)
-1. **1?④퀎 ?꾨젅?꾩썙???쒖뼱 (WPF ?쒖? ?⑦꽩)**:
-   * `TreeView`??`ScrollViewer.HorizontalScrollBarVisibility="Disabled"` ?좎뼵 諛?`RequestBringIntoView` ?대깽??李⑤떒(`e.Handled = true`)?쇰줈 1李?諛⑹뼱.
-2. **2?④퀎 援ъ“???꾨㈃ ?닿껐: ?뚮옯 媛?곹솕 ?몃━ ?ъ쁺 (Flat Virtualized Tree Projection) 留덉씠洹몃젅?댁뀡**:
-   * Microsoft WinUI 3(`TreeViewList`), VS Code(`Monaco Tree`), ILSpy(`SharpTreeView`)???꾪궎?띿쿂 ?⑦꽩??Phalanx???좎젣???꾩엯.
-   * **?곗씠??怨꾩링 (`ProcessTreeProjectionManager`)**:
-     * `ProcessNodeModel`??`Depth` 諛?`IndentMargin` ?띿꽦, `IsExpanded` ?좉? 異붽?.
-     * `VisibleNodes` (`ObservableCollection<ProcessNodeModel>`)瑜?援ъ텞?섏뿬 ?몃━媛 ?쇱퀜吏???DFS ?꾩쐞 ?쒖꽌(Pre-order)濡?1李⑥썝 ?됲깂???ъ쁺.
-     * `ToggleNodeExpanded` 硫붿꽌?쒕? ?듯빐 ?몃뱶 ?묓옒/?쇱묠 ??VS Code??諛곗뿴 `splice()` 諛⑹떇?쇰줈 媛???몃뱶留?遺遺?媛깆떊.
-     * `EnsureNodeVisible` 硫붿꽌?쒕? ?듯빐 ?ъ링 ?섏궗?ㅼ뿉???꾨줈?몄뒪 ?몃━ ?먰봽 ???곸쐞 議곗긽 ?몃뱶 ?먮룞 ?몃옪 吏??
-   * **UI 酉?怨꾩링 (`ProcessGraphView.xaml` / `.cs`)**:
-     * 怨좎쟾 ?ш? `TreeView`瑜??쒓굅?섍퀬, ?섎뱶?⑥뼱 媛?곹솕媛 耳쒖쭊 `ListView`(`VirtualizingStackPanel.IsVirtualizing="True"`, `VirtualizationMode="Recycling"`, `ScrollUnit="Pixel"`)濡?援먯껜.
-     * ?쒖닔 MVVM ?곗씠??諛붿씤??`SelectedItem="{Binding SelectedProcessNode, Mode=TwoWay}"`)?쇰줈 肄붾뱶鍮꾪븯?몃뱶 ?대깽???몃뱾???쒓굅.
-     * 1李⑥썝 ?섏쭅 ?됰㈃ ?뚮뜑留곸쑝濡??섑룊 ?ㅽ겕濡??붾룞 諛??좊┝ ?꾩긽??援ъ“?곸쑝濡?0% ?먯쿇 諛뺣㈇?섍퀬, 60fps 媛?곹솕 ?ㅽ겕濡ㅺ낵 ?ν썑 硫?곗뺄??TreeGrid) ?뺤옣 湲곕컲 ?뺣낫.
-
-
-
----
-
-## 2026-09-28: [Resolved] AttackLab 모의 침해 실연동(Phase 5.2) 백엔드 분리 및 비동기 사살 무결성
+## 2026-09-08: [Resolved] Windows Winsock/NOMINMAX 충돌 및 MSVC UAC 매니페스트 링크 에러
 
 ### 1. 현상 (Symptom)
-* 어택랩(`AttackLabWindow`)에서 모의 침해 시나리오를 주입할 때, 가짜 `Task.Delay`와 정적 하드코딩 문자열만 출력되어 실제 관제 콘솔(`IncidentsView`)에 사건이 격발되지 않음.
-* OS 프로세스 연동 시 동기 블로킹(`Process.WaitForExit`) 호출로 인한 WPF UI 프리징 위험, 그리고 실제 AI 에이전트의 수사 결과와 무관하게 사전 정의된 기대값(`ExpectedAction`)으로 프로세스를 강제 사살하는 단일 의사결정 권한(SSOT) 위반 위험 식별.
-* 867라인에 달하는 `MainViewModel`에 OS 프로세스 기동/사살, Protobuf 생성, 파일 I/O가 집중될 경우 단일 책임 원칙(SRP) 위배 및 단위 테스트 파괴 위험.
+* `ws2ipdef.h` / `ws2tcpip.h` 컴파일 시 `error C2011: 'ip_mreq': 'struct' type redefinition`, `error C2065: 'PADDRINFOA'`, `error C3861: 'WSAIoctl'` 등 100여 건의 Winsock 심볼 충돌 발생.
+* `grpcpp/impl/generic_serialize.h` 및 `grpc/event_engine/memory_request.h`에서 Windows 매크로 `min`/`max` 간섭으로 구문 에러 발생.
+* `Phalanx.Sensor.exe` 링크 시 `manifest authoring error c1010001: Values of attribute "level" not equal in different manifest snippets (LNK1327)` 발생.
 
 ### 2. 원인 (Root Cause)
-1. 어택랩이 UI 프로토타입 단계에 머물러 있어 실제 CQRS `ProcessTreeProjectionManager` 및 `AutonomousHunterAgent`와 내부 파이프라인 결합 부재.
-2. UI 스레드 컨텍스트에서 OS 프로세스 종료를 동기 대기할 경우 화면 렌더링 락 발생.
-3. 생성자 파라미터 변경 시 기존 `SensorProcessControllerTests` 단위 테스트 시그니처 깨짐 발생.
+1. `windows.h`가 `winsock2.h`보다 먼저 인클루드되어 구형 `winsock.h` (Winsock 1)와 `winsock2.h` (Winsock 2)가 중복 로드됨.
+2. `NOMINMAX` 및 `UNICODE` / `_UNICODE` 매크로 부재로 `std::min`/`std::max` 파괴 및 `krabs-etw`의 `KERNEL_LOGGER_NAME` (`TEXT(...)`) 와이드 문자열 불일치 발생.
+3. CMake의 `target_sources`에 `app.manifest`를 직접 전달하면서 MSVC 기본 생성 매니페스트(`asInvoker`)와 병합 충돌 발생.
 
 ### 3. 해결책 (Resolution)
-1. **AttackLabScenarioRunner 서비스 신설 (SRP 준수)**:
-   * `src/Phalanx.Cockpit/Services/AttackLabScenarioRunner.cs`를 신설하여 OS 프로세스 제어, CQRS 인프로세스 주입, AI 헌터 수사 연동, JSON 감사 리포트 직렬화 전담.
-   * `MainViewModel`은 상태 바인딩 및 커맨드 중계만 담당하도록 계층 분리.
-2. **비동기 논블로킹 및 SSOT 권한 체계 확립**:
-   * `await realOsProcess.WaitForExitAsync(cts.Token)`를 적용하여 UI 프리징 0% 차단.
-   * AI 에이전트의 실제 ReAct 수사 판결(`result.VerdictAction == ActionKill`)에 한해서만 OS 사살을 집행하고, `try-finally` 블록에서 미종료 고아 프로세스 자동 청소 안전망 구현.
-3. **특화 시나리오 제어 분기 및 하위 호환성**:
-   * 시나리오 #7 (DAG Burst): LLM을 우회하고 순수 CQRS 50노드 투영 지연시간을 Stopwatch 실측하여 SLA(<50ms) 판정.
-   * 시나리오 #2 (Reflex Kill): 미등록 노드 수사 시 방어적 폴백 노드 즉시 합성 후 `HandleReflexKill` 호출 (0.08ms 사살 재현).
-   * 4-인자 생성자 오버로드를 유지하여 기존 29개 단위 테스트 100% 무손실 통과 보장.
-4. **Master-Detail 리스트형 UI 개편**:
-   * 7개 붉은 버튼 공해를 전면 제거하고 좌측 8개 항목 통합 리스트 + 우측 인스펙터/단일 주입 버튼 구조로 전환하여 메인 대시보드와의 100% 디자인 일체감 달성.
+1. 루트 `CMakeLists.txt`에 전역 컴파일 정의 `add_compile_definitions(UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00)` 적용.
+2. 모든 C++ 헤더에서 `<windows.h>` 호출 전 `<winsock2.h>`와 `<ws2tcpip.h>`를 선행 인클루드하도록 구조화.
+3. CMake 링크 플래그에 MSVC 네이티브 UAC 임베딩 지시어 `/MANIFEST:EMBED /MANIFESTUAC:"level='requireAdministrator' uiAccess='false'"` 적용하여 `mt.exe` 충돌 없이 PE 바이너리에 권한 임베딩 완료.
 
 ---
 
-## 2026-09-28: [Resolved] AttackLab 전문가 라이브 모드(Live Execution Mode) 및 호스트 안전성/위험 경고 배너 구현
+## 2026-09-10: [Resolved] 원자적 프로세스 동결 엔진(NtSuspendProcess) 24μs 집행 및 폴백 체계
 
 ### 1. 현상 (Symptom)
-* 어택랩의 2가지 모드(클린룸 인프로세스 주입 vs OS 하이브리드)는 안전한 더미 프로세스(`timeout`, `powershell`)만 기동하여 실제 악성 페이로드의 디스크/메모리 생성 양상을 실측할 수 없었음.
-* 특히 시나리오 #5(T1036.005 Masquerading Dropper)의 핵심 한계인 `FileInspectionTool` 부재로 인한 턴 수 지연(메모리 스캔 우회로 21.7초 낭비)을 실제 OS 디스크 레벨에서 체감하고 테스트할 수 있는 라이브 환경 부재.
-* 실제 호스트 OS 상에서 실프로세스와 스크립트를 기동할 경우, 랜섬웨어 시나리오(섀도우 복사본 삭제 등)에 의한 개발 PC 파괴 위험 및 관제사가 위험 모드 작동 여부를 인지하지 못할 UI 안전장치 결핍.
+* 기존 Win32 `CreateToolhelp32Snapshot` + `SuspendThread` 스레드 순회 방식은 스냅샷 생성 및 스레드 오픈 순회 과정에서 수십 ms의 지연이 발생(약 35ms 계측).
+* 순회 도중 타깃 악성 프로세스가 신규 워커 스레드를 즉각 분기(`CreateThread`)하여 페이로드를 실행하고 탈출할 수 있는 미세한 동시성 레이스 컨디션(Race Window) 취약점 존재.
 
 ### 2. 원인 (Root Cause)
-1. `AttackScenario` 내에 실제 OS 공격 페이로드를 스폰하는 실행 정보(`GetLiveProcessInfo`) 델리게이트 부재.
-2. 실행 모드가 단순 `bool isModeOs` 불리언으로 설계되어 3단계(클린룸 / 하이브리드 / 전문가 라이브) 제어 불가능.
-3. 실프로세스 구동 시 호스트 시스템 보호를 위한 무해화(Safe Weaponization) 규칙과 생성 파일 자동 정리(Teardown) 파이프라인 결여.
-4. UI 상에서 실시간 C++ 커널 센서 연결 여부와 결합된 시각적 위험 경고 배너 부재.
+* Win32 공개 API군에는 단일 호출로 프로세스 내 모든 스레드를 일괄 정지시키는 표준 인터페이스가 부재하여, 유저모드 스레드 열거 순회 방식에 의존함.
 
 ### 3. 해결책 (Resolution)
-1. **3-모드 주입 아키텍처 확립 (`AttackLabMode` Enum)**:
-   * `CleanRoom`: 순수 인프로세스 CQRS 텔레메트리 주입 (초고속 단위/파이프라인 검증).
-   * `OsHybrid`: 무해한 표준 프로세스 병행 스폰 및 AI 수사 연동.
-   * `LiveExpert`: 실제 공격 시그니처를 지닌 프로세스/스크립트를 OS 상에 직접 기동하여 디스크/메모리 실체화.
-2. **호스트 안전성 보장 (Safe Weaponization & Teardown Guarantee)**:
-   * **Safe Weaponization**: 시나리오 #2(랜섬웨어)의 볼륨 섀도우 삭제 명령(`vssadmin delete shadows`)을 안전한 조회 명령(`vssadmin list shadows /all`)으로 대체하여 100% TTP 시그니처는 보존하되 호스트 파괴를 원천 차단.
-   * **시나리오 #5 디스크 실체화 및 도구 결핍 감지**: `powershell.exe`를 통해 `C:\Windows\Temp\svchost.exe` 더미 페이로드를 실제 생성하여 디스크 위장 공격을 실체화하고, 감사 로그에 `[도구 결핍 감지] FileInspectionTool 부재로 인한 턴 수 지연`을 명시 기록.
-   * **Teardown Guarantee**: `try-finally` 블록에서 미종료 고아 프로세스(`Kill()`)와 드롭된 임시 파일(`svchost.exe`, `phalanx_test.tmp`)을 100% 자동 삭제하여 파일 잔여물 및 백신 오탐 위험 제거.
-3. **고시인성 위험 경고 배너 및 C++ 커널 센서 연동 UI (`AttackLabWindow.xaml`)**:
-   * 상단에 붉은색 경고 배너를 신설하여 `IsModeLive == true`일 때 즉시 노출.
-   * 호스트 프로세스 실행 및 디스크 쓰기 경고 문구 출력.
-   * `IsSensorConnected` 상태와 연동하여 C++ 커널 센서가 온라인일 때는 녹색 `[KERNEL SENSOR: ONLINE]`, 오프라인일 때는 점멸하는 주황/적색 `[KERNEL SENSOR: OFFLINE - UNPROTECTED]` 배지를 실시간 표출하여 안전한 테스트 환경 조성.
-4. **하위 호환성 유지**:
-   * `ExecuteScenarioAsync(sc, isModeOs, ct)` 오버로드를 유지하여 기존 단위 테스트 및 호출부 호환성 100% 보장 (29/29 Unit Tests Pass).
+1. `ProcessActuator`에 `ntdll.dll`의 미공개 커널 네이티브 API `NtSuspendProcess` 및 `NtResumeProcess`를 동적으로 바인딩하여 1순위 원자적(Atomic) 동결 파이프라인 구축.
+2. 동결 소요 시간이 기존 35,281μs(~35ms)에서 23μs(마이크로초, 1000배 이상 단축)로 단축되어 스레드 탈출 레이스 윈도우 원천 차단.
+3. 권한 부족, 특정 OS 비호환 환경 또는 결함 발생 시 즉시 기존 `Toolhelp32` 방식으로 자동 후퇴(Graceful Fallback)하는 2중 방어선 구현.
 
 ---
 
-## 2026-09-28: [Resolved] Enterprise 설정창(SettingsWindow) 신설 및 UI 팔레트 무채색/옵시디언 다크 전면 정규화
+## 2026-09-10: [Resolved] EtwKernelCollector::Start() 동시성 레이스 컨디션 해결 및 원자적 CAS 적용
 
 ### 1. 현상 (Symptom)
-* Google Cloud Vertex AI / AI Studio API 키, gRPC 커널 센서 IPC 주소, SafetyWatchdog 타임아웃, Reflex 사살 정책, LiteDB 저장 경로 등을 관제 대시보드 내에서 변경할 수 없어 설정 조정 시마다 `AppSettings.json` 수동 편집 및 재기동이 강제됨.
-* 사용자 심미적 요구사항(파란색/네이비 배제 및 하이엔드 무채색 옵시디언 다크 테마)에 반하여 일부 UI 뷰(`AttackLabWindow`, `InvestigationView`)에 푸른색 계열 틴트(`#1c2430`, `#388bfd`, `#58a6ff` 등)가 잔존해 통일감 저해.
-* 에이전트 런타임(`AutonomousHunterAgent`)이 앱 시작 시의 클라이언트 설정을 캐싱하여, 설정창에서 키나 모델을 변경하더라도 런타임에 동적 반영되지 않는 한계 존재.
+* `EtwKernelCollector::Start()`를 복수의 스레드가 동시에 호출할 경우, 이미 가동 중인 스레드가 덮어씌워지며 C++ 런타임에 의해 `std::terminate()` 크래시가 유발될 수 있는 잠재적 취약점 존재.
+* 스레드 기동 중 시스템 자원 부족 예외(`std::system_error` 등) 발생 시 상태 플래그 롤백 로직이 부재하여 `running`이 `true`로 고착되는 상태 불일치 발생.
 
 ### 2. 원인 (Root Cause)
-1. `SettingsWindow` 및 이를 지원하는 `SettingsViewModel`의 부재.
-2. `AutonomousHunterAgent` 내부에 설정 리로드 메서드(`ReloadConfiguration`) 미구현.
-3. 초기 공격 시뮬레이터 및 프로토타입 작성 시 표준 VS 테마/WPF 기본 브러시(파란색 하이라이트) 산재.
+* 기존 코드가 `running.load()`를 확인하고 `running.store(true)`를 호출하는 전형적인 Check-Then-Act (TOCTOU) 비원자적 상태 전이 구조로 작성되어 있었음.
 
 ### 3. 해결책 (Resolution)
-1. **설정창(SettingsWindow) 및 뷰모델(SettingsViewModel) 신설**:
-   * `src/Phalanx.Cockpit/Views/SettingsWindow.xaml` 및 `SettingsViewModel.cs` 구현.
-   * 4개 카테고리 탭 제공:
-     - **AI Hunter & Gemini**: Vertex AI(서비스 계정) vs AI Studio(API 키) 모드 전환, 프로젝트 ID/위치/모델 지정, ReAct 최대 턴 수 및 페일 시큐어 옵션, 비동기 즉시 연결 테스트(Ping/Latency 실측).
-     - **Kernel Sensor IPC**: gRPC Host/Port(`127.0.0.1:50051`), C++ SafetyWatchdog 타임아웃, Reflex Kill(0.1ms) 토글, 프로세스 트리 전체 사살 여부.
-     - **Storage & Forensics**: LiteDB DB 경로(`phalanx_forensics.db`), 리포트 출력 경로, 저장된 침해 사고 카운트 현황 조회.
-     - **System Info**: Phalanx 2-Tier 아키텍처 및 버전 정보.
-   * `SaveSettingsCommand` 실행 시 `AppSettings.json` 영구 저장 및 런타임 `AutonomousHunterAgent.ReloadConfiguration` 즉각 호출로 무중단 적용.
-2. **메인 대시보드 접근성 연동**:
-   * 상단 헤더 바 `SETTINGS` 버튼 및 좌측 네비게이션 레일 하단 톱니바퀴(⚙) 버튼 더블 바인딩으로 손쉬운 모달 호출 지원.
-   * DI 컨테이너(`Program.cs`)에 `SettingsViewModel` 싱글톤 등록.
-3. **UI 팔레트 완전 무채색(Zero Blue) 정규화**:
-   * 전역 솔루션 XAML 스캔을 통해 `#1c2430`, `#388bfd`, `#58a6ff`, `#0e1117`, `#253545`, `#181e28`, `#253548` 등 잔류 푸른색을 순수 티타늄/징크 다크 계열(`#1a1d21`, `#21262d`, `#8b949e`, `#ffffff` 등)로 100% 치환.
-   * `EnterpriseTheme.xaml`에 `FormLabelStyle`, `FormInputStyle`, `IconNavSettings` 추가로 폼 스타일 일체감 확보.
-4. **품질 검증 (Mandatory QA)**:
-   * `dotnet build Phalanx.sln -c Release`: Exit Code 0 (경고 0, 에러 0).
-   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"`: 29/29 통과 (Exit Code 0).
+1. `impl_->running.compare_exchange_strong(expected, true, std::memory_order_acq_rel)`을 적용하여 복수의 스레드가 동시 진입하더라도 오직 하나의 스레드만 `false -> true` 전이에 성공하도록 원자적 상태 전이 보장.
+2. 스레드 생성부를 `try-catch`로 감싸 `std::thread` 생성 실패 시 `impl_->running.store(false, std::memory_order_release)`로 원자적 롤백 수행 및 `false` 반환하도록 예외 안전성 확보.
+
+---
+
+## 2026-09-14: [Resolved] ProcessTree PID 재사용 시 유령 부모(Ghost Parent) 족보 왜곡 방어
+
+### 1. 현상 (Symptom)
+* 윈도우 OS는 종료된 프로세스의 PID를 빠른 속도로 재할당함.
+* 부모 프로세스 A(PID: 1000)가 자식 B(PID: 2000, `ppid = 1000`)를 생성한 후 A가 먼저 종료되고 자식 B는 계속 실행 중인 상태에서, OS가 동일한 PID 1000을 전혀 무관한 새 프로세스 C에 재할당하는 경우 발생.
+* 이때 C++ `ProcessTree`가 PID 1000 노드를 새 프로세스 C로 덮어쓰면, 기존 자식 B의 `ppid`가 여전히 1000을 가리키고 있어 B가 엉뚱한 새 프로세스 C를 자기 부모로 오인하고 족보를 거슬러 올라가는 유령 부모(Ghost Parent) 족보 왜곡 발생.
+
+### 2. 원인 (Root Cause)
+* 윈도우 OS 커널은 부모 프로세스가 종료되어도 고아 자식 프로세스의 `ParentProcessId`를 0으로 재설정해주지 않음 (죽은 부모 PPID 영구 보존).
+* 기존 `ProcessTree::InsertOrOverwriteNodeInternal`은 PID 재사용 시 이전 노드의 부모(`old_ppid`)와의 링크만 절단하고, 이전 노드가 낳았던 자식들(`it->second.children_pids`)의 부모 링크(`child.ppid = 0`) 절단 처리가 누락되어 있었음.
+
+### 3. 해결책 (Resolution)
+1. **즉각 재사용 덮어쓰기 (`InsertOrOverwriteNodeInternal`)**: PID 덮어쓰기 직전, 이전 프로세스의 자식 노드들을 순회하여 `child.ppid == pid`인 경우 `ppid = 0`으로 재설정하여 엉뚱한 새 프로세스로의 유령 입양 원천 차단.
+2. **10,000개 상한선 영구 퇴출 (`EvictOldestTombstoneInternal`)**: 톰스톤 노드가 메모리에서 완전히 삭제(Evict)될 때도, 상향 링크(부모의 `children_pids`에서 나를 제거)뿐만 아니라 하향 링크(자식 노드들의 `ppid = 0` 고아 처리)를 양방향으로 원자적 절단.
+3. **C# ProcessTreeProjectionManager 연동**: C# 측에서도 `LIFECYCLE_START` 수신 시 동일 PID의 활성 노드가 존재하면 이전 노드를 즉시 Tombstone 처리하고 신규 GUID 노드로 대체.
+
+---
+
+## 2026-09-14: [Resolved] CQRS 프로젝션 파이프라인 콜드 스타트 및 초기 스냅샷 핸드셰이크
+
+### 1. 현상 (Symptom)
+* C# Cockpit이 가동되었을 때 C++ 센서로부터 실시간 증분 이벤트만 수신할 경우, 센서 기동 전이나 Cockpit 기동 전부터 실행 중이던 프로세스(약 300여 개)의 계층 관계를 알지 못해 자식 프로세스 인입 시 족보 추적(`GetAncestry`)이 루트에서 단절되는 콜드 스타트 문제 발생.
+* C++ `EtwKernelCollector`에서 프로세스 종료 이벤트(`ProcessStop`) 발생 시 내부 옵저버에게만 통지하고 gRPC 큐 푸시가 누락되어, C# 프로젝션 트리가 종료된 프로세스를 인지하지 못하고 영구 활성 상태로 방치하는 메모리 누수 존재.
+
+### 2. 원인 (Root Cause)
+* 1단계 프로토콜 설계 시 `ProcessEvent`에 프로세스 생명주기 구분이 없었고, 센서-클라이언트 간 gRPC 스트림 연결 시 초기 상태 동기화 프로토콜 규약이 부재했음.
+
+### 3. 해결책 (Resolution)
+1. **`phalanx.proto` 생명주기 및 GUID 확장**: `ProcessLifecycle` enum 추가(`LIFECYCLE_SNAPSHOT`, `LIFECYCLE_START`, `LIFECYCLE_STOP`, `LIFECYCLE_SUSPENDED`, `LIFECYCLE_TERMINATED`).
+2. **C++ `EtwKernelCollector`의 `ProcessStop` 큐 푸시 연동**: 커널 `ProcessStop` 수신 시 `LIFECYCLE_STOP` 및 종료 코드(`exit_code`)를 포함하여 락-스왑 큐에 푸시.
+3. **초기 스냅샷 핸드셰이크**: `ProcessTree::GetActiveSnapshotEvents()`를 구축하여 gRPC 스트림 연결 직후 활성 프로세스 스냅샷 배치(`LIFECYCLE_SNAPSHOT`)를 C# Cockpit으로 일괄 전송.
+
+---
+
+## 2026-09-15: [Resolved] Google Cloud Vertex AI OAuth2 인증 및 JsonElement 매개변수 언래핑 결함
+
+### 1. 현상 (Symptom)
+* Google AI Studio의 단순 API 키 방식 외에, Google Cloud Vertex AI 서비스 어카운트(`Config/google-credentials.json`)를 연동할 때 인증 실패 발생.
+* LLM이 반환한 `ActionArgs` JSON을 `System.Text.Json`으로 역직렬화할 때 딕셔너리 값들이 `JsonElement`로 파싱되어 `DecodePayloadTool` 등의 하위 도구에서 `raw is string` 타입 검사가 실패하고 매개변수 누락 오류가 발생하는 현상.
+
+### 2. 원인 (Root Cause)
+* Vertex AI는 HTTP 헤더에 `x-goog-api-key`가 아닌 OAuth2 Bearer Token(`Google.Apis.Auth.OAuth2`) 인증을 요구하며 엔드포인트 URL 구조가 다름.
+* C# `System.Text.Json`의 `Dictionary<string, object>` 역직렬화 특성상 원시 타입이 네이티브 `string`, `int`가 아닌 `JsonElement` 박싱 객체로 적재됨.
+
+### 3. 해결책 (Resolution)
+1. **`GeminiRestClient.cs` OAuth2 지원**: `ServiceAccountCredential`을 통해 `cloud-platform` 스코프의 Bearer Token을 동적 발급받아 헤더에 주입.
+2. **도구 매개변수 언래핑**: `AutonomousHunterAgent.cs`에서 도구 인자 전달 전 `JsonElement`를 네이티브 C# 타입(`string`, `int`, `double`, `bool`)으로 일괄 언래핑 처리.
+3. `DecodePayloadTool.cs`에서 `JsonElement` 및 다양한 대소문자/별칭(`encodedCommand`, `command`, `payload` 등)을 지원하도록 정규화.
+
+---
+
+## 2026-09-15: [Resolved] Gemini responseSchema CFG 루프/토큰 고갈 결함 및 JSON Mode 최적화
+
+### 1. 현상 (Symptom)
+* EDR 환경에서 Gemini API 호출 시 `responseSchema`를 적용했을 때, 간헐적으로 15초 타임아웃에 도달하며 응답이 실패하거나 도구 선택 정확도가 40%로 급락하는 현상 발생.
+
+### 2. 원인 (Root Cause)
+* Gemini 내부 추론 토큰(`thoughtsTokenCount`)이 `MaxOutputTokens`(4096)의 예산을 잠식하고, 필드 설명이 불명확한 필드에서 CFG(Context-Free Grammar) 문법 제약 퇴행 무한 반복 루프가 발생하여 타임아웃 유발.
+* Native Function Calling은 보안 사고 과정(`Thought`)이 90% 이상 누락되어 EDR 포렌식 요구사항에 부적합.
+
+### 3. 해결책 (Resolution)
+* **JSON Mode + 정밀 파서 채택**: 순수 JSON Mode와 견고한 중첩 괄호 균형 탐색 파서(`LlmJsonParser`) 조합을 프로덕션 표준으로 확정.
+* 도구 선택 정확도 100%, 필수 인자 100%, 보안 사고 과정(CoT) 보존 및 단일 왕복 완결 달성.
+
+
+---
+
+## 2026-09-15: [Resolved] EDR 수사 도구 5대 실무 맹점 해결
+
+### 1. 현상 (Symptom)
+* 실전 환경 검증 시 식별된 핵심 수사 도구 결함:
+  1. `DecodePayloadTool`: Gzip/Deflate 압축 인코딩(`H4sIA...`)이 결합된 파워셸 드로퍼 미탐.
+  2. `ProcessMemoryScanTool`: 0x0부터 선형 50MB만 순회하여 고위 주소 동적 힙(`VirtualAlloc`)의 Cobalt Strike/Reflective DLL 미탐, `PAGE_GUARD` 크래시 위험 및 LOH 파편화.
+  3. `ThreatReputationTool`: RFC 1918 B클래스(`172.16.0.0/12`) 누락으로 사내 사설망을 외부 IP로 오인, 미확인 IP에 75점 부여로 정상 통신 프로세스 오탐 사살 위험.
+  4. `MitreClassifierTool`: 단순 `Contains("c2")` 매칭으로 정상 설치기 `c2rsetup.exe`를 C2 공격으로 오탐.
+  5. `SystemFirewallTool`: Netsh 실패 시에도 `true`를 반환하는 Silent Failure 버그, 게이트웨이/DNS 차단 시 엔드포인트 네트워크 먹통(Self-DoS) 위험.
+
+### 2. 원인 (Root Cause)
+* VAD 구조, 엔터프라이즈 사설망 토폴로지, 다단계 압축/난독화 및 인프라 보호 가드가 프로토타입 단계에서 결여되었음.
+
+### 3. 해결책 (Resolution)
+1. **`DecodePayloadTool`**: Gzip 매직 바이트(`0x1F, 0x8B`) 자동 감지 및 `GZipStream`/`DeflateStream` 무손실 압축 해제, Hex 디코더 추가, ReDoS 가드(250ms).
+2. **`ProcessMemoryScanTool`**: `VirtualQueryEx` 기반 VAD 순회로 Unbacked Executable Memory (`MEM_PRIVATE` + `EXECUTE` + `!PAGE_GUARD`)만 선별 스캔, 사설 메모리 첫 2바이트 `MZ` 헤더 감지, `ArrayPool<byte>.Shared` 활용.
+3. **`ThreatReputationTool`**: 비트마스크 사설망 분류기(RFC 1918 A/B/C, 루프백, APIPA, CGNAT 등 0점 처리), 미확인 외부 IP는 30점 중립(`INCONCLUSIVE`) 처리, 포트/디팽 파싱 전처리.
+4. **`MitreClassifierTool`**: 단어 경계(`\b`) 컴파일 정규식 26종 적용으로 파일명 오탐 차단, 10단계 사이버 킬체인 순서 정렬.
+5. **`SystemFirewallTool`**: `new ToolResult(overallSuccess, ...)` 반환으로 Silent Failure 방지, 로컬 IP/기본 게이트웨이/DNS 화이트리스트 보호망 구축.
+
+---
+
+## 2026-09-16: [Resolved] C# 생성자 내 Sync-over-Async(GetAwaiter().GetResult()) 스레드풀 데드락 제거
+
+### 1. 현상 (Symptom)
+* `AutonomousHunterAgent` 클래스 생성자 내부에서 Vertex AI 서비스 계정 토큰 발급 및 설정 로딩 시 `.GetAwaiter().GetResult()`를 호출하는 동기 블로킹 코드가 잔존하여, 스레드풀 고갈(Thread Pool Starvation) 시 데드락 발생 위험 존재.
+
+### 2. 원인 (Root Cause)
+* 의존성 주입 또는 인스턴스 초기화 시점에서 비동기 초기화 팩토리 패턴을 사용하지 않고 생성자에서 동기 대기함.
+
+### 3. 해결책 (Resolution)
+* `AutonomousHunterAgent.cs` 생성자에서 블로킹 호출을 제거하고, `GeminiRestClient.TryCreateFromLocalConfig()` 동기 팩토리 메서드를 신설하여 Phalanx 로컬 JSON 설정을 안전하게 파싱하도록 리팩토링.
+
+---
+
+## 2026-09-16: [Resolved] AI 수사관 판정 왜곡(Decision Hijacking) 및 결정권 침해 결함 해결 (SSOT 아키텍처 확립)
+
+### 1. 현상 (Symptom)
+* 정상 관리 스크립트(`explorer.exe ➔ powershell.exe -enc <Get-Service ... *.internal>`) 인입 시, Gemini 모델이 정상 판결(`ACTION_RESUME`, 확신도 98%)을 내렸음에도 C# 호스트 코드가 이를 가로채 `ActionKill`로 변조하고 피싱 기법(`T1566.001`)을 조작 주입하는 치명적 오탐 발생.
+
+### 2. 원인 (Root Cause)
+1. **의미론적 확신도 역전 (Semantic Inversion)**: `ConfidenceScore`(정상 프로세스 확신도 98%)를 `threatScore`(위협 점수 98점)로 오인 바인딩하여 사살 집행.
+2. **정적 시그니처 강제 오버라이드**: 동결 사유였던 `-enc`를 최종 단계에서 `CommandLine.Contains("-enc")`로 재검사하여 LLM 수사 결론을 무시하고 강제 사살.
+3. **증거 조작 및 조기 차단**: 정상 제목을 사살용 제목으로 치환하고, 미확정 상태에서 사내 백업 서버 IP 방화벽 차단 집행.
+
+### 3. 해결책 (Resolution)
+1. **단일 진실 공급원(SSOT) 아키텍처 확립**: ReAct 루프가 정상 종결(`reachedFinal == true && hasValidAction`)된 경우, Gemini AI 수사관의 `VerdictAction`(`ACTION_KILL` vs `ACTION_RESUME`)을 100% 최상위 결정권으로 수용. `Contains("-enc")`, `Contains("http")` 등 정적 오버라이드 코드 완전 삭제.
+2. **Fail-Secure 안전 가드 격리**: C# 시스템 가드는 최대 턴 초과, API 장애 등 '예외 상황'에서만 선제 사살을 집행하도록 관심사 분리(SoC).
+3. **포렌식 무결성 보장**: 정상 프로세스 판정 시 가짜 TTP 주입 차단 및 `blockedIp = ""` 보장, 악성 확정 시에만 `SystemFirewallTool` 집행.
+
+---
+
+## 2026-09-16: [Resolved] WPF 관제 콕핏과 Kestrel gRPC 백그라운드 서버 하이브리드 호스팅 및 STA 스레드 안전성 확보
+
+### 1. 현상 (Symptom)
+* Phase 4에서 WPF 관제 콕핏(`Phalanx.Cockpit`)과 C++ 센서와의 통신을 위한 Kestrel gRPC 서버(포트 50051)를 단일 실행 바이너리(`Program.cs`)에 통합할 때, 비동기 `async Task Main`에서 `new MainWindow()`를 인스턴스화할 경우 STA(Single-Threaded Apartment) 스레드 제약 위반으로 `InvalidOperationException`이 발생하거나, 반대로 WPF STA 스레드에서 gRPC 네트워크 IO를 블로킹하여 UI 프리징이 발생하는 아키텍처 충돌 발생.
+* 백그라운드 Kestrel gRPC 및 AI 에이전트 수사관 스레드에서 실시간 이벤트 발생 시 WPF UI 컬렉션(`ObservableCollection`)을 직접 수정하려 하여 `NotSupportedException` 발생 위험.
+
+### 2. 원인 (Root Cause)
+* WPF UI 서브시스템은 엄격한 `[STAThread]` 동기 진입점과 독립된 Dispatcher 메시지 펌프를 요구하는 반면, Kestrel 웹 호스트는 비동기 멀티스레드 스레드풀 워커를 기반으로 동작함.
+* 비UI 스레드에서 UI 바인딩 컬렉션을 조작할 경우 WPF의 스레드 선호도(Thread Affinity) 모델과 충돌함.
+
+### 3. 해결책 (Resolution)
+1. **하이브리드 호스팅 라이프사이클 (`Program.cs`)**:
+   * `[STAThread] public static void Main(string[] args)` 동기 진입점을 유지.
+   * `webApp.Start()`(동기 비차단)를 통해 Kestrel gRPC 서버를 백그라운드에서 기동한 후, 메인 STA 스레드에서 `wpfApp.Run(mainWindow)`을 실행하여 UI 메시지 펌프를 완벽히 유지.
+   * `mainWindow.Closed` 이벤트 핸들러에서 `await webApp.StopAsync()` 및 `DisposeAsync()`를 호출하여 창 종료 시 백그라운드 gRPC 서버가 안전하게 Graceful Shutdown되도록 결합.
+   * CI 및 풀체인 E2E 테스트 스크립트를 위한 `--headless` 모드 지원 분기 추가.
+2. **이벤트 브리지 및 UI 스레드 마샬링 (`CockpitUiBridge`)**:
+   * gRPC 수신 및 AI 수사 시작/완료 알림을 `Application.Current?.Dispatcher?.InvokeAsync(...)`로 안전하게 래핑하여 UI 스레드로 마샬링.
+   * 비GUI 환경(헤드리스 러너 및 단위 테스트)에서도 `Application.Current`가 null일 때 안전하게 No-op 통과하는 Null-Safety 방어 구현.
+
+---
+
+## 2026-09-20: [Resolved] gRPC 스트림 다중 클라이언트 세션 덮어쓰기 및 거짓 DISCONNECTED 상태 전이 결함 해결
+
+### 1. 현상 (Symptom)
+* C++ 커널 센서(`Phalanx.Sensor`)가 백그라운드에서 정상 기동되어 gRPC 스트림을 유지하고 있음에도 불구하고, 모의 공격 도구(`Phalanx.AttackSimulator`) 실행 종료 직후 또는 유휴 상태 경과 시 WPF 관제 콘솔의 상단 통신 상태가 주기적으로 빨간색 `[DISCONNECTED]`로 반전되는 현상 발생.
+* 센서 토글 버튼은 `STOP SENSOR`로 가동 상태를 가리키는데 통신 상태는 `[DISCONNECTED]`로 표시되어 관제관에게 혼선을 초래하고, 수동 완화 명령 하달 실패 가능성 유발.
+
+### 2. 원인 (Root Cause)
+1. **단일 응답 스트림 포인터 덮어쓰기 및 조기 폐기**:
+   * `PhalanxGrpcService`가 단일 필드 `private IServerStreamWriter<MitigationCommand>? _responseStream;`로 작성되어 있었음.
+   * C++ 센서가 연결된 상태에서 모의 공격 도구가 추가로 `StreamTelemetry`에 연결하면 해당 필드가 모의 도구의 스트림으로 덮어써짐.
+   * 모의 도구의 시나리오가 끝나 연결이 해제되면 `finally` 블록에서 `_responseStream = null`로 초기화하고 `_uiBridge?.NotifySensorConnected(false)`를 무조건 호출함.
+   * 이로 인해 C++ 센서가 여전히 연결되어 있음에도 UI가 `[DISCONNECTED]`로 반전되고, 백그라운드 센서로 완화 명령을 보낼 수 없는 단절 상태 발생.
+2. **Kestrel HTTP/2 유휴 킵얼라이브 미설정**:
+   * Kestrel gRPC 엔드포인트에 HTTP/2 KeepAlive Ping 설정이 부재하여 유휴 시 소켓 반폐쇄(Half-closed) 상태 진입 가능성 존재.
+
+### 3. 해결책 (Resolution)
+1. **동시성 컬렉션 기반 멀티 클라이언트 세션 관리 (`PhalanxGrpcService.cs`)**:
+   * 단일 포인터를 `ConcurrentDictionary<string, IServerStreamWriter<MitigationCommand>> _activeClients`로 교체.
+   * 클라이언트 접속 시 고유 ID로 등록하고, 연결 해제 시 해당 클라이언트만 제거.
+   * `_activeClients.IsEmpty`가 true(즉, 등록된 모든 클라이언트가 완전히 단절)일 때만 `_uiBridge.NotifySensorConnected(false)`를 호출하도록 통신 수명주기 보정.
+   * `SendCommandAsync` 실행 시 살아있는 모든 스트림으로 완화 명령을 브로드캐스팅하고 죽은 스트림은 안전하게 제거.
+2. **Kestrel HTTP/2 킵얼라이브 활성화 (`Program.cs`)**:
+   * `KeepAlivePingDelay = 30s`, `KeepAlivePingTimeout = 15s`, `KeepAliveTimeout = 5분`을 명시하여 장기 유휴 gRPC 세션의 무중단 연결 유지 보장.
+3. **기존 센서 프로세스 감지 시 이벤트 리스너 바인딩 (`SensorProcessController.cs`)**:
+   * 이미 외부에서 실행 중이던 `Phalanx.Sensor` 프로세스를 감지했을 때도 `EnableRaisingEvents = true` 및 `Exited` 핸들러를 등록하여 비정상 종료 시 가동 상태 플래그가 정확히 동기화되도록 보강.
+
+---
+
+## 2026-09-20: [Resolved] C++ 커널 룰 엔진 0.1ms 즉각 현장 사살(Reflex Kill)의 관제 콕핏 누락 및 포렌식 즉시 등록 구현
+
+### 1. 현상 (Symptom)
+* 랜섬웨어(`vssadmin.exe delete shadows`, `bcdedit /set recoveryenabled no` 등)가 실행될 때 C++ 커널 센서의 `LocalRuleEngine`이 0.1ms(80μs) 이내에 즉각 현장 사살(`NtTerminateProcess`)을 집행하고 `Lifecycle = LIFECYCLE_TERMINATED` 텔레메트리를 C# Cockpit으로 전송함.
+* 그러나 WPF 관제 콕핏 UI 상단의 Monitored Processes 카운트 및 내부 CQRS 트리에서만 프로세스가 비활성화(`IsAlive = false`)될 뿐, 좌측 실시간 인시던트 작업 목록(Incident Worklist)에는 침해 대응 카드가 전혀 생성되지 않는 현상 발생.
+
+### 2. 원인 (Root Cause)
+1. **수사 파이프라인 트리거 조건의 단일화 (`PhalanxGrpcService.cs`)**:
+   * 기존 gRPC 서비스의 텔레메트리 루프는 `if (ev.IsSuspended)` 조건문만 검사하여 동결된 회색지대 프로세스만 `AutonomousHunterAgent.InvestigateThreatAsync`로 라우팅하고 있었음.
+   * C++ 로컬 룰 엔진에 의해 즉각 사살된 이벤트는 이미 종료되었으므로 `IsSuspended = false`, `IsTerminated = true`, `Lifecycle = LIFECYCLE_TERMINATED` 상태로 인입됨.
+   * 이로 인해 C# 에이전트 수사관 및 관제 UI 브리지로 사건 통지가 도달하지 못함.
+2. **사살 후 역전송 불필요 제약과의 결합**:
+   * 이미 C++ 센서가 프로세스를 사살했기 때문에 C#에서 센서로 `MitigationCommand`를 다시 보낼 필요가 없음(오히려 중복 송신 시 오류). 그러나 관제관(SOC) 보고 및 LiteDB 포렌식 아카이빙은 여전히 필수적임.
+
+### 3. 해결책 (Resolution)
+1. **현장 사살 즉각 보고 파이프라인 신설 (`AutonomousHunterAgent.HandleReflexKill`)**:
+   * AI ReAct 루프의 수 초 지연을 거치지 않고, 0.08ms 소요시간 레코드와 `LocalRuleEngine` 사살 사유, MITRE ATT&CK T1490 전술을 담은 `IncidentRecord` 및 1단계 `ReActTraceRecord`를 즉각 생성.
+   * LiteDB 영구 저장소(`ForensicArchiveManager.SaveIncident`)에 즉시 적재.
+   * `OnInvestigationCompleted` 이벤트를 트리거하여 `CockpitUiBridge`를 통해 WPF UI 스레드로 마샬링, 관제 콕핏 인시던트 목록에 빨간색 `CRITICAL` / `SECURED` 카드를 즉시 표시.
+2. **gRPC 인입 라우팅 분기 보강 (`PhalanxGrpcService.cs`)**:
+   * `else if (ev.IsTerminated || ev.Lifecycle == ProcessLifecycle.LifecycleTerminated)` 분기를 추가하여 C++ 현장 사살 수신 시 `_agent.HandleReflexKill(node)`로 직결.
+3. **모의 도구 및 단위 테스트 검증**:
+   * `FullChainSystemTests.cs`의 `TestScenario1_InstantKill_BypassesAiInvestigation`에 포렌식 아카이브 및 인시던트 자동 등록 검증 단계를 추가하여 회귀 방지(26/26 Unit Tests 통과).
+   * `Phalanx.AttackSimulator` 시나리오 2(`vssadmin.exe delete shadows`)의 페이로드를 실제 C++ 센서의 사살 텔레메트리 포맷(`IsSuspended = false, IsTerminated = true, LifecycleTerminated`)으로 동기화.
+4. **적응형 레이턴시(Latency) 포맷터 및 영구 복원 개선 (`IncidentItemViewModel.cs`, `MainViewModel.cs`, `ForensicModels.cs`)**:
+   * 밀리초(`ElapsedMs`)를 무조건 초(`s`) 단위로 변환 후 소수점 둘째 자리(`:F2`)로 포맷팅하여 10ms 미만 초고속 사건이 `0.00s`로 절삭되던 결함 수정 (`80μs (0.08ms, Reflex)` 표기).
+   * 재시작 후 모든 과거 카드가 `Investigating...`으로 초기화되던 원인: `IncidentRecord`에 지연시간 필드가 부재하고 `LoadIncidentsFromDatabase`에서 `ElapsedMs` 바인딩이 누락되어 `0.0`으로 남아있었던 결함.
+   * `IncidentRecord.ElapsedMs` 스키마 필드 추가 및 `traces.Sum(t => t.ElapsedMs)` 복원 파이프라인 구축.
+   * 이미 판결이 종결된 사건(`ACTION_KILL`/`ACTION_RESUME`)은 `ElapsedMs`가 0이더라도 `Investigating...`이 절대 표출되지 않도록 이중 방어.
+5. **현장 사살 후속 대응 런북(Remediation) 정제 (`AutonomousHunterAgent.cs`)**:
+   * 이미 완료된 실행 사실(`사살 완료 (소요시간 0.08ms)`)을 런북에서 완전 제거.
+   * 룰 유형(`vssadmin` 섀도 복사본 무결성 검증, `bcdedit` BCD 부팅 정책 점검, `wbadmin` 백업 카탈로그 감사 등)에 따른 실제 관제관 후속 Action Item으로 세분화.
+6. **수동 개입(Force Terminate / Resume) 버튼 제거 및 관제 UX 단순화 (`MainWindow.xaml`, `MainViewModel.cs`)**:
+   * 이미 C++ 커널 또는 AI 수사관에 의해 종결(`ACTION_KILL`/`ACTION_RESUME`)된 사건에 대해 사후 수동 개입 버튼을 노출하는 논리적 모순 및 관제관 혼선 해소.
+   * 자율 EDR 원칙(Autonomous Execution)에 맞춰 프로세스 강제 종료/재개 버튼 및 불필요한 바인딩 코드를 완전히 제거하고, 향후 실무형 2차 거버넌스 기능(화이트리스트 등록, 포렌식 보고서 복사 등)으로 전환할 수 있도록 UX 정리.
+7. **관제 콕핏 인시던트 검색 필터(`ApplyFilter`) `NullReferenceException` 예외 결함 해결 (`MainViewModel.cs`)**:
+   * 현상: 관제 콕핏 상단 검색창에 키워드 입력 시 `MainViewModel.ApplyFilter()`(줄 340)에서 `NullReferenceException`이 발생하며 콕핏 크래시.
+   * 원인: 과거 사건의 `BlockedIp`, `CommandLine` 등이 null인 상태에서 Null 조건부 연산자 없이 `.Contains()`를 직접 호출하여 발생. 또한 DB 역직렬화 시 null 필드가 뷰모델에 그대로 바인딩됨.
+   * 해결: `TargetImage`, `CommandLine`, `SummaryTitle`, `BlockedIp` 등에 `?.Contains(...) ?? false` 널-세이프 탐색 연산자 적용 및 `LoadIncidentsFromDatabase`에서 `?? string.Empty`로 방어 초기화.
+
+---
+
+## 2026-09-23: [Resolved] Kestrel 백그라운드 스레드의 ObservableCollection 조작으로 인한 gRPC 스트림 단절 및 센서 ON/OFF 무한 루프
+
+### 1. 현상 (Symptom)
+* WPF 관제 콘솔 UI에서 C++ 센서 연결 상태가 `LIVE`와 `OFFLINE` 사이를 수 초 주기로 계속해서 자동으로 반복 전환(플리핑)됨.
+* 프로세스 트리 화면에 활성 프로세스가 1개 또는 소수만 표시되고 전체 PC 프로세스가 적재되지 못함.
+
+### 2. 원인 (Root Cause)
+1. **WPF UI 컬렉션 스레드 위반 (`NotSupportedException`)**:
+   * C++ 센서가 접속하여 300+개 활성 프로세스 스냅샷 배치(`snapshot_batch`)를 gRPC로 전송할 때, Kestrel 백그라운드 스레드풀에서 `ProcessTreeProjectionManager.RootNodes.Add(node)`를 호출함.
+   * `ProcessGraphView`의 `TreeView`가 `RootNodes`에 바인딩되어 있는 상태에서 Dispatcher가 아닌 백그라운드 스레드가 `ObservableCollection`을 수정함에 따라 WPF `CollectionView`가 `NotSupportedException`을 발생시킴.
+   * 예외로 인해 `PhalanxGrpcService.StreamTelemetry`가 루프를 탈출하고 `finally` 블록에서 `_uiBridge.NotifySensorConnected(false)`를 호출하여 UI가 `OFFLINE`으로 전환됨.
+   * C++ 센서는 스트림 단절을 감지하고 2초 후 자동 재접속(`LIVE`) ➔ 스냅샷 재전송 ➔ 예외 재발생 ➔ `OFFLINE` 전환을 무한 반복함.
+2. **스냅샷 배치 분할 및 족보 왜곡**:
+   * `PhalanxGrpcService`에서 `foreach (var ev in batch.ProcessEvents)`로 쪼개어 `ApplyDeltaEvent(ev)`를 호출하면서, 300개의 스냅샷 이벤트가 개별 `ApplySnapshotBatch(new[] { ev })`로 분할 전달됨.
+   * `tempMap`이 1개 노드만 갖게 되어 부모-자식 관계를 형성하지 못하고 전원 루트 노드로 편입되는 결함 유발.
+
+### 3. 해결책 (Resolution)
+1. **WPF 컬렉션 동기화 및 Dispatcher 마샬링 (`ProcessTreeProjectionManager.cs`)**:
+   * `BindingOperations.EnableCollectionSynchronization(RootNodes, _syncLock)` 및 `EnableCollectionSynchronization(AllNodes, _syncLock)` 등록.
+   * `DispatchUI` 헬퍼를 도입하여 `RootNodes`, `AllNodes`, `node.Children` 조작을 UI Dispatcher 스레드로 안전하게 마샬링 (헤드리스/테스트 환경 Null-Safety 보장).
+2. **gRPC 스냅샷 배치 보존 (`PhalanxGrpcService.cs`)**:
+   * `batch.ProcessEvents` 중 `LifecycleSnapshot` 이벤트를 `ApplySnapshotBatch(snapshotEvents)`로 통째로 전달하여 단 1회의 Dispatcher 컨텍스트 스위치로 부모-자식 트리 전체를 0초 완결 투영.
+3. **로컬 OS 프로세스 기저 투영 폴백 (`InitializeFromLocalOsSnapshot`)**:
+   * Win32 `CreateToolhelp32Snapshot` P/Invoke를 구현하여, C++ 커널 센서가 연결되기 전(오프라인 상태)이라도 Cockpit 기동 즉시 로컬 PC의 300여 개 전체 프로세스를 즉각 렌더링.
+
+
+---
+
+## 2026-09-28: [Resolved] 프로세스 트리(TreeView) 리프 노드 클릭 시 화면 좌측 쏠림 및 고착 결함
+
+### 1. 현상 (Symptom)
+* `ProcessGraphView`(인메모리 프로세스 족보 탐색기)에서 깊이 중첩된 자식/리프 노드를 클릭했을 때, 트리 뷰포트 전체가 우측으로 스크롤되면서 화면 내 프로세스 트리 내용이 좌측으로 밀려 사라짐.
+* 루트 노드와 확장 접기 화살표, 부모 프로세스들이 좌측 화면 밖으로 이탈하며, 다른 노드를 클릭하거나 마우스를 움직여도 원상태(가로 오프셋 0)로 돌아오지 않고 좌측 쏠림 상태로 영구 고착됨.
+
+### 2. 원인 (Root Cause)
+1. **WPF TreeView의 기본 포커스 BringIntoView() 호출 메커니즘**:
+   * WPF의 `TreeViewItem`은 마우스 클릭 또는 포커스 획득 시 자동으로 `BringIntoView()`를 호출하여 `FrameworkElement.RequestBringIntoViewEvent` 라우티드 이벤트를 발생시킴.
+2. **무제한 수평 측정 pass 및 가로 폭 오프셋 팽창**:
+   * `TreeView` 내부의 기본 템플릿에 내장된 `ScrollViewer`는 기본적으로 `HorizontalScrollBarVisibility="Auto"` 상태로 동작함.
+   * 이에 따라 자식 노드들에 대해 `availableSize.Width = double.PositiveInfinity`로 무한 가로 너비를 부여하며, `TreeViewItem` 템플릿 내의 `<ColumnDefinition Width="*" />`와 결합하여 자식 노드가 깊어질수록(19px * depth 계층 들여쓰기) 항목의 우측 바운딩 박스가 뷰포트 가시 영역 너비를 크게 초과함.
+3. **ScrollViewer의 일방향 수평 스크롤 및 복구 기전 부재**:
+   * `ScrollViewer`는 이벤트의 `TargetRect` 우측 경계가 화면 밖으로 나갔다고 판단하여 이를 화면 안에 넣기 위해 `HorizontalOffset`을 증가시킴 (콘텐츠가 화면 좌측으로 밀려남).
+   * WPF `ScrollViewer`는 항목 가시화 요청에 따른 일방향 스크롤만 수행할 뿐 클릭 완료 후 원점(X=0)으로 복귀시키는 메커니즘이 전무함.
+   * 또한 수평 스크롤바가 숨겨져 있어 사용자가 수동으로 되돌릴 수도 없으며, 다른 자식 노드를 클릭해도 해당 노드의 들여쓰기 바운딩 박스가 타깃이 되므로 수평 오프셋이 유지되거나 더 밀려남.
+
+### 3. 해결책 (Resolution)
+1. **1단계 프레임워크 제어 (WPF 표준 패턴)**:
+   * `TreeView`에 `ScrollViewer.HorizontalScrollBarVisibility="Disabled"` 선언 및 `RequestBringIntoView` 이벤트 차단(`e.Handled = true`)으로 1차 방어.
+2. **2단계 구조적 전면 해결: 플랫 가상화 트리 투영 (Flat Virtualized Tree Projection) 마이그레이션**:
+   * Microsoft WinUI 3(`TreeViewList`), VS Code(`Monaco Tree`), ILSpy(`SharpTreeView`)의 아키텍처 패턴을 Phalanx에 선제적 도입.
+   * **데이터 계층 (`ProcessTreeProjectionManager`)**:
+     * `ProcessNodeModel`에 `Depth` 및 `IndentMargin` 속성, `IsExpanded` 토글 추가.
+     * `VisibleNodes` (`ObservableCollection<ProcessNodeModel>`)를 구축하여 트리가 펼쳐질 때 DFS 전위 순서(Pre-order)로 1차원 평탄화 투영.
+     * `ToggleNodeExpanded` 메서드를 통해 노드 접힘/펼침 시 VS Code의 배열 `splice()` 방식으로 가시 노드만 부분 갱신.
+     * `EnsureNodeVisible` 메서드를 통해 심층 수사실에서 프로세스 트리 점프 시 상위 조상 노드 자동 언랩 지원.
+   * **UI 뷰 계층 (`ProcessGraphView.xaml` / `.cs`)**:
+     * 고전 재귀 `TreeView`를 제거하고, 하드웨어 가상화가 켜진 `ListView`(`VirtualizingStackPanel.IsVirtualizing="True"`, `VirtualizationMode="Recycling"`, `ScrollUnit="Pixel"`)로 교체.
+     * 순수 MVVM 데이터 바인딩(`SelectedItem="{Binding SelectedProcessNode, Mode=TwoWay}"`)으로 코드비하인드 이벤트 핸들러 제거.
+     * 1차원 수직 평면 렌더링으로 수평 스크롤 요동 및 쏠림 현상을 구조적으로 0% 원천 박멸하고, 60fps 가상화 스크롤과 향후 멀티컬럼(TreeGrid) 확장 기반 확보.
 
 ---
 
@@ -465,5 +373,4 @@ related:
    * `CockpitUiBridge.Dispatch`에 `app.Dispatcher.Thread.IsAlive` 검사를 추가하여 종료된 스레드로의 큐잉 방지.
 3. **WPF 솔루션 빌드 안정화**:
    * MSBuild 직렬화 옵션(`-m:1`) 또는 프로젝트 개별 빌드를 통해 XAML 파서 중간 산출물 경합 방지 확인.
-
 
