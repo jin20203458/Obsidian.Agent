@@ -374,3 +374,32 @@ related:
 3. **WPF 솔루션 빌드 안정화**:
    * MSBuild 직렬화 옵션(`-m:1`) 또는 프로젝트 개별 빌드를 통해 XAML 파서 중간 산출물 경합 방지 확인.
 
+---
+
+## 2026-09-29: [Resolved] Phase 1 레거시 벤치마크 및 중복 코드 821라인 일괄 폐기 및 싱글톤 스레드 안전성 확보
+
+### 1. 현상 (Symptom)
+* 전체 C# 코드베이스 정적 감사 결과:
+  1. `LlmArchitectureBenchmarkTests.cs` (517라인) 및 `GeminiApiDto.cs` 내 `FunctionCallDto`, `FunctionResponseDto` 등 이미 Phase 3에서 검증 완료되어 `docs/04_performance_benchmarks.md`에 박제된 일회성 벤치마크/미사용 DTO가 테스트 및 코어 라이브러리에 잔존.
+  2. `tools/Phalanx.AttackSimulator/Scenarios/AttackScenarioRegistry.cs` (289라인)가 `src/Phalanx.Cockpit/Scenarios`와 100% 동일하게 이중 중복 유지됨.
+  3. `CockpitUiBridge.cs` 및 `SensorProcessController.cs`의 싱글톤 인스턴스 생성이 `_instance ??= new ...()`로 되어 있어 멀티스레드 레이스 컨디션 위험 존재.
+
+### 2. 원인 (Root Cause)
+* Phase 3 아키텍처 결정 후 과거 벤치마크 코드와 프로토타입 DTO를 미처 정리하지 못하고 보존해옴.
+* 어택랩 기능 Cockpit 통합 과정에서 시뮬레이터 프로젝트의 중복 파일 정리 누락.
+
+### 3. 해결책 (Resolution)
+1. **레거시 벤치마크 및 DTO 동반 삭제**:
+   * `tests/Phalanx.Agent.Tests/LlmArchitectureBenchmarkTests.cs` (-516라인) 완전 삭제.
+   * `src/Phalanx.Cockpit/Agent/Gemini/GeminiApiDto.cs`에서 `FunctionCallDto`, `FunctionResponseDto`, `Tools`, `FunctionCall`, `FunctionResponse` 완전 제거 (-17라인).
+2. **시나리오 레지스트리 단일화 (SSOT)**:
+   * `tools/Phalanx.AttackSimulator/Scenarios/AttackScenarioRegistry.cs` (-288라인) 완전 삭제.
+   * `tools/Phalanx.AttackSimulator/Program.cs`에서 `Phalanx.Cockpit.Scenarios`를 직접 참조하도록 네임스페이스 단일화.
+3. **싱글톤 아키텍처 스레드 안전성 확보**:
+   * `CockpitUiBridge.cs`, `SensorProcessController.cs`의 `Instance` 프로퍼티를 `public static ... Instance { get; } = new();` 정적 인스턴스로 전환.
+4. **품질 검증 (Gate 2 PASS)**:
+   * `dotnet build Phalanx.sln -c Release -m:1`: Exit Code 0 (경고 0, 에러 0).
+   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"`: 33/33 전수 통과 (Exit Code 0).
+   * 총 약 821 라인의 레거시/중복 소스코드 감축 완료.
+
+
