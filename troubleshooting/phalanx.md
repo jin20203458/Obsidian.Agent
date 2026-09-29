@@ -432,4 +432,39 @@ related:
    - `dotnet build Phalanx.sln -c Release -m:1`: Exit Code 0 (경고 0, 에러 0).
    - `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"`: 33/33 전수 통과 (Exit Code 0).
 
+---
+
+## 2026-09-29: [Resolved] Phase 3 데이터 무결성 및 비동기 정규화 (CRIT-06, MAJ-06, MAJ-03, MAJ-01, MAJ-02, NEW-01)
+
+### 1. 현상 (Symptom)
+1. **[CRIT-06, MAJ-06] LiteDB 원자적 트랜잭션 부재 및 타임스탬프 인덱스 누락**:
+   - `ForensicArchiveManager.cs`: `SaveIncident` 호출 시 `_incidents.Upsert` 성공 후 `_traces.InsertBulk` 도중 장애 발생 시 사건과 트레이스 간 정합성 결여.
+   - `GetAllIncidents` 쿼리 시 `Timestamp` 인덱스가 없어 전체 문서 풀스캔 발생.
+2. **[MAJ-03] 센서 프로세스 동기 블로킹 및 타임아웃 시 좀비 프로세스 방치**:
+   - `SensorProcessController.cs`: `Task.Run(() => _sensorProcess.WaitForExit(3000))`로 ThreadPool 스레드를 동기 블로킹. 타임아웃 발생 시 OS 프로세스가 여전히 실행 중인데 핸들만 버려져 커널 ETW 세션을 독점하는 고아 좀비 프로세스 발생.
+3. **[MAJ-01, MAJ-02, NEW-01] 방화벽 도구 동기 블로킹, 파이프 버퍼 포화 데드락 위험 및 이모지 잔재**:
+   - `SystemFirewallTool.cs`: `Task.WhenAll` 완료 후 `.Result` 동기 접근 안티패턴.
+   - `RunNetshAsync`: stdout/stderr 순차 대기 시 버퍼 포화 데드락 위험 및 5초 타임아웃 방어 부재.
+   - 5개 지점(7개 문자)에 `🚨`, `✅`, `⚠️`, `❌` 장식용 이모지 하드코딩 잔존.
+
+### 2. 원인 (Root Cause)
+* LiteDB 5.0 트랜잭션 API(`BeginTrans`, `Commit`, `Rollback`) 미활용.
+* .NET 9 비동기 표준(`WaitForExitAsync`) 미적용 및 OS 프로세스 수명주기 강제 회수(`Kill`) 폴백 누락.
+* `netsh.exe` 파이프 동시 드레인 미구현 및 UI 텍스트 작성 시 전역 이모지 금지 규칙 미준수.
+
+### 3. 해결책 (Resolution)
+1. **[CRIT-06, MAJ-06] LiteDB 트랜잭션 및 인덱스 구축 (`ForensicArchiveManager.cs`)**:
+   - 일반 DB 생성자 및 인메모리 생성자 모두에 `_incidents.EnsureIndex(x => x.Timestamp);` B-Tree 인덱스 등록.
+   - `SaveIncident` 내 `_db.BeginTrans()` / `Commit()` / `Rollback()`을 도입하여 사건-트레이스 원자적 영속화 보장.
+2. **[MAJ-03] 센서 프로세스 비동기 정규화 및 수명주기 회수 (`SensorProcessController.cs`)**:
+   - `StartSensorAsync` 기동 전 `_sensorProcess?.Dispose()` 및 다중 탐색 시 잉여 인스턴스 핸들(`existing[1..]`) 안전 폐기.
+   - `StopSensorAsync`: 네이티브 `WaitForExitAsync(cts.Token)` 3초 대기, 타임아웃 발생 시 `Kill(entireProcessTree: true)` 강제 회수 가동, `finally` 핸들 `Dispose()` 및 null화.
+3. **[MAJ-01, MAJ-02, NEW-01] 방화벽 도구 비동기 정규화, 파이프 드레인 및 이모지 전수 제거 (`SystemFirewallTool.cs`)**:
+   - `.Result` 동기 블로킹 완전 제거 및 `var (outRes, inRes) = (results[0], results[1]);` 튜플 언패킹.
+   - `RunNetshAsync`: `ReadToEndAsync(cts.Token)` 백그라운드 병렬 스트림 드레인 개시, `WaitForExitAsync(cts.Token)` 5초 타임아웃 우선 대기, 타임아웃 시 `proc.Kill(entireProcessTree: true)` 강제 회수.
+   - 파일 내 모든 장식용 이모지 5곳 전수 제거 및 표준 대괄호 태그(`[안전 가드]`, `[SystemFirewallTool]`) 정규화.
+4. **품질 검증 (Gate 2 PASS)**:
+   - `dotnet build Phalanx.sln -c Release -m:1`: Exit Code 0 (경고 0, 에러 0).
+   - `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"`: 33/33 전수 통과 (Exit Code 0).
+
 
