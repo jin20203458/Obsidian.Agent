@@ -350,121 +350,52 @@ related:
 
 ---
 
-## 2026-09-28: [Resolved] SettingsWindow 오픈 시 CLR 강제 종료(0xc000041d) 및 MSBuild WPF 동시 빌드 경합
+## 2026-09-28: [Resolved] SettingsWindow 오픈 시 TwoWay 바인딩 읽기 전용 속성 충돌로 인한 CLR 강제 종료(0xc000041d)
 
 ### 1. 현상 (Symptom)
-* 대시보드에서 `SETTINGS` 버튼 클릭 시 `PresentationUI.resources.dll` 로드 직후 `STATUS_FATAL_USER_CALLBACK_EXCEPTION (0xc000041d)` 발생하며 프로세스 비정상 종료.
-* 솔루션 단위 빌드(`dotnet build Phalanx.sln`) 시 간헐적으로 `CS2001: ...Views\*.g.cs 소스 파일을 찾을 수 없습니다` 오류 발생.
+* 대시보드에서 `SETTINGS` 버튼 클릭 시 `PresentationUI.resources.dll` 로드 직후 `STATUS_FATAL_USER_CALLBACK_EXCEPTION (0xc000041d)`가 발생하며 Cockpit 프로세스가 즉시 비정상 종료됨.
+* 일반적인 .NET 처리되지 않은 예외(UnhandledException) 대화상자 없이 네이티브 Fast-fail로 크래시 발생.
 
 ### 2. 원인 (Root Cause)
-1. **WPF TwoWay 바인딩 읽기 전용 속성 충돌**:
-   * `SettingsWindow.xaml`의 RadioButton `IsChecked`는 기본 동작이 `TwoWay` 바인딩임.
-   * `SettingsViewModel.cs`의 `IsApiKeyMode`가 getter만 존재하는 읽기 전용 프로퍼티(`=> !UseVertexAi`)로 선언되어 있어 윈도우 초기 렌더링 시 `System.InvalidOperationException` 발생, 네이티브 윈도우 콜백 단계에서 프로세스가 즉시 다운됨.
-2. **MSBuild 병렬 컴파일 간 WPF XAML MarkupCompile 경합**:
-   * 솔루션 내 `Phalanx.Agent.Tests` 및 `Phalanx.AttackSimulator`가 `Phalanx.Cockpit`을 동시 참조하여 빌드할 때, 기본 멀티프로세스(`/m`) 동작으로 인해 중간 생성 파일(`*.g.cs`) 생성 타깃이 경합을 일으켜 파일 누락 오류 유발.
+* WPF `RadioButton.IsChecked` 의존성 속성의 기본 바인딩 모드는 `TwoWay`임.
+* `SettingsViewModel.cs`의 `IsApiKeyMode`가 getter만 존재하는 읽기 전용 계산 프로퍼티(`=> !UseVertexAi;`)로 선언되어 있었음.
+* 윈도우 초기화 및 렌더링 과정에서 XAML 엔진이 ViewModel 프로퍼티로 역방향 쓰기(`ConvertBack`)를 시도할 때 `InvalidOperationException`이 발생함.
+* 이 예외가 Win32 메시지 루프의 네이티브 `WndProc` 콜백 경계를 교차(cross unmanaged boundary)하면서 CLR이 치명적 콜백 예외로 판단, 프로세스를 즉시 강제 종료시킴.
 
 ### 3. 해결책 (Resolution)
-1. **`SettingsViewModel.cs` TwoWay 바인딩 완결**:
-   * `IsApiKeyMode`에 setter 및 양방향 상호 갱신 로직 구현 (`set { if (UseVertexAi == value) { UseVertexAi = !value; OnPropertyChanged(); } }`).
-2. **UI 정규화 및 안전장치**:
-   * `SettingsWindow.xaml` 탭 버튼 내 불필요한 장식용 이모지 전면 제거.
-   * `EnterpriseTheme.xaml`에 `ComboBox`, `ComboBoxItem`, `CheckBox`, `RadioButton` 전용 엔터프라이즈 다크 컨트롤 템플릿을 신설하여 Windows 기본 테마의 흰색 팝업/흰색 텍스트 묻힘 현상 완전 해결.
-   * `MainViewModel.AutoStartSensorAsync`에 단위 테스트 환경(`testhost`) 및 헤드리스 가드 추가하여 불필요한 UAC 팝업 차단.
-   * `CockpitUiBridge.Dispatch`에 `app.Dispatcher.Thread.IsAlive` 검사를 추가하여 종료된 스레드로의 큐잉 방지.
-3. **WPF 솔루션 빌드 안정화**:
-   * MSBuild 직렬화 옵션(`-m:1`) 또는 프로젝트 개별 빌드를 통해 XAML 파서 중간 산출물 경합 방지 확인.
+* **`SettingsViewModel.cs`의 `IsApiKeyMode`에 양방향 setter 구현**:
+  * 읽기 전용 계산 프로퍼티였던 `IsApiKeyMode`에 setter를 구현하여, XAML 바인딩 엔진의 상태 쓰기(`ConvertBack`)를 정상 수용하고 `UseVertexAi`와 상호 동기화되도록 수정:
+    ```csharp
+    public bool IsApiKeyMode
+    {
+        get => !UseVertexAi;
+        set
+        {
+            if (UseVertexAi == value)
+            {
+                UseVertexAi = !value;
+                OnPropertyChanged();
+            }
+        }
+    }
+    ```
+  * 양방향 통로가 정상 개방됨으로써 윈도우 생성 및 렌더링 시 발생하던 `InvalidOperationException` 및 Win32 네이티브 콜백 Fast-fail(`0xc000041d`) 원천 해소.
 
 ---
 
-## 2026-09-29: [Resolved] Phase 1 레거시 벤치마크 및 중복 코드 821라인 일괄 폐기 및 싱글톤 스레드 안전성 확보
+## 2026-09-28: [Resolved] WPF XAML MarkupCompile 중간 산출물 파일 I/O 경합으로 인한 솔루션 병렬 빌드 실패(CS2001)
 
 ### 1. 현상 (Symptom)
-* 전체 C# 코드베이스 정적 감사 결과:
-  1. `LlmArchitectureBenchmarkTests.cs` (517라인) 및 `GeminiApiDto.cs` 내 `FunctionCallDto`, `FunctionResponseDto` 등 이미 Phase 3에서 검증 완료되어 `docs/04_performance_benchmarks.md`에 박제된 일회성 벤치마크/미사용 DTO가 테스트 및 코어 라이브러리에 잔존.
-  2. `tools/Phalanx.AttackSimulator/Scenarios/AttackScenarioRegistry.cs` (289라인)가 `src/Phalanx.Cockpit/Scenarios`와 100% 동일하게 이중 중복 유지됨.
-  3. `CockpitUiBridge.cs` 및 `SensorProcessController.cs`의 싱글톤 인스턴스 생성이 `_instance ??= new ...()`로 되어 있어 멀티스레드 레이스 컨디션 위험 존재.
+* 솔루션 단위 빌드(`dotnet build Phalanx.sln`) 시 간헐적으로 `CS2001: ...Views\*.g.cs 소스 파일을 찾을 수 없습니다` 컴파일 오류 발생.
+* 단일 프로젝트 빌드(`dotnet build src/Phalanx.Cockpit/`) 시에는 항상 정상 컴파일됨.
 
 ### 2. 원인 (Root Cause)
-* Phase 3 아키텍처 결정 후 과거 벤치마크 코드와 프로토타입 DTO를 미처 정리하지 못하고 보존해옴.
-* 어택랩 기능 Cockpit 통합 과정에서 시뮬레이터 프로젝트의 중복 파일 정리 누락.
+* 솔루션 내 `Phalanx.Agent.Tests` 및 `Phalanx.AttackSimulator` 프로젝트가 `Phalanx.Cockpit` 프로젝트(WPF, `<UseWPF>true</UseWPF>`)를 직접 프로젝트 참조함.
+* MSBuild 기본 멀티프로세스 빌드(`/m`) 동작 시 여러 MSBuild 워커 프로세스가 `Phalanx.Cockpit`의 XAML 컴파일 파이프라인(`MarkupCompilePass1` / `MarkupCompilePass2`)을 동시에 트리거함.
+* 중간 산출물 디렉터리(`obj/`)에 `*.g.cs` 파일이 생성되고 덮어쓰여지는 과정에서 파일 잠금 및 삭제 타이밍 레이스 컨디션(I/O Race)이 발생하여 컴파일러가 해당 소스 파일을 읽지 못함.
 
 ### 3. 해결책 (Resolution)
-1. **레거시 벤치마크 및 DTO 동반 삭제**:
-   * `tests/Phalanx.Agent.Tests/LlmArchitectureBenchmarkTests.cs` (-516라인) 완전 삭제.
-   * `src/Phalanx.Cockpit/Agent/Gemini/GeminiApiDto.cs`에서 `FunctionCallDto`, `FunctionResponseDto`, `Tools`, `FunctionCall`, `FunctionResponse` 완전 제거 (-17라인).
-2. **시나리오 레지스트리 단일화 (SSOT)**:
-   * `tools/Phalanx.AttackSimulator/Scenarios/AttackScenarioRegistry.cs` (-288라인) 완전 삭제.
-   * `tools/Phalanx.AttackSimulator/Program.cs`에서 `Phalanx.Cockpit.Scenarios`를 직접 참조하도록 네임스페이스 단일화.
-3. **싱글톤 아키텍처 스레드 안전성 확보**:
-   * `CockpitUiBridge.cs`, `SensorProcessController.cs`의 `Instance` 프로퍼티를 `public static ... Instance { get; } = new();` 정적 인스턴스로 전환.
-4. **품질 검증 (Gate 2 PASS)**:
-   * `dotnet build Phalanx.sln -c Release -m:1`: Exit Code 0 (경고 0, 에러 0).
-   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"`: 33/33 전수 통과 (Exit Code 0).
-   * 총 약 821 라인의 레거시/중복 소스코드 감축 완료.
-
----
-
-## 2026-09-29: [Resolved] Phase 2 핫패스 무할당 최적화 (CRIT-01 VAD 스캔 힙 할당 제거 및 CRIT-02 CQRS O(1) 해시 인덱스 개편)
-
-### 1. 현상 (Symptom)
-1. **[CRIT-01] VAD 메모리 청크 스캔 힙 메모리 폭증**:
-   - `ProcessMemoryScanTool.cs`의 `ScanBufferChunk` 내부 루프에서 64KB 크기의 `asciiText`, `unicodeText` 문자열마다 `string lower = text.ToLowerInvariant();`를 호출.
-   - 최대 16MB 스캔 시 수백 개의 64KB 대형 문자열이 Gen0/LOH에 연속 할당되어 대규모 가비지 컬렉션(GC Stop-the-world) 지연 유발.
-2. **[CRIT-02] CQRS 프로세스 트리 DAG 투영 $O(N^2)$ 선형 탐색 병목**:
-   - `ProcessTreeProjectionManager.cs`의 `ApplySnapshotBatch`에서 수백~수천 개 프로세스 스냅샷 수신 시, 각 노드마다 `RootNodes.Contains(node)`, `AllNodes.Contains(node)`, `rootNodesToAdd.Contains(node)`, `allNodesToAdd.Contains(node)`를 순차 선형 탐색하여 $O(N^2)$ 계산 병목 및 UI 프리징 발생.
-   - 실시간 델타 이벤트 처리(`HandleStartOrMitigated`)에서도 매 이벤트마다 `ObservableCollection.Contains()` 선형 스캔 발생 ($O(N)$).
-
-### 2. 원인 (Root Cause)
-* 대소문자 무시 문자열 검색 시 .NET 9 표준 `StringComparison.OrdinalIgnoreCase`를 활용하지 않고 구식 소문자 변환 복제본 방식을 채택함.
-* `ObservableCollection` 3종(`RootNodes`, `AllNodes`, `VisibleNodes`)에 대응하는 $O(1)$ 해시셋 보조 인덱스가 부재하여 중복 방지를 순수 리스트 선형 탐색에 의존함.
-
-### 3. 해결책 (Resolution)
-1. **[CRIT-01] VAD 스캔 무할당 최적화 (`ProcessMemoryScanTool.cs`)**:
-   - `text.ToLowerInvariant()` 완전 제거.
-   - .NET 9 표준 `text.Contains(kw, StringComparison.OrdinalIgnoreCase)`로 전환하여 키워드 매칭 시 추가 힙 할당 0 Byte 실현.
-2. **[CRIT-02] CQRS 프로세스 트리 $O(1)$ 해시셋 보조 인덱스 구축 (`ProcessTreeProjectionManager.cs`)**:
-   - `_rootNodeGuids`, `_allNodeGuids`, `_visibleNodeGuids` (`HashSet<ulong>`) 도입 및 `_syncLock` 동기화 래핑.
-   - `ApplySnapshotBatch`: `_rootNodeGuids.Add` 및 `_allNodeGuids.Add` 기반 $O(1)$ 중복 검증, `allRoots` 조립 시 `.Concat().Distinct().ToList()`를 제거하고 사전 용량 지정 `AddRange`로 무할당 $O(R)$ 합성.
-   - `HandleStartOrMitigated`: `parent.IsExpanded` 조건부 가시성 엄격 준수 하에 `_visibleNodeGuids.Add` 기반 $O(1)$ 삽입.
-   - `ToggleNodeExpanded` / `EnsureNodeVisible` / `RebuildVisibleNodes` / `Clear`: 접힘 시 잘려나가는 자손(`descendantsToRemove`) 제거, 펼침 시 삽입 자손(`toInsert`) 추가, 전체 재색인 시 `_visibleNodeGuids` 동시 초기화/재색인 구현.
-   - `FindNodeByPid`: 활성 프로세스 락 프리 $O(1)$ 즉시 반환 및 과거 프로세스 대상 `lock (_syncLock)` 안전 폴백.
-3. **품질 검증 (Gate 2 PASS)**:
-   - `dotnet build Phalanx.sln -c Release -m:1`: Exit Code 0 (경고 0, 에러 0).
-   - `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"`: 33/33 전수 통과 (Exit Code 0).
-
----
-
-## 2026-09-29: [Resolved] Phase 3 데이터 무결성 및 비동기 정규화 (CRIT-06, MAJ-06, MAJ-03, MAJ-01, MAJ-02, NEW-01)
-
-### 1. 현상 (Symptom)
-1. **[CRIT-06, MAJ-06] LiteDB 원자적 트랜잭션 부재 및 타임스탬프 인덱스 누락**:
-   - `ForensicArchiveManager.cs`: `SaveIncident` 호출 시 `_incidents.Upsert` 성공 후 `_traces.InsertBulk` 도중 장애 발생 시 사건과 트레이스 간 정합성 결여.
-   - `GetAllIncidents` 쿼리 시 `Timestamp` 인덱스가 없어 전체 문서 풀스캔 발생.
-2. **[MAJ-03] 센서 프로세스 동기 블로킹 및 타임아웃 시 좀비 프로세스 방치**:
-   - `SensorProcessController.cs`: `Task.Run(() => _sensorProcess.WaitForExit(3000))`로 ThreadPool 스레드를 동기 블로킹. 타임아웃 발생 시 OS 프로세스가 여전히 실행 중인데 핸들만 버려져 커널 ETW 세션을 독점하는 고아 좀비 프로세스 발생.
-3. **[MAJ-01, MAJ-02, NEW-01] 방화벽 도구 동기 블로킹, 파이프 버퍼 포화 데드락 위험 및 이모지 잔재**:
-   - `SystemFirewallTool.cs`: `Task.WhenAll` 완료 후 `.Result` 동기 접근 안티패턴.
-   - `RunNetshAsync`: stdout/stderr 순차 대기 시 버퍼 포화 데드락 위험 및 5초 타임아웃 방어 부재.
-   - 5개 지점(7개 문자)에 `🚨`, `✅`, `⚠️`, `❌` 장식용 이모지 하드코딩 잔존.
-
-### 2. 원인 (Root Cause)
-* LiteDB 5.0 트랜잭션 API(`BeginTrans`, `Commit`, `Rollback`) 미활용.
-* .NET 9 비동기 표준(`WaitForExitAsync`) 미적용 및 OS 프로세스 수명주기 강제 회수(`Kill`) 폴백 누락.
-* `netsh.exe` 파이프 동시 드레인 미구현 및 UI 텍스트 작성 시 전역 이모지 금지 규칙 미준수.
-
-### 3. 해결책 (Resolution)
-1. **[CRIT-06, MAJ-06] LiteDB 트랜잭션 및 인덱스 구축 (`ForensicArchiveManager.cs`)**:
-   - 일반 DB 생성자 및 인메모리 생성자 모두에 `_incidents.EnsureIndex(x => x.Timestamp);` B-Tree 인덱스 등록.
-   - `SaveIncident` 내 `_db.BeginTrans()` / `Commit()` / `Rollback()`을 도입하여 사건-트레이스 원자적 영속화 보장.
-2. **[MAJ-03] 센서 프로세스 비동기 정규화 및 수명주기 회수 (`SensorProcessController.cs`)**:
-   - `StartSensorAsync` 기동 전 `_sensorProcess?.Dispose()` 및 다중 탐색 시 잉여 인스턴스 핸들(`existing[1..]`) 안전 폐기.
-   - `StopSensorAsync`: 네이티브 `WaitForExitAsync(cts.Token)` 3초 대기, 타임아웃 발생 시 `Kill(entireProcessTree: true)` 강제 회수 가동, `finally` 핸들 `Dispose()` 및 null화.
-3. **[MAJ-01, MAJ-02, NEW-01] 방화벽 도구 비동기 정규화, 파이프 드레인 및 이모지 전수 제거 (`SystemFirewallTool.cs`)**:
-   - `.Result` 동기 블로킹 완전 제거 및 `var (outRes, inRes) = (results[0], results[1]);` 튜플 언패킹.
-   - `RunNetshAsync`: `ReadToEndAsync(cts.Token)` 백그라운드 병렬 스트림 드레인 개시, `WaitForExitAsync(cts.Token)` 5초 타임아웃 우선 대기, 타임아웃 시 `proc.Kill(entireProcessTree: true)` 강제 회수.
-   - 파일 내 모든 장식용 이모지 5곳 전수 제거 및 표준 대괄호 태그(`[안전 가드]`, `[SystemFirewallTool]`) 정규화.
-4. **품질 검증 (Gate 2 PASS)**:
-   - `dotnet build Phalanx.sln -c Release -m:1`: Exit Code 0 (경고 0, 에러 0).
-   - `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"`: 33/33 전수 통과 (Exit Code 0).
-
-
+1. **단기 조치 (빌드 파이프라인 직렬화)**:
+   * 솔루션 빌드 시 MSBuild 단일 프로세스/단일 노드 플래그(`-m:1`)를 명시하여 XAML 컴파일 파이프라인 파일 I/O 경합을 원천 차단함.
+2. **장기 아키텍처 개선 (Core 라이브러리 분리 계획)**:
+   * 테스트 및 시뮬레이터 프로젝트가 WPF UI 어셈블리를 직접 참조하지 않도록, EDR 코어 로직(센서 제어, 에이전트 루프, CQRS 프로젝션)을 순수 .NET 9 클래스 라이브러리(`Phalanx.Core`)로 분리하여 의존성을 정규화하는 구조적 개선 로드맵 수립.
