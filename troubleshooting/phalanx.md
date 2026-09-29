@@ -617,3 +617,36 @@ related:
    * `dotnet build Phalanx.sln -c Release -m:1` ➔ Exit Code 0 (경고 0건, 오류 0건).
    * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 39/39 통과 (Exit Code 0).
 
+---
+
+## 2026-09-29: [Feature & Optimization] 실시간 동적 테마 시스템 (Dark / Light / System) 구현
+
+### 1. 배경 및 설계 요구사항 (Background)
+* 기존 Cockpit 콘솔은 `#0E0E0E` 기반 딥 다크 모드로 고정되어 있어 다양한 조명 환경에서의 가독성 지원 및 엔터프라이즈 테마 확장이 불가했음.
+* 요구사항: 앱 재시작 없이 0ms 실시간 동적 전환(Dynamic Switching), Windows OS 테마 자동 감지/동기화(`SystemEvents`), GitHub/Linear 스타일의 엔터프라이즈 라이트 테마 지원.
+* 레퍼런스(`ArqaStatic`) 분석 및 안티패턴 개선:
+  * ARQA의 테마 딕셔너리마다 컨트롤 스타일 전체를 중복 병합(`ControlStyles.xaml`)하는 안티패턴(GC 부하, UI 깜빡임)을 배제.
+  * ControlTemplate 및 벡터 아이콘은 `EnterpriseTheme.xaml`에 영구 상주시키고, 순수 색상 브러시 36종만 담긴 `DarkPalette.xaml` ↔ `LightPalette.xaml` 단일 딕셔너리만 스왑하는 **모던 토큰 분리 아키텍처** 확립.
+
+### 2. 해결 및 구현 내역 (Resolution)
+1. **토큰 팔레트 분리 및 리소스 순서 계약**:
+   * `Themes/Palettes/DarkPalette.xaml`: 기존 36종 다크 색상 토큰 정의.
+   * `Themes/Palettes/LightPalette.xaml`: 엔터프라이즈 Neutral Zinc 오프화이트(`#F4F4F5`) 및 고대비 라이트 시맨틱 브러시 정의.
+   * `App.xaml`: `MergedDictionaries[0]`(활성 팔레트) ↔ `MergedDictionaries[1]`(공통 컨트롤 스타일) 순서 계약 수립.
+2. **`ThemeManager` 싱글톤 서비스 구축**:
+   * `SystemEvents.UserPreferenceChanged` 및 `HKCU\...\Themes\Personalize\AppsUseLightTheme` 레지스트리를 통한 OS 테마 실시간 추적.
+   * `Application.Current.Dispatcher.InvokeAsync`를 통한 UI 스레드 안전 마샬링.
+   * 단위 테스트 및 백그라운드 환경 방어를 위한 `Application.Current == null` Headless Guard 및 `IDisposable` 누수 방지 완비.
+3. **윈도우 크롬 및 DWM 연동 (`WindowTitleBarBehavior.cs`)**:
+   * `UpdateImmersiveDarkMode`: Win32 DWM API(`DWMWA_USE_IMMERSIVE_DARK_MODE`)를 통해 다크(`1`), 라이트(`0`) 동적 토글.
+   * `Window.SourceInitialized` 수명주기 훅으로 늦게 생성되는 윈도우(`SettingsWindow`, `AttackLabWindow`)의 DWM 동기화 보장.
+4. **XAML 뷰 동적 리소스 바인딩 전수 정규화**:
+   * 7개 XAML 파일 전반의 하드코딩 색상 및 `{StaticResource ...Brush}`를 `{DynamicResource ...Brush}`로 100% 마이그레이션.
+   * `MainWindow.xaml` 및 `AttackLabWindow.xaml`의 중복 로컬 리소스 사전 제거.
+5. **환경 설정(Settings) UI 연동 및 영속화**:
+   * `SettingsViewModel.cs`: `THEME` 카테고리 추가, `SetThemeModeCommand`, `SelectedThemeMode` 양방향 바인딩.
+   * `AppSettings.json`: `"Theme": "System"` 입출력 및 `App.xaml.cs` 기동 시 자동 복원.
+6. **빌드 및 단위 테스트 검증**:
+   * `dotnet build Phalanx.sln -c Release -m:1` ➔ Exit Code 0 (경고 0, 오류 0).
+   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 총 44개 단위 테스트 전원 통과 (Exit Code 0).
+
