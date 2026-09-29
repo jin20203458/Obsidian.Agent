@@ -650,3 +650,37 @@ related:
    * `dotnet build Phalanx.sln -c Release -m:1` ➔ Exit Code 0 (경고 0, 오류 0).
    * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 총 44개 단위 테스트 전원 통과 (Exit Code 0).
 
+---
+
+## 2026-09-29: [Resolved] 설정 창(SettingsWindow) 진입 시 WPF RadioButton 읽기 전용 TwoWay 바인딩 충돌 및 0xc000041d 크래시 해결
+
+### 1. 현상 (Symptom)
+* 메인 관제 콘솔 좌측 네비게이션 레일에서 [환경 설정] 버튼 클릭 시 `Phalanx.Cockpit.exe`가 즉각 비정상 종료됨.
+* 종료 코드: `3221226525 (0xc000041d)` (`STATUS_FATAL_USER_CALLBACK_EXCEPTION`).
+
+### 2. 원인 (Root Cause)
+1. **WPF RadioButton의 기본 TwoWay 바인딩 특성**:
+   * WPF `RadioButton.IsChecked` 의존성 속성은 메타데이터 상 `BindsTwoWayByDefault = true`로 구성됨.
+   * `SettingsWindow.xaml`의 테마 선택 라디오 버튼에 `{Binding IsThemeSystem}`, `{Binding IsThemeDark}`, `{Binding IsThemeLight}`를 바인딩했으나, `SettingsViewModel.cs`의 세 프로퍼티는 게터 전용 람다 프로퍼티(`=> SelectedThemeMode == "..."`)로 선언되어 있었음.
+2. **Win32 네이티브 콜백 내 예외 전파**:
+   * 윈도우 생성 및 렌더링 초기화 단계(`HwndSource.SetLayoutSize` ➔ `ContextLayoutManager.UpdateLayout`)에서 WPF 바인딩 엔진의 `PropertyPathWorker.CheckReadOnly`가 호출되며 `System.InvalidOperationException: TwoWay 또는 OneWayToSource 바인딩은 'Phalanx.Cockpit.ViewModels.SettingsViewModel' 형식의 읽기 전용 속성 'IsThemeSystem'에서 작동하지 않습니다.` 예외를 발생시킴.
+   * 해당 예외가 Win32 메시지 디스패치 루프(`WM_CREATE` / `WM_SHOWWINDOW`) 내부에서 처리되지 않고 탈출하면서 Windows 커널에 의해 `STATUS_FATAL_USER_CALLBACK_EXCEPTION` (`0xc000041d`)으로 프로세스가 강제 사살됨.
+3. **리소스 Pack URI 상대 경로 취약점**:
+   * `App.xaml` 및 `ThemeManager.cs`에서 사용하던 상대 Pack URI(`/Themes/Palettes/...`)가 외부 테스트 어셈블리 또는 보조 실행 컨텍스트에서 어셈블리 불일치(`IOException`)를 유발할 수 있는 잠재성 식별.
+
+### 3. 해결책 (Resolution)
+1. **ViewModel 양방향 세터 및 상태 안전성 구축 (`SettingsViewModel.cs`)**:
+   * `IsThemeSystem`, `IsThemeDark`, `IsThemeLight`에 명시적 `set` 블록을 구현.
+   * 라디오 버튼 그룹 특성상 비활성화(`value == false`) 시그널이 주입될 때는 상태를 덮어쓰지 않고, 오직 활성화(`value == true`) 시그널일 때만 `SelectedThemeMode`를 원자적으로 변경하도록 방어 로직 적용.
+2. **XAML 바인딩 모드 방어 강화 (`SettingsWindow.xaml`)**:
+   * 라디오 버튼의 `IsChecked` 바인딩에 `Mode=OneWay`를 명시적으로 부여하여 WPF 바인딩 엔진의 소스 갱신 시도를 원천 차단하고, 변경은 `Command="{Binding SetThemeModeCommand}"`로만 통제하도록 2중 방어선 확립.
+3. **절대 Pack URI 표준화 (`App.xaml`, `ThemeManager.cs`)**:
+   * `pack://application:,,,/Phalanx.Cockpit;component/Themes/...` 형식의 명시적 절대 Pack URI로 전환하여 모든 어셈블리 컨텍스트에서 오차 없는 리소스 로딩 보장.
+4. **DWM 및 네이티브 윈도우 수명주기 방어 (`WindowTitleBarBehavior.cs`, `App.xaml.cs`)**:
+   * `WindowTitleBarBehavior.ApplyCurrentThemeTitleBar` 본문을 `try-catch`로 감싸 `SourceInitialized` 훅 내의 어떠한 예외도 Win32 메시지 루프로 탈출하지 못하도록 완벽 차단.
+   * `App.xaml.cs`에 `DispatcherUnhandledException` 로깅 핸들러를 장착하여 잠재적 UI 예외 가시화.
+5. **STA 윈도우 인스턴스화 및 테마 토글 회귀 테스트 완비 (`SettingsViewModelTests.cs`)**:
+   * `TestSettingsWindow_InstantiationAndThemeToggle` 단위 테스트 추가: STA 스레드에서 `SettingsWindow`를 실제 생성, 렌더링(`Show()`), 테마 카테고리 전환 및 다크/라이트/시스템 모드 동적 토글 후 정상 종료(`Close()`)까지 전 구간 무결성 검증.
+   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 45/45 전원 통과 (Exit Code 0).
+
+
