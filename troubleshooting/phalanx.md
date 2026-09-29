@@ -402,4 +402,30 @@ related:
 3. **`SettingsWindow.xaml.cs`의 Closed 수명주기 정리 핸들러 구현**:
    * 윈도우 종료 시 `SettingsViewModel.RequestClose` 구독을 해제하고 `DataContext = null`로 설정하여 모든 바인딩 및 델리게이트 체인을 즉시 완전 절단.
 
+---
+
+## 2026-09-29: [Resolved] 환경설정 커널 센서 카테고리 내 허위(Phantom) 액추에이터 옵션 폐기 및 런타임 진단 체계 일원화
+
+### 1. 현상 (Symptom)
+* 환경설정(`SettingsWindow`) '커널 센서 및 차단 액추에이터' 탭에 표출되던 `ReflexKillEnabled`("커널 룰 즉각 차단") 및 `KillProcessTree`("프로세스 트리 동반 종료") 체크박스가 실제 C++ 커널 센서(`Phalanx.Sensor`)의 런타임 동작과 일치하지 않는 상태로 방치됨.
+* 센서 토글 및 gRPC 제어 파라미터로 동작하는 것처럼 표기되었으나, C++ 센서는 관련 CLI 옵션이나 gRPC 플래그를 수신하지 않고 독자적인 안전 규칙 및 단일 PID 기준 `TerminateProcess`를 집행하고 있었음.
+
+### 2. 원인 (Root Cause)
+1. **`ReflexKillEnabled`의 허위성**:
+   * C++ 센서의 `LocalRuleEngine`은 랜섬웨어 복구 무력화 등 시스템 치명 공격에 대해 0.08ms(80μs) 이내에 무조건적인 현장 즉각 사살을 집행하도록 설계됨.
+   * 이를 외부 설정으로 끄거나 켤 수 있는 인터페이스가 C++ 센서에 구현되어 있지 않았으며, UI 상의 체크박스는 실제 센서에 아무런 영향도 미치지 못하는 100% 사장/허위 코드였음.
+2. **`KillProcessTree`의 스코프 왜곡**:
+   * C++ 커널 센서의 `ProcessActuator`는 커널 핸들을 열어 타깃 프로세스 단일 PID에 대해서만 `TerminateProcess`를 호출함.
+   * `KillProcessTree`는 모의 침해 시나리오 러너(`AttackLabScenarioRunner`)가 테스트용 자식 프로세스를 일괄 회수하기 위한 C# 내부 안전 메커니즘이었으나, UI상에 커널 센서의 액추에이터 동작 옵션인 것처럼 잘못 배치되어 관제관에게 혼선을 초래함.
+
+### 3. 해결책 (Resolution)
+1. **허위 및 레거시 옵션 전면 폐기**:
+   * `AppSettings.json`, `SettingsViewModel.cs`, `SettingsWindow.xaml`, `SettingsViewModelTests.cs`에서 `ReflexKillEnabled` 및 `KillProcessTree`를 완전 제거.
+   * `AttackLabScenarioRunner`의 프로세스 트리 정리 로직은 내부 불변 안전 규약(`KillProcessTree = true`)으로 정상 격리.
+2. **센서 바이너리 및 런타임 연결 상태 실시간 진단 카드로 전환**:
+   * 기존 허위 체크박스 UI 공간을 대체하여, `SensorProcessController`가 탐지한 실제 C++ 센서 바이너리 파일 경로(`SensorBinaryPath`), 바이너리 검출 여부(`SensorBinaryFound`), Kestrel gRPC 클라이언트 활성 연결 상태(`IsSensorConnected`)를 실시간으로 표출하는 진단 카드를 구현.
+3. **네트워크 포트 유효 범위 가드 적용**:
+   * `SensorPort` 저장 및 로드 시 `Math.Clamp(port, 1024, 65535)`를 적용하여 비정상 포트 번호 주입 방어.
+
+
 
