@@ -402,4 +402,34 @@ related:
    * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"`: 33/33 전수 통과 (Exit Code 0).
    * 총 약 821 라인의 레거시/중복 소스코드 감축 완료.
 
+---
+
+## 2026-09-29: [Resolved] Phase 2 핫패스 무할당 최적화 (CRIT-01 VAD 스캔 힙 할당 제거 및 CRIT-02 CQRS O(1) 해시 인덱스 개편)
+
+### 1. 현상 (Symptom)
+1. **[CRIT-01] VAD 메모리 청크 스캔 힙 메모리 폭증**:
+   - `ProcessMemoryScanTool.cs`의 `ScanBufferChunk` 내부 루프에서 64KB 크기의 `asciiText`, `unicodeText` 문자열마다 `string lower = text.ToLowerInvariant();`를 호출.
+   - 최대 16MB 스캔 시 수백 개의 64KB 대형 문자열이 Gen0/LOH에 연속 할당되어 대규모 가비지 컬렉션(GC Stop-the-world) 지연 유발.
+2. **[CRIT-02] CQRS 프로세스 트리 DAG 투영 $O(N^2)$ 선형 탐색 병목**:
+   - `ProcessTreeProjectionManager.cs`의 `ApplySnapshotBatch`에서 수백~수천 개 프로세스 스냅샷 수신 시, 각 노드마다 `RootNodes.Contains(node)`, `AllNodes.Contains(node)`, `rootNodesToAdd.Contains(node)`, `allNodesToAdd.Contains(node)`를 순차 선형 탐색하여 $O(N^2)$ 계산 병목 및 UI 프리징 발생.
+   - 실시간 델타 이벤트 처리(`HandleStartOrMitigated`)에서도 매 이벤트마다 `ObservableCollection.Contains()` 선형 스캔 발생 ($O(N)$).
+
+### 2. 원인 (Root Cause)
+* 대소문자 무시 문자열 검색 시 .NET 9 표준 `StringComparison.OrdinalIgnoreCase`를 활용하지 않고 구식 소문자 변환 복제본 방식을 채택함.
+* `ObservableCollection` 3종(`RootNodes`, `AllNodes`, `VisibleNodes`)에 대응하는 $O(1)$ 해시셋 보조 인덱스가 부재하여 중복 방지를 순수 리스트 선형 탐색에 의존함.
+
+### 3. 해결책 (Resolution)
+1. **[CRIT-01] VAD 스캔 무할당 최적화 (`ProcessMemoryScanTool.cs`)**:
+   - `text.ToLowerInvariant()` 완전 제거.
+   - .NET 9 표준 `text.Contains(kw, StringComparison.OrdinalIgnoreCase)`로 전환하여 키워드 매칭 시 추가 힙 할당 0 Byte 실현.
+2. **[CRIT-02] CQRS 프로세스 트리 $O(1)$ 해시셋 보조 인덱스 구축 (`ProcessTreeProjectionManager.cs`)**:
+   - `_rootNodeGuids`, `_allNodeGuids`, `_visibleNodeGuids` (`HashSet<ulong>`) 도입 및 `_syncLock` 동기화 래핑.
+   - `ApplySnapshotBatch`: `_rootNodeGuids.Add` 및 `_allNodeGuids.Add` 기반 $O(1)$ 중복 검증, `allRoots` 조립 시 `.Concat().Distinct().ToList()`를 제거하고 사전 용량 지정 `AddRange`로 무할당 $O(R)$ 합성.
+   - `HandleStartOrMitigated`: `parent.IsExpanded` 조건부 가시성 엄격 준수 하에 `_visibleNodeGuids.Add` 기반 $O(1)$ 삽입.
+   - `ToggleNodeExpanded` / `EnsureNodeVisible` / `RebuildVisibleNodes` / `Clear`: 접힘 시 잘려나가는 자손(`descendantsToRemove`) 제거, 펼침 시 삽입 자손(`toInsert`) 추가, 전체 재색인 시 `_visibleNodeGuids` 동시 초기화/재색인 구현.
+   - `FindNodeByPid`: 활성 프로세스 락 프리 $O(1)$ 즉시 반환 및 과거 프로세스 대상 `lock (_syncLock)` 안전 폴백.
+3. **품질 검증 (Gate 2 PASS)**:
+   - `dotnet build Phalanx.sln -c Release -m:1`: Exit Code 0 (경고 0, 에러 0).
+   - `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"`: 33/33 전수 통과 (Exit Code 0).
+
 
