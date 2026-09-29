@@ -510,3 +510,32 @@ related:
 4. **단위 테스트 검증**:
    * `ProcessTreeProjectionTests.TestMainViewModel_FocusProcessInGraphCommand`를 추가하여 `FocusProcessInGraphCommand` 실행 시 뷰 전환, 타깃 PID 탐색, 권한 레벨(TokenElevationType = 2) 노드 정상 바인딩 완결성 검증 (36/36 통과, Exit Code 0).
 
+---
+
+## 2026-09-29: [Resolved] 프로세스 트리 노드 상태 점 고정 결함 및 원자적 제어(동결 ↔ 해제) 유동적 토글 구현
+
+### 1. 현상 (Symptom)
+* 프로세스 트리 탐색기(`ProcessGraphView`)에서 사살되거나 원자적 동결된 프로세스의 좌측 원형 상태 점(`<Ellipse>`)이 상태 전이(사살/동결) 후에도 계속 초록색(정상 생존 색상)으로 고정되어 표시되는 결함 발생.
+* 우측 상세 패널의 [원자적 프로세스 제어] 영역에 [원자적 동결 (Suspend)]과 [프로세스 사살 (Kill)]만 존재하고, 관제사가 동결된 프로세스를 수동 복구시키는 [동결 해제 (Resume)] 버튼 및 뷰모델 커맨드가 누락되어 있었음.
+* 관제사 수동 제어(동결/해제/사살) 실행 시 백엔드 gRPC 전송만 수행되고 뷰모델의 `SelectedProcessNode` 상태(`UpdateStatus`)가 즉각 갱신되지 않아 오프라인 또는 지연 상황에서 UI 반응성이 떨어짐.
+
+### 2. 원인 (Root Cause)
+1. `ProcessGraphView.xaml`의 ListView DataTemplate 내 좌측 `<Ellipse>`의 `Fill` 속성이 `{StaticResource DotLiveBrush}`로 정적 하드코딩되어 있어, `IsSuspended`, `IsTerminated`, `IsAlive` 속성 변화에 반응하는 `DataTrigger`가 누락되어 있었음.
+2. 백엔드(C++ `ProcessActuator::ResumeProcess` 및 gRPC `ACTION_RESUME`) 파이프라인은 완비되어 있었으나, WPF 뷰모델(`MainViewModel`) 및 XAML UI에 관제사 수동 호출 커맨드(`ResumeSelectedProcessCommand`)가 연결되지 않았음.
+3. 수동 명령 비동기 전송 핸들러(`SuspendSelectedProcessAsync`, `TerminateSelectedProcessAsync`) 내부에 낙관적 상태 갱신(Optimistic UI Update) 및 이미 종료된 프로세스(`!IsAlive`)에 대한 실행 차단 가드가 부재했음.
+
+### 3. 해결책 (Resolution)
+1. **좌측 상태 점 `<Ellipse>` 동적 스타일 트리거 적용**:
+   * 기본 `Fill`: `{StaticResource DotLiveBrush}` (Green `#10B981`)
+   * `IsSuspended == True`: `{StaticResource DotSuspendedBrush}` (Amber `#D97706`)
+   * `IsTerminated == True` 및 `IsAlive == False`: `{StaticResource DotCriticalBrush}` (Rose Red `#E11D48`)
+2. **원자적 동결 ↔ 동결 해제 유동적 토글 버튼 및 사살 비활성화 가드 구현**:
+   * Column 0 내부에 `[원자적 동결 (Suspend)]` 및 `[동결 해제 (Resume)]` 버튼을 배치하고, `SelectedProcessNode.IsSuspended`에 따라 `Visibility`를 상호 반전(Visible ↔ Collapsed) 토글.
+   * `SelectedProcessNode.IsAlive == False`인 사망 프로세스에 대해 동결, 해제, 사살 3개 버튼 모두 `IsEnabled = False` 트리거를 적용하여 안전 가드 확보.
+3. **`MainViewModel.cs` 수동 제어 로직 보강**:
+   * `ResumeSelectedProcessAsync` [RelayCommand] 신설 및 `ActionType.ActionResume` 전송.
+   * 수동 제어 3종 메서드 모두 `if (SelectedProcessNode == null || !SelectedProcessNode.IsAlive) return;` 방어 가드 추가.
+   * 명령 발송 직후 `SelectedProcessNode.UpdateStatus(...)`를 즉시 호출하여 낙관적 UI 상태 갱신 보장.
+4. **단위 테스트 검증**:
+   * `ProcessTreeProjectionTests.TestMainViewModel_ManualActuation_SuspendResumeTerminateCommands`를 신설하여 Suspend ➔ Resume ➔ Terminate 상태 전이 및 사망 노드 재실행 차단 완결성 검증 (37/37 통과, Exit Code 0).
+
