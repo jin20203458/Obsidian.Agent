@@ -539,3 +539,81 @@ related:
 4. **단위 테스트 검증**:
    * `ProcessTreeProjectionTests.TestMainViewModel_ManualActuation_SuspendResumeTerminateCommands`를 신설하여 Suspend ➔ Resume ➔ Terminate 상태 전이 및 사망 노드 재실행 차단 완결성 검증 (37/37 통과, Exit Code 0).
 
+---
+
+## 2026-09-29: [Resolved] 프로세스 트리 시각화 정규화 (정상 종료 회색 분리, NT 디바이스 경로 정제, 종료 프로세스 숨기기 필터)
+
+### 1. 현상 (Symptom)
+* Obsidian의 백그라운드 Git 동기화 루틴 등 정상적인 백그라운드 프로세스가 완료 후 종료되었을 때, 프로세스 트리의 상태 점이 전부 크리티컬 위협 색상인 빨간색(`DotCriticalBrush`)으로 표출되어 마치 침해 사고나 악성 사살이 대량 발생한 것처럼 심각한 시각적 오인 유발.
+* ETW 커널 센서가 수집한 프로세스 이미지가 `\Device\HarddiskVolume3\Program Files\Git\cmd\git.exe` 형태의 원시 NT 디바이스 경로로 노출되어 트리가 과도하게 장황하고 가독성이 저하됨.
+* 과거 정상 종료된 프로세스 이력이 계속 트리에 누적되어 관제사가 현재 살아있는 활성 프로세스만 격리하여 볼 수 있는 필터링 기능이 부재했음.
+
+### 2. 원인 (Root Cause)
+1. `ProcessGraphView.xaml`의 `<Ellipse.Style>` 트리거에서 `IsAlive == False` 조건에 무조건 `DotCriticalBrush`를 할당하여, EDR 사살(`IsTerminated == True`)과 정상 종료(`LifecycleStop`)가 시각적으로 분리되지 않았음.
+2. `NormalizeProcessImageName`이 단순 PID 0 검사만 수행하고 NT 디바이스 경로 또는 DOS 경로 구분자(`\`, `/`)를 파일명 단위로 슬라이싱하지 않고 원본 전체 경로를 그대로 반환했음.
+3. `ProcessTreeProjectionManager` 및 `MainViewModel`에 종료된 프로세스 필터링 속성 및 가시화 노드 목록(`VisibleNodes`) 제외 로직이 부재했음.
+
+### 3. 해결책 (Resolution)
+1. **상태 점 시각화 및 노드 텍스트 딤 정규화**:
+   * `<Ellipse.Style>` 트리거 평가 순서 재정의:
+     * 기본값: `DotLiveBrush` (초록 `#10B981` - 정상 실행 중)
+     * `IsAlive == False`: `DotBenignBrush` (회색 `#71717A` - 정상 종료 프로세스 명확 분리)
+     * `IsSuspended == True`: `DotSuspendedBrush` (호박색 `#D97706` - 원자적 동결)
+     * `IsTerminated == True`: `DotCriticalBrush` (빨강 `#E11D48` - EDR 긴급 사살, 최우선 덮어쓰기)
+   * `ImageName` TextBlock에 `IsAlive == False` 시 `TextMutedBrush` 딤 처리를 적용하고 `ToolTip="{Binding FullImagePath}"`를 연동.
+2. **NT 디바이스 경로 파일명 슬라이싱 및 전체 경로 보존**:
+   * `ProcessNodeModel`에 `FullImagePath` 프로퍼티 신설.
+   * `NormalizeProcessImageName`: `LastIndexOfAny(['\\', '/'])` 기반으로 `\Device\HarddiskVolume3\...\git.exe`를 `git.exe`로 안전하게 슬라이싱.
+   * 우측 인스펙터 패널 제목에 `ToolTip="{Binding SelectedProcessNode.FullImagePath}"` 연동.
+3. **'종료된 프로세스 숨기기' 필터 및 고아 방지(Orphan-Prevention) 로직 구현**:
+   * `ProcessTreeProjectionManager`에 `HideTerminated` 불리언 속성 추가.
+   * `HasAliveDescendants(node)` 재귀 헬퍼를 도입하여 하위에 살아있는 자손이 존재하는 종료 부모 노드는 족보 유지를 위해 보존하고, 자손이 모두 종료된 노드만 가시 목록에서 배제.
+   * `MainViewModel`에 `HideTerminatedProcesses` TwoWay 프로퍼티 추가 및 체크박스 토글 시 `RebuildVisibleNodes()` 즉시 동기화.
+4. **단위 테스트 검증**:
+   * `TestProcessTree_NormalizeProcessImageName_StripsNtAndDosPaths` 및 `TestProcessTree_HideTerminatedProcesses_FilterAndPreserveAncestry`를 추가하여 총 39개 단위 테스트 전원 통과 확인 (Exit Code 0).
+
+---
+
+## 2026-09-29: [Resolved] 원자적 동결 버튼 클릭 시 유령 리소스 키(ThreatCriticalBrush)로 인한 Foreground DependencyProperty.UnsetValue 크래시
+
+### 1. 현상 (Symptom)
+* 관제 콘솔(`ProcessGraphView`)에서 프로세스를 선택하고 [원자적 동결 (Suspend)] 버튼을 클릭하는 즉시 프로그램이 비정상 종료되며 예외 발생:
+  ```text
+  System.InvalidOperationException: '{DependencyProperty.UnsetValue}'은(는) 'Foreground' 속성의 유효한 값이 아닙니다.
+  HResult=0x80131509
+  ```
+
+### 2. 원인 (Root Cause)
+* `ProcessGraphView.xaml` 내 상태 배지 `<TextBlock.Style>`에서 `IsSuspended == True` 트리거에 지정된 리소스 키 `{StaticResource ThreatCriticalBrush}`가 테마 사전(`EnterpriseTheme.xaml`)에 존재하지 않는 유령 키(Phantom Resource Key)였음.
+* 과거에는 버튼 클릭 시 뷰모델의 `SelectedProcessNode.IsSuspended`가 UI 스레드에서 즉시 `True`로 전환되지 않아 해당 DataTrigger가 발화되지 않았으나, 낙관적 UI 갱신(`UpdateStatus`)이 추가되면서 클릭 즉시 DataTrigger가 활성화됨.
+* WPF 런타임이 미존재 키를 조회하면서 `DependencyProperty.UnsetValue`를 반환하였고, `TextBlock.Foreground` 속성이 이를 거부하여 즉시 크래시 유발.
+
+### 3. 해결책 (Resolution)
+1. **유령 리소스 키 완전 제거 및 공식 테마 브러시 매핑**:
+   * `[동결]` 트리거: `{StaticResource ThreatCriticalBrush}` ➔ `{StaticResource SeveritySuspendedTextBrush}` (`#FBBF24` Amber Gold)
+   * `[사살]` 트리거: `{StaticResource TextMutedBrush}` ➔ `{StaticResource SeverityCriticalTextBrush}` (`#F87171` Crimson Red)
+2. **XAML 리소스 키 전수 무결성 검증**:
+   * 솔루션 전체에서 `ThreatCriticalBrush` 참조가 0건임을 확인하고, `ProcessGraphView.xaml` 내 모든 `StaticResource`가 `EnterpriseTheme.xaml`에 실재함을 검증 완료.
+3. **단위 테스트 및 빌드 검증**:
+   * `dotnet build Phalanx.sln -c Release -m:1` ➔ Exit Code 0
+   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 39개 전원 통과 확인.
+
+---
+
+## 2026-09-29: [Resolved] 메인 대시보드 상단 타이틀바 중복 및 레거시 버튼(REFRESH DB, SETTINGS) 제거
+
+### 1. 현상 및 개선 배경 (Background)
+* 메인 관제 콘솔(`MainWindow.xaml`) 상단 커스텀 윈도우 타이틀바 우측에 `REFRESH DB` 및 `SETTINGS` 버튼이 상주.
+* `SETTINGS`: 좌측 52px 네비게이션 레일 최하단에 동일한 `OpenSettingsCommand`를 호출하는 기어 아이콘(`IconNavSettings`)이 이미 존재하여 명백한 UI 중복 발생.
+* `REFRESH DB`: 기동 시 자동 DB 웜업 및 `CockpitUiBridge` 기반의 실시간 델타 이벤트 동기화(`InvestigationStarted`, `InvestigationCompleted`)가 완비되어 수동 새로고침이 불필요한 초기 디버깅용 레거시 잔재.
+
+### 2. 해결책 (Resolution)
+1. **타이틀바 우측 스택패널 정돈**:
+   * `MainWindow.xaml`: `REFRESH DB` 및 `SETTINGS` 버튼 2개 블록을 제거.
+   * 최소화(`MinimizeButton_Click`), 최대화/복원(`MaximizeButton_Click`), 닫기(`CloseButton_Click`) 캡션 버튼 3종만 보존하여 창 캡션 드래그 영역 확장 및 모던 엔터프라이즈 룩앤필 확립.
+2. **ViewModel 호환성 및 무결성 보존**:
+   * 좌측 네비게이션 레일 하단 `IconNavSettings` 버튼 및 `MainViewModel` 내 커맨드 로직(`OpenSettingsCommand`, `RefreshFromDbCommand`)은 보존하여 타 뷰 및 향후 확장 시 무결성 유지.
+3. **빌드 및 회귀 테스트 검증**:
+   * `dotnet build Phalanx.sln -c Release -m:1` ➔ Exit Code 0 (경고 0건, 오류 0건).
+   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 39/39 통과 (Exit Code 0).
+
