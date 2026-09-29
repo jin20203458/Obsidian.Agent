@@ -358,3 +358,48 @@ related:
     ```
   * 양방향 통로가 정상 개방됨으로써 윈도우 생성 및 렌더링 시 발생하던 `InvalidOperationException` 및 Win32 네이티브 콜백 Fast-fail(`0xc000041d`) 원천 해소.
 
+---
+
+## 2026-09-29: [Resolved] SettingsWindow 재오픈 시 RadioButton TwoWay 바인딩 순환 피드백에 의한 StackOverflowException (0x800703E9)
+
+### 1. 현상 (Symptom)
+* Cockpit 상단 헤더 또는 네비게이션 레일에서 `환경 설정(SETTINGS)` 창을 열었다가 닫은 후, 다시 `환경 설정` 창을 열 때 `System.StackOverflowException (HResult: 0x800703E9)` 크래시 발생.
+
+### 2. 원인 (Root Cause)
+1. **닫힌 윈도우의 이벤트 델리게이트 및 DataContext 미해제 누수**:
+   * `SettingsWindow.xaml.cs`에서 `DataContextChanged`를 통해 싱글톤 `SettingsViewModel.RequestClose`에 이벤트 핸들러를 등록했으나, 창이 닫힐 때(`Closed`) 이를 해제하지 않아 닫힌 윈도우 인스턴스가 GC되지 않고 싱글톤 뷰모델에 강참조로 고착됨.
+   * 닫힌 윈도우의 DataContext와 바인딩들이 싱글톤 뷰모델의 `PropertyChanged`를 계속 청취 및 양방향 쓰기 상태를 유지함.
+2. **`GroupName="AuthMode"` 전역 등록 간섭**:
+   * WPF `RadioButton`은 `GroupName`이 지정될 경우 부모 컨테이너 범위를 넘어 네임스페이스/전역 그룹 레지스트리에 등록됨.
+   * 새 윈도우 인스턴스가 열릴 때 새 윈도우의 라디오 버튼이 체크되면, WPF 그룹 로직이 기존 닫힌 윈도우의 라디오 버튼에 `IsChecked = false`를 전파함.
+3. **`IsApiKeyMode` 역방향 바운싱 세터에 의한 상호 무한 재귀 (Infinite Ping-Pong Recursion)**:
+   * 기존 `IsApiKeyMode` 세터의 `if (UseVertexAi == value)` 비교 로직은 비활성화 시그널(`value = false`)이 주입될 때 `UseVertexAi`가 `false`이면 `false == false`가 되어 참(true)으로 평가되고, `UseVertexAi = !false = true`로 강제 반전시킴.
+   * 이에 따라 [새 창의 라디오버튼 체크 -> 기존 창의 라디오버튼 언체크 -> ViewModel 프로퍼티 변경 -> 새 창의 라디오버튼 언체크 -> 기존 창의 라디오버튼 체크...]가 밀리초 단위로 수만 회 상호 재귀 호출되어 호출 스택이 고갈(StackOverflowException)됨.
+
+### 3. 해결책 (Resolution)
+1. **`SettingsViewModel.cs`의 `IsApiKeyMode` 단방향 활성화 가드 적용**:
+   * 라디오 버튼 선택 해제 시그널(`value = false`)에 의한 역방향 프로퍼티 반전(Bouncing)을 원천 차단:
+     ```csharp
+     public bool IsApiKeyMode
+     {
+         get => !UseVertexAi;
+         set
+         {
+             if (value && UseVertexAi)
+             {
+                 UseVertexAi = false;
+             }
+             else if (!value && !UseVertexAi)
+             {
+                 UseVertexAi = true;
+             }
+         }
+     }
+     ```
+2. **`SettingsWindow.xaml` 라디오 버튼의 `GroupName` 속성 제거**:
+   * 두 라디오 버튼은 이미 동일 `StackPanel` 내에 배치되어 있으므로 WPF 패널 스코프에 의해 자연스럽게 상호 배타 그룹화됨.
+   * `GroupName="AuthMode"`를 제거하여 다중 윈도우 인스턴스 간 전역 그룹 등록 및 교차 간섭 원천 제거.
+3. **`SettingsWindow.xaml.cs`의 Closed 수명주기 정리 핸들러 구현**:
+   * 윈도우 종료 시 `SettingsViewModel.RequestClose` 구독을 해제하고 `DataContext = null`로 설정하여 모든 바인딩 및 델리게이트 체인을 즉시 완전 절단.
+
+
