@@ -716,13 +716,20 @@ related:
 5. **자율 AI 헌터 FSM 및 수사 파이프라인 연계**:
    * `AutonomousHunterAgent.cs`: 시스템 프롬프트에 6번째 도구 등록 및 파일 우선 수사 지침 명시.
    * 오프라인 결정론적 엔진에 Step 1.5로 `FileInspectionTool`을 연계하여 `IsPathMasqueraded == true` 또는 `AnomalyScore >= 80` 시 `riskScore += 50` 가산 후 파이프라인(C2 IP 방화벽 차단 및 MITRE 매핑) 완주 보장.
-6. **복합 회피 공격(T1036.005) 전용 검증 및 MITRE TTP 분류기 보강**:
+6. **복합 회피 공격(T1036.005) 전용 검증 및 실시간 LLM(Live Gemini) 벤치마크**:
    * `MitreClassifierTool.cs`: Defense Evasion 범주에 `T1036.005` (Masquerading: Match Legitimate Name or Location) 규칙 추가 (`masquerad`, `t1036`, `경로 위장`, `temp\svchost` 등 정규식 매핑).
-   * `FileInspectionToolTests.cs`: `TestConvolutedEvasiveAttack_WithFileInspectionTool_ImmediateMasqueradingDetectionAndKill` 단위 테스트 신설.
-   * **실측 비교 결과**:
-     * 기존 베이스라인(도구 미보유): 5턴, 36.5초 소요 (Turn 3에서 21.7초간 RAM 메모리 스캔 낭비).
-     * 신규 도구 도입 후: Step 1.5에서 `C:\Windows\Temp\svchost.exe`를 즉시 적발(`IsPathMasqueraded = true`, `AnomalyScore = 100`), `riskScore += 50` 가산으로 누적 85점 달성, `T1036.005` 자동 매핑, 미등록 C2 IP(`198.51.100.99`) 방화벽 차단 및 `ACTION_KILL` 즉각 도출 (오프라인 결정론 모드 기준 284ms 완결).
+   * **실제 Gemini LLM 연동 Live 벤치마크 실측 대조 (`convoluted_attack_with_file_tool_audit.json`)**:
+     * **기존 베이스라인 (도구 5종 주입, FileInspectionTool 부재)**:
+       * **총 소요 시간**: 37,945ms (약 38초)
+       * **수사 턴 수**: 5턴
+       * **실제 추론 흐름**: Step 1 (DecodePayload 6.4s) ➔ Step 2 (Gemini가 위장 감지를 위해 FileInspectionTool을 호출했으나 도구 부재 오류 수신 2.4s) ➔ Step 3 (대안으로 ThreatReputation 조회에 23.2s 낭비) ➔ Step 4 (사살 판결 5.9s) ➔ Step 5 (방화벽 차단).
+     * **신규 도구 결합 후 (도구 6종 주입, FileInspectionTool 활성화)**:
+       * **총 소요 시간**: 16,184ms (약 16초) ➔ **수사 시간 57.3% 대폭 단축 (38초 ➔ 16초)**
+       * **수사 턴 수**: 4턴 (ReAct 수사 루프는 단 2턴 만에 즉각 사살 확증)
+       * **실제 추론 흐름**: Step 1 (DecodePayload 7.0s) ➔ Step 2 (`FileInspectionTool` 정상 호출 3.1s: 무서명, 시스템 위장 T1036.005 CRITICAL, 고엔트로피 7.4521, 이상점수 100/100 즉각 획득) ➔ Step 3 (추가 메모리 스캔이나 IP 평판 방황 없이 즉각 ACTION_KILL 도출 6.0s) ➔ Step 4 (SystemFirewallTool C2 IP 차단).
+   * **오프라인 결정론 모드**: 초고속 284ms 완결 (로컬 룰 FSM에서 위장 가산 +50점으로 누적 85점 즉각 사살).
 7. **회귀 및 QA 검증 결과**:
-   * `FileInspectionToolTests.cs`: 8개 전 시나리오(정규 서명, 무서명 위장 100점, .dat 확장자 위장, 고엔트로피, 0바이트 빈 파일, 결측/무효 인자, Clean-Room 모의 주입, 복합 회피 공격 즉각 사살) 전원 통과.
+   * `FileInspectionToolTests.cs`: 8개 전 단위 시나리오 통과.
+   * `AutonomousHunterAgentTests.cs`: `TestLive_ConvolutedEvasiveAttack_WithFileInspectionTool` 통과 (16초, Live LLM 통신 검증 완료).
    * `dotnet build Phalanx.sln`: 경고 0, 오류 0 (Exit Code 0).
    * `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"`: 총 57개 단위 테스트 전원 통과 (Exit Code 0, 1.0s).
