@@ -13,6 +13,5 @@ related:
 - [00_project_overview.md](./docs/00_project_overview.md): 비전, 해결 과제 및 3대 엔지니어링 의의
 - [01_system_architecture.md](./docs/01_system_architecture.md): 2계층 시스템 토폴로지 (C++ 네이티브 실시간 탐지/방어 엔진 + C# WPF AI 관제 콘솔)
 - [02_ai_agent_investigation_design.md](./docs/02_ai_agent_investigation_design.md): ReAct 자율 위협 헌터 에이전트, 5대 OS 수사 도구 및 포렌식 아카이브 설계
-- [03_implementation_roadmap.md](./docs/03_implementation_roadmap.md): 단계별(Phase) 기능 구현 마일스톤 및 완료 정의(DoD)
+- [03_implementation_roadmap.md](./docs/03_implementation_roadmap.md): 단계별(Phase) 기능 구현 마일스톤, 완료 정의(DoD), 통합 기술 인수인계 및 활성 백로그 사양서 (통합 SSOT)
 - [04_performance_benchmarks.md](./docs/04_performance_benchmarks.md): EDR 시스템 전체 실측 벤치마크 및 성능 프로파일링 통합 레지스트리 (큐 동시성, 프로세스 동결, 족보 역추적, 100μs 룰 엔진, 향후 E2E 공격 누수 실측)
-- [05_agent_handover_specification.md](./docs/05_agent_handover_specification.md): Phase 1~4.1 구현 완료 현황 및 후속 개발 에이전트를 위한 핵심 기술 인수인계 사양서
