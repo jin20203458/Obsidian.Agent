@@ -570,6 +570,72 @@ related:
 5. **회귀 검증**:
    * `ProcessTreeProjectionTests.cs` 단위 테스트에 3회 추가 동결/해제 루프(`RESTORED: 1` 상한 유지, 무한 증가 차단), 복원 상태 자연 종료 회수, 동결 중 사살 회수 검증을 추가하여 46개 단위 테스트 전원 통과 (Exit Code 0).
 
+---
+
+## 2026-09-30: [Resolved] AI 자율 수사 진행 중 시각적 정체감 해소 및 실시간 ReAct 턴 스트리밍 생동감 UX 파이프라인 구축
+
+### 1. 현상 (Symptom)
+* C++ 커널 센서가 선제 동결한 회색지대 프로세스를 AI 헌터(`AutonomousHunterAgent`)가 수사하는 동안(3초~36초), 관제 UI 상의 사건 카드가 단일 정적 텍스트로 고정되어 에이전트의 작동 여부를 체감하기 어려움.
+* 심층 포렌식 수사 기록(ReAct 추론 단계별 Thought, Action, Observation)이 수사가 모두 종료된 후에야 일괄 갱신되어, 관제사가 수사관의 실시간 추론 과정을 지켜볼 수 없는 정체된 UX 발생.
+
+### 2. 원인 (Root Cause)
+1. `AutonomousHunterAgent` 내에서 각 도구 호출(`IInvestigationTool.ExecuteAsync`) 및 판결 추론 시점에 외부로 진행 상태를 통지하는 실시간 이벤트 파이프라인이 부재하여, 오직 수사 종결 시점의 `OnInvestigationCompleted` 이벤트에만 의존함.
+2. `CockpitUiBridge` 및 `MainViewModel`에 개별 ReAct 턴 단위의 UI 스레드 안전 마샬링 및 수사 경과시간 타이머가 구현되어 있지 않았음.
+3. `IncidentItemViewModel` 및 XAML 뷰템플릿(`IncidentsView.xaml`, `InvestigationView.xaml`)에 수사 진행 중 상태(`IsInvestigating`), 실시간 진행 텍스트, 펄스 애니메이션, 아코디언 양방향 펼침 제어(`IsExpanded`)가 결여되어 있었음.
+
+### 3. 해결책 (Resolution)
+1. **`AutonomousHunterAgent.cs` 실시간 턴 이벤트 신설**:
+   * `public event Action<string, ReActTraceRecord>? OnReActStepProgress;` 추가.
+   * 온라인 Gemini ReAct 루프(최종 판결, 각 도구 완료, 최대 루프 소진 Fail-Secure 스텝, 방화벽 후속 조치) 및 오프라인 결정론적 추론 5개 단계 전역에서 턴 완료 시 즉시 이벤트 발생.
+2. **`CockpitUiBridge.cs` UI 안전 마샬링**:
+   * `ReActStepCompleted` 이벤트 및 `NotifyReActStepCompleted` 구현 (UI 스레드 안전 Dispatcher 마샬링 및 Headless null 가드 적용).
+3. **`Program.cs` 이벤트 배선**:
+   * `agent.OnReActStepProgress` ➔ `uiBridge.NotifyReActStepCompleted` 연결.
+4. **뷰모델 상태 전이 및 100ms 경과 타이머 구현**:
+   * `ReActStepViewModel`: `[ObservableProperty] private bool _isExpanded;` 추가.
+   * `IncidentItemViewModel`: `_investigationProgressText`, `_isInvestigating`, `_activeElapsedSeconds` 프로퍼티 추가 및 `[NotifyPropertyChangedFor(nameof(FormattedLatency))]` 어트리뷰트 적용으로 타이머 틱 시 실시간 지연시간 UI 갱신 보장.
+   * `MainViewModel`:
+     * `OnInvestigationStarted`: `IsInvestigating = true`, 100ms 간격 `DispatcherTimer` 가동 (`Application.Current == null` 가드 포함).
+     * `OnReActStepCompleted`: 이전 턴 자동 접힘, 신규 턴 `IsExpanded = true` 생성 및 증식, `InvestigationProgressText = "Turn N • [ActionTool] 완료"` 갱신.
+     * `OnInvestigationCompleted`: `IsInvestigating = false`, 다중 수사 안전 가드 타이머 정지, `Traces.Clear()`를 지양하고 누락분만 보충 동기화하여 아코디언 펼침 상태 보존.
+5. **WPF XAML 3계층 생동감 UI 고도화**:
+   * `IncidentsView.xaml`: 사건 카드 좌측 점에 `IsInvestigating=True` 시 부드러운 Glow 호흡 펄스(Opacity 0.35 ↔ 1.0, 0.8초 주기, `AutoReverse="True"`) 적용. Line 2 TextBlock에서 태그 내 로컬 하드코딩 속성을 제거하고 `Style.Setters` 및 `DataTrigger`로 완전 위임하여 의존성 프로퍼티 우선순위 충돌 방지.
+   * `InvestigationView.xaml`: ReAct 아코디언 `<Expander>`를 `IsExpanded="{Binding IsExpanded, Mode=TwoWay}"`로 양방향 바인딩하여 턴 증식 시 최신 턴 자동 펼침 지원.
+6. **회귀 및 수명주기 검증**:
+   * `ProcessTreeProjectionTests.cs`에 `TestInvestigation_RealtimeProgressAndTraceStreaming_Lifecycle` 단위 테스트 추가: 수사 개시 ➔ 100ms 지연시간 통지 ➔ Turn 1 스트리밍 및 자동 펼침 ➔ Turn 2 스트리밍(Turn 1 자동 접힘 및 Turn 2 자동 펼침) ➔ 수사 완료 후 아코디언 상태 보존 전 과정 검증.
+   * `dotnet build Phalanx.sln -c Release -m:1` ➔ Exit Code 0 (경고 0, 오류 0).
+   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 47개 단위 테스트 전원 통과 (Exit Code 0, 908ms).
+
+---
+
+## 2026-09-30: [Resolved] AI 수사 완료 시 심층수사실 빈 화면(SelectedIncident null) 유실 버그 및 최종 판결 턴 'NONE' 표기 개선
+
+### 1. 현상 (Symptom)
+* AI 자율 수사관의 실시간 ReAct 턴 스트리밍 중 마지막 판결 단계 헤더에 날것의 `PHASE 03 : NONE`이 노출되어 미구현 또는 오류처럼 보이는 현상 발생.
+* 직후 수사가 완전히 종료되는 순간 심층수사실(`InvestigationView.xaml`)의 모든 3-Panel 데이터(서사, 런북, MITRE 전술, 아코디언 추적)가 한순간에 증발하여 화면 전체가 완전한 빈 화면(Blank Screen)으로 변하는 심각한 화면 유실 버그 발생.
+
+### 2. 원인 (Root Cause)
+1. **WPF `ListBox` 컬렉션 Reset에 의한 `SelectedItem` 강제 Coercion (`null` 주입)**:
+   * `MainViewModel.OnInvestigationCompleted`에서 수사 결과를 반영한 뒤 사건 목록 필터를 갱신하기 위해 `ApplyFilter()`를 호출함.
+   * `ApplyFilter()` 내부에서 `FilteredIncidents.Clear()`가 호출되는 순간, WPF `ListBox`(`IncidentsView.xaml`)가 `ItemsSource`의 `Reset`을 감지하여 자신의 `SelectedItem`을 `null`로 강제 초기화함.
+   * `ListBox.SelectedItem="{Binding SelectedIncident}"`의 기본 양방향(Two-Way) 바인딩에 의해 `MainViewModel.SelectedIncident`가 즉각 `null`로 덮어씌워짐.
+   * 그 직후 `if (SelectedIncident == existing)` 조건 검사가 이미 `null == existing`으로 평가되어 `false`로 실패하고, `SelectedIncident`가 영구히 `null`로 방치됨.
+   * `InvestigationView.xaml`의 모든 UI 컨트롤이 `{Binding SelectedIncident.*}`를 바라보고 있어 전체 화면이 공백으로 증발함.
+2. **ReAct 최종 판결 도구 부재 표기 가공 누락**:
+   * Gemini ReAct 루프가 최종 판결(Final Verdict)에 도달하면 더 이상 도구를 호출하지 않으므로 `ActionTool = "None"`으로 기록됨.
+   * `ReActStepViewModel.FormattedStep`이 이를 `$"PHASE {StepNumber:D2} : {ActionTool.ToUpperInvariant()}"`로 단순 변환하여 `PHASE 03 : NONE`이 아코디언 헤더에 그대로 노출됨.
+
+### 3. 해결책 (Resolution)
+1. **`MainViewModel.cs` 선택 상태 원자적 보존 및 확정 할당**:
+   * `ApplyFilter()` 시작 시 `var previousSelected = SelectedIncident;`로 원자적 스냅샷을 캡처하고, 필터링 루프 완료 후 `if (previousSelected != null && FilteredIncidents.Contains(previousSelected)) { SelectedIncident = previousSelected; }`를 통해 ListBox 초기화로 인한 null 코어션을 원천 차단.
+   * `OnInvestigationCompleted` 종료 시 `ApplyFilter()` 직후 `SelectedIncident = existing; OnPropertyChanged(nameof(SelectedIncident));`를 명시적으로 실행하여 수사가 완료된 사건의 상세 포렌식 데이터가 심층수사실에 100% 온전히 유지되도록 보장.
+2. **`ReActStepViewModel.cs` 최종 판결 엔터프라이즈 용어 정규화**:
+   * `FormattedStep`에서 `string.Equals(ActionTool, "None", StringComparison.OrdinalIgnoreCase)` 분기를 적용하여, 최종 턴일 경우 날것의 `NONE` 대신 `PHASE {02} : FINAL VERDICT`로 품격 있게 렌더링되도록 개선.
+3. **회귀 및 수명주기 검증**:
+   * `ProcessTreeProjectionTests.cs` 내 `TestInvestigation_RealtimeProgressAndTraceStreaming_Lifecycle`에 "None" 턴의 `FINAL VERDICT` 표기 검증 및 수사 완료 후 `SelectedIncident` 인스턴스 동일성 보존(`Assert.Same(incident, vm.SelectedIncident)`) 검증 추가.
+   * `dotnet build Phalanx.sln -c Release -m:1` ➔ Exit Code 0 (경고 0, 오류 0).
+   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 47개 단위 테스트 전원 통과 (Exit Code 0, 916ms).
+
 
 
 
