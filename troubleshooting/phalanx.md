@@ -752,3 +752,19 @@ related:
    * `AutonomousHunterAgentTests.cs`: Live Gemini 테스트 전원 통과.
    * `dotnet build Phalanx.sln`: 경고 0, 오류 0 (Exit Code 0).
    * `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"`: 총 63개 단위 테스트 전원 통과 (Exit Code 0, 1.0s).
+
+9. **중립적 엔터프라이즈 스트레스 벤치마크 10대 시나리오 실측 평가 (`NeutralEnterpriseStressBenchmarkTests.cs`)**:
+   * **수행 배경**: Phalanx 내부의 점수 가중치에 맞춘 기능 검증이 아닌, 실제 엔터프라이즈 업무 환경(오탐 검증 5종)과 공격자 회피 기법(미탐 검증 5종)을 독립적 보안 감사관 관점에서 무조작(No Artificial Tuning)으로 실측.
+   * **실측 성적표**:
+     * 총 10개 시나리오 중 **7개 PASS (정합률 70.0%)**, **3개 FAIL (미탐 3건, 오탐 0건)**.
+     * **정밀도 (Precision)**: 100% (정상 업무 5건 전원 ACTION_RESUME, 오탐 0건).
+     * **재현율 (Recall)**: 40.0% (고도화 회피 공격 5건 중 2건 사살, 3건 미탐).
+   * **사각지대(미탐 3건) 및 기술적 원인 분석**:
+     1. **DLL 사이드로딩 (T1574.002)**: 정상 서명 `OneDriveUpdate.exe`가 Public 폴더의 비패킹 무서명 `version.dll`을 로드할 때, 커맨드라인에 DLL 경로가 없고 주 실행파일이 MS 정품 서명이어서 파일 이상 점수 0점으로 누적 40점에 그쳐 통과됨 (`ActionResume` 미탐).
+     2. **레지스트리 은닉 간접 실행 (T1218.010)**: `regsvr32.exe`가 커맨드라인에 URL/Base64 없이 레지스트리 CLSID만 인자로 받아 구동될 때, LOLBAS(+30) + 평판(+40) = 70점에 그쳐 사살 임계치(80점)에 10점 미달하여 통과됨 (`ActionResume` 미탐).
+     3. **유니코드 동형이의어 위장 (T1036.005)**: System32 내 키릴 자모 'о'를 쓴 `svchоst.exe` 실행 시, `System32Binaries` 집합과의 단순 ASCII 비교가 불일치하여 위장 룰이 격발되지 않고 40점에 머물러 통과됨 (`ActionResume` 미탐).
+   * **성공적 방어 (2건 사살, 5건 해제)**:
+     * **메모리 슬립 MZ 와이핑 (T1055.012)**: MZ 헤더 소거에도 VAD Unbacked RWX 속성 추적으로 90점 사살 (`ActionKill`).
+     * **다단계 CertUtil 다운로드/디코딩 (T1105/T1140)**: LOLBAS 프록시 + LockBit C2 통신 복합 탐지로 105점 사살 (`ActionKill`).
+     * **정상 업무 5건 (PyInstaller, 로컬 빌드, Intune, 백업, AnyDesk)**: 인라인 C2 및 메모리 침투 부재를 확인하여 억울한 사살 없이 100% 정상 해제 (`ActionResume`).
+
