@@ -539,5 +539,37 @@ related:
    * `dotnet build Phalanx.sln -c Release` ➔ Exit Code 0 (경고 0, 오류 0).
    * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 46개 단위 테스트 전원 통과 (Exit Code 0).
 
+---
+
+## 2026-09-30: [Resolved] 단일 프로세스 반복 동결/해제 시 RESTORED 카운터 무한 증가 결함 및 엔터프라이즈 Gauge 모델 전면 통일
+
+### 1. 현상 (Symptom)
+* 단일 프로세스에 대해 관제사가 [원자적 동결]과 [동결 해제]를 반복 클릭할 때마다 `RESTORED` 카운터가 무한히 증가(`1 -> 2 -> 3... -> 10`)하는 현상 발생.
+* 이는 CrowdStrike Falcon, SentinelOne, Defender XDR 등 엔터프라이즈 EDR의 상황 인식(Situational Awareness) 상태 표시줄 표준인 Gauge(현재 활성 상태 유지 수) 방식과 불일치하여 관제사에게 혼선을 유발함.
+
+### 2. 원인 (Root Cause)
+1. `TotalRestoredCount`가 단순 누적 액션 카운터(`++`)로만 동작하여, 프로세스가 다시 동결되거나 사살되거나 OS 상에서 자연 종료되더라도 복원 수치가 회수되지 않고 무한 누적됨.
+2. `ProcessNodeModel`에 현재 복원 상태인지 여부를 나타내는 상태 플래그(`IsRestored`)가 부재하였음.
+3. `ProcessTreeProjectionManager.HandleStop`에서 상태 리셋 전 사전 플래그(`wasRestored`, `wasSuspended`) 캡처 및 UI 스레드 마샬링 파이프라인이 부재하여 자연 종료 시 카운터 차감이 누락됨.
+
+### 3. 해결책 (Resolution)
+1. **`ProcessNodeModel.cs` 상태 플래그 확장**:
+   * `[ObservableProperty] private bool _isRestored;` 추가 및 동결/사살/종료 시 리셋.
+2. **`ProcessTreeProjectionManager.cs` 이벤트 시그니처 및 사전 캡처 확장**:
+   * `OnProcessStopped`를 `Action<ProcessNodeModel, bool, bool>` (`node, wasSuspended, wasRestored`)로 확장하고, `HandleStop`에서 UI Dispatcher 진입 전 원자적으로 플래그를 캡처하여 전달.
+3. **`MainViewModel.cs` Gauge 라이프사이클 및 안전 마샬링 완비**:
+   * `ActiveRestoredCount`를 신설하고 `TotalRestoredCount` 양방향 호환 브리지를 제공하여 CS0200 에러 및 XAML 하위 호환성 100% 보장.
+   * `HandleProcessStopped`에서 `Application.Current?.Dispatcher` 안전 마샬링 및 Headless 환경 분기를 구성하여, 프로세스 자연 종료 시 `ActiveRestoredCount--`, `ActiveSuspendedCount--`, `MonitoredProcessCount` 동기화 보장.
+   * `SuspendSelectedProcessAsync`: 복원 상태 노드 재동결 시 `ActiveRestoredCount--` 회수 및 `ActiveSuspendedCount++`.
+   * `ResumeSelectedProcessAsync`: 동결 노드 해제 시 `ActiveSuspendedCount--`, `ActiveRestoredCount++`, `node.IsRestored = true`.
+   * `TerminateSelectedProcessAsync`: 복원/동결 상태 노드 사살 시 각 Gauge 회수, `TotalTerminatedCount++`, `MonitoredProcessCount--`.
+   * AI Hunter 수사 라이프사이클(`OnInvestigationStarted`, `OnInvestigationCompleted`) 내 `FindNodeByPid` 역참조 및 `ActiveRestoredCount` 동기화.
+   * `LoadIncidentsFromDatabase`: Gauge 모델 원칙에 따라 과거 DB 수치 덮어쓰기 배제.
+4. **`MainWindow.xaml` 바인딩 정규화**:
+   * 하단 RESTORED 텍스트 바인딩을 `ActiveRestoredCount`로 정규화.
+5. **회귀 검증**:
+   * `ProcessTreeProjectionTests.cs` 단위 테스트에 3회 추가 동결/해제 루프(`RESTORED: 1` 상한 유지, 무한 증가 차단), 복원 상태 자연 종료 회수, 동결 중 사살 회수 검증을 추가하여 46개 단위 테스트 전원 통과 (Exit Code 0).
+
+
 
 
