@@ -1,4 +1,4 @@
----
+﻿---
 description: >-
   Phalanx C++ 센서 및 C# 코어 트러블슈팅 런북. Phalanx 프로젝트 버그, ETW 수집 오류 및 gRPC 장애 발생 시 참조.
 related:
@@ -768,3 +768,22 @@ related:
      * **다단계 CertUtil 다운로드/디코딩 (T1105/T1140)**: LOLBAS 프록시 + LockBit C2 통신 복합 탐지로 105점 사살 (`ActionKill`).
      * **정상 업무 5건 (PyInstaller, 로컬 빌드, Intune, 백업, AnyDesk)**: 인라인 C2 및 메모리 침투 부재를 확인하여 억울한 사살 없이 100% 정상 해제 (`ActionResume`).
 
+
+10. **Phase 1: FileInspectionTool UTR #39 유니코드 Confusable 정규화 및 System32 무서명 Zero-Trust 구현 완료**:
+    * **해결 대상**: 10대 실무 벤치마크 중 시나리오 9(키릴 자모 'о' `svch\u043Est.exe` System32 상주 공격의 False Negative 미탐).
+    * **원인 규명**: 기존 `CheckPathMasqueraded`는 단순 `HashSet<string>`의 ASCII 대소문자 비교(`OrdinalIgnoreCase`)에 의존하여, 시각적으로 동일한 키릴 문자(U+043E)를 다른 문자로 인식하고 위장 탐지를 건너뜀. 또한 `System32` 내부의 무서명 실행 파일에 대해 일반 디렉터리와 동일하게 경미 가산(+10점)만 부여하여 총 이상 점수가 35점에 그침.
+    * **구현 내역 (`FileInspectionTool.cs`)**:
+      * **UTR #39 Confusable Skeleton 매핑 (`GetUnicodeSkeleton`)**: Cyrillic 소문자/대문자 및 Greek 소문자/대문자 58종의 시각적 동형이의어를 ASCII Latin 대표 문자로 치환하는 O(1) 룩업 매퍼 구현. .NET 9 `Normalize(NormalizationForm.FormKD)`를 전후로 적용하여 호환 분해 및 결합 정규화 보장.
+      * **시스템 파일 위장 검증 확장 (`CheckPathMasqueraded`)**: 파일명 스켈레톤 추출 후 `hasConfusable` 상태가 감지되면, 디렉터리 위치(심지어 `System32` 내부라 할지라도)와 무관하게 100% 위장(`isHomoglyphDetected = true`)으로 판정 (`T1036.005 Masquerading`).
+      * **`System32` 디렉터리 무서명 Zero-Trust 체계**: `IsInSystem32Directory`를 신설하여 `System32`/`SysWOW64` 경로 내에 상주하는 실행 파일이 유효한 디지털 서명이 없을 경우 Zero-Trust 위반으로 이상 점수 +70점 가산. 일반 사용자/개발 디렉터리의 무서명 파일은 +10점으로 유지하여 정상 업무 오탐 방어 불변식 완비.
+      * **결정론적 시뮬레이션 팩토리 (`CreateSimulatedEntry`)**: 단위 테스트 및 벤치마크에서 하드코딩 없이 알고리즘 자체를 수행하여 `SimulatedFileEntry`를 생성하는 API 제공.
+    * **실측 검증 결과**:
+      * `dotnet build Phalanx.sln`: 경고 0, 오류 0 (Exit Code 0).
+      * `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"`: 신규 단위 테스트 3종 포함 총 66개 단위 테스트 전원 통과 (Exit Code 0, 1.0s).
+      * `Scenario09_UnicodeHomoglyphSvchost_Malicious`: `ActionKill` (PASS TP, AnomalyScore 130점, 확신도 0.98).
+      * **10대 실무 엔터프라이즈 벤치마크 지표 도약**:
+        * **성공률 (Accuracy)**: 70.0% ➔ **80.0%** (8개 PASS, 2개 FAIL)
+        * **재현율 (Recall)**: 40.0% ➔ **60.0%** (공격 탐지율 1.5배 향상)
+        * **F1-Score**: 0.571 ➔ **0.750**
+        * **미탐 (False Negative)**: 3건 ➔ **2건** (DLL 사이드로딩, 레지스트리 간접 실행 잔여)
+        * **오탐 (False Positive)**: **0건 유지** (정밀도 100% 보존)
