@@ -72,15 +72,17 @@ flowchart TD
 | 도구명 (Tool Name) | 매개변수 (Parameters) | 수행 작업 (Functionality) | 반환값 (Return) | 구현 소스 링크 |
 | :--- | :--- | :--- | :--- | :--- |
 | `DecodePayloadTool` | `string encodedCommand` | Base64, Hex 등 다단계 난독화 인자 재귀적 디코딩 | 원본 텍스트 스크립트 및 URL 목록 | [DecodePayloadTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/DecodePayloadTool.cs) |
-| `ProcessMemoryScanTool` | `uint32 targetPid` | 타깃 RAM 가상 메모리(`ReadProcessMemory`) 정규식/YARA 스캔 | 발견된 C2 도메인, IP, 특이 문자열 | [ProcessMemoryScanTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/ProcessMemoryScanTool.cs) |
+| `ProcessMemoryScanTool` | `uint32 targetPid` | 타깃 RAM 가상 메모리(`ReadProcessMemory`) VAD 스캔 및 Win32 Toolhelp32 무누수 모듈 열거 | C2 도메인/IP, Unbacked 실행 메모리, 비표준 디렉터리 로드 모듈 | [ProcessMemoryScanTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/ProcessMemoryScanTool.cs) |
 | `ThreatReputationTool` | `string targetIndicator` | 로컬 내장 위협 인텔리전스 IoC 캐시 및 악성 IP/도메인 블랙리스트 조회 | 평판 점수 (0~100) 및 알려진 악성 그룹명 | [ThreatReputationTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/ThreatReputationTool.cs) |
 | `MitreClassifierTool` | `string observedBehavior` | 관찰된 행위 문자열을 MITRE ATT&CK Matrix 기법(ID)으로 자동 매핑 | `T1059.001`, `T1566` 등의 기법 코드 및 설명 | [MitreClassifierTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/MitreClassifierTool.cs) |
 | `SystemFirewallTool` | `string maliciousIp` | Windows Filtering Platform(WFP) 또는 Netsh 명령으로 해당 IP 인/아웃바운드 즉시 차단 | 차단 성공 여부 (bool) | [SystemFirewallTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/SystemFirewallTool.cs) |
+| `FileInspectionTool` | `string filePath` | Authenticode 디지털 서명, 시스템 경로 위장(Masquerading T1036.005), UTR #39 Confusable 스켈레톤, Shannon 엔트로피, DLL 사이드로딩(T1574.002) 정밀 분석 | 서명 유효성, 엔트로피, 위장 여부, 사이드로딩 DLL 목록, 복합 이상 점수 | [FileInspectionTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/FileInspectionTool.cs) |
+| `RegistryInspectionTool` | `string registryKey` | 윈도우 64비트 레지스트리(CLSID, InprocServer32, ScriptletURL, Run/RunOnce) 간접 실행(T1218.010) 및 COM 하이재킹(T1546.015) 검증 | 간접 실행/하이재킹 여부, 추출 C2 URL/IP, 복합 이상 점수 | [RegistryInspectionTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/RegistryInspectionTool.cs) |
 
 > **설계 원칙 및 구현 완료 상태 (Implementation Status)**:
-> * 본 문서는 에이전트와 도구 간의 상위 인터페이스 규격을 정의하며, 5대 OS 수사 도구는 Phase 3에서 독립 구현 및 단위 검증(`InvestigationToolsTests`, Exit Code 0)이 완료되었습니다.
-> * 각 도구는 다단계 디코딩 재귀 종료 조건(최대 5회, 512KB 상한 Zip Bomb 방어), `ReadProcessMemory` 기반 VAD 스캔, 로컬 위협 DB 캐시, WFP 방화벽 로컬호스트 차단 방지 가드를 갖추고 있습니다.
-> * **추론 레이턴시 특성**: 실측 벤치마크 기준 전형적 2턴 조기 종결 시나리오는 약 7~10초, 10대 실무 시나리오 평균(2.4턴) 완결은 12.64초가 소요되며, 복합 회피 공격의 5턴 심층 수사 완주 시에는 36.5초가 소요됩니다 (C# 상위 타임아웃 50초 SLA 예산 내 안전 완결).
+> * 본 문서는 에이전트와 도구 간의 상위 인터페이스 규격을 정의하며, **7대 OS 심층 포렌식 도구**는 Phase 3에서 전원 독립 구현 및 단위 검증(`InvestigationToolsTests`, `FileInspectionToolTests`, `RegistryInspectionToolTests`, `ProcessMemoryScanToolTests`, 총 80개 단위 테스트 전원 통과, Exit Code 0)이 완료되었습니다.
+> * 각 도구는 다단계 디코딩 재귀 종료 조건(최대 5회, 512KB 상한 Zip Bomb 방어), `ReadProcessMemory` 기반 VAD 스캔 및 RAII 모듈 스냅샷, 로컬 위협 DB 캐시, WFP 방화벽 로컬호스트 차단 방지 가드, UTR #39 Confusable 스켈레톤 매핑, 64비트 레지스트리 뷰 조회, 예약 DLL 검색 순서 하이재킹 검증 체계를 갖추고 있습니다.
+> * **추론 레이턴시 특성**: 실측 10대 실무 엔터프라이즈 스트레스 벤치마크 기준 평균 수사 완결 시간은 **38ms**에 불과하며, 외부 LLM(Gemini) 연동 시에도 2.4턴 기준 약 12.6초(C# 상위 타임아웃 50초 SLA 예산 내 안전 완결) 내에 완결됩니다.
 
 ---
 

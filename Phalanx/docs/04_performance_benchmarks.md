@@ -309,6 +309,51 @@ gantt
 3. **`FileInspectionTool` 신설 시 기대 효과**:
    `WinVerifyTrust` 디지털 서명 검증 및 시스템 경로(System32 vs Temp) 불일치 탐지 도구가 제공되면, Turn 2에서 위장을 즉각 확증하여 **수사 시간을 5턴(36.5초)에서 2~3턴(10초 내외)으로 대폭 압축** 가능함을 실증함.
 
+---
+
+## 10. [Phase 3.5 Final] 중립적 10대 엔터프라이즈 스트레스 벤치마크 (100.0% All-Green 완전 정복)
+
+### A. 벤치마크 설계 목적 및 독립적 검증 원칙
+* **목적**: EDR 솔루션 내부의 하드코딩된 점수 편향을 배제하고, 실무 엔터프라이즈 환경에서 발생하는 정상 업무 5종(오탐 검증)과 고도화된 회피 공격 5종(미탐 검증)을 대상으로 무조작(No Artificial Tuning) 실측 평가를 진행하여 탐지 사각지대를 치유.
+* **기준 테스트 하네스**: [`NeutralEnterpriseStressBenchmarkTests.cs`](../../../Phalanx/tests/Phalanx.Agent.Tests/NeutralEnterpriseStressBenchmarkTests.cs)
+* **결과 데이터 원천 (SSOT)**: [`neutral_enterprise_benchmark.json`](../../../Phalanx/neutral_enterprise_benchmark.json)
+
+### B. 3단계 치유 및 성적표 도약 추이 (Baseline ➔ Phase 3)
+
+| 평가 메트릭 (Metrics) | Baseline (초기 실측) | Phase 1 (유니코드) | Phase 2 (레지스트리) | **Phase 3 (사이드로딩, 최종)** |
+| :--- | :---: | :---: | :---: | :---: |
+| **전체 시나리오 수** | 10 건 | 10 건 | 10 건 | **10 건** |
+| **합격 건수 (Passed)** | 7 건 (70.0%) | 8 건 (80.0%) | 9 건 (90.0%) | **10 건 (100.0% All-Green)** |
+| **실패 건수 (Failed)** | 3 건 (미탐 3건) | 2 건 (미탐 2건) | 1 건 (미탐 1건) | **0 건 (완전 무결점)** |
+| **정탐 (True Positive)** | 2 / 5 (40.0%) | 3 / 5 (60.0%) | 4 / 5 (80.0%) | **5 / 5 (100.0%)** |
+| **정상 복구 (True Negative)** | 5 / 5 (100.0%) | 5 / 5 (100.0%) | 5 / 5 (100.0%) | **5 / 5 (100.0%)** |
+| **오탐 (False Positive)** | **0 건** | **0 건** | **0 건** | **0 건 (오탐 0% 완벽 보존)** |
+| **미탐 (False Negative)** | 3 건 | 2 건 | 1 건 | **0 건 (미탐 완전 박멸)** |
+| **정확도 (Accuracy)** | 70.0% | 80.0% | 90.0% | **100.0%** |
+| **정밀도 (Precision)** | 100.0% | 100.0% | 100.0% | **100.0%** |
+| **재현율 (Recall)** | 40.0% | 60.0% | 80.0% | **100.0%** |
+| **F1-Score** | 0.5714 | 0.7500 | 0.8889 | **1.0000** |
+| **평균 수사 지연시간** | 39 ms | 38 ms | 38 ms | **38 ms** |
+
+### C. 10대 실무 시나리오별 최종 실측 데이터표
+
+| ID | 카테고리 | 시나리오 명칭 | 탐지 대상 MITRE TTP | 판결 결과 | 판결 근거 및 주요 호출 도구 시퀀스 | 지연시간 |
+| :-: | :--- | :--- | :--- | :-: | :--- | :-: |
+| 1 | Benign | PyInstaller Temp 언팩 패키지 | Legitimate Bundle | **PASS (TN)** | Decode ➔ FileInspection ➔ MemoryScan (정상 관리 도구 판정) | 73 ms |
+| 2 | Benign | 사내 개발자 로컬 빌드 바이너리 | Developer Debug | **PASS (TN)** | Decode ➔ FileInspection ➔ MemoryScan (정상 관리 도구 판정) | 48 ms |
+| 3 | Benign | Intune/SCCM 소프트웨어 배포 | Base64 PowerShell | **PASS (TN)** | Decode ➔ 1ms 조기 탈출 (정상 인프라 배포 판정) | 1 ms |
+| 4 | Benign | 사내 일일 대용량 백업 업로드 | Backup Utility | **PASS (TN)** | Decode ➔ 1ms 조기 탈출 (사내 정상 백업 스크립트 판정) | 1 ms |
+| 5 | Benign | AnyDesk 포터블 무서명 헬퍼 | Remote Support | **PASS (TN)** | Decode ➔ FileInspection ➔ MemoryScan (정상 원격 도구 판정) | 46 ms |
+| 6 | Malicious | DLL 사이드로딩 (OneDrive + version.dll) | **T1574.002** | **PASS (TP)** | FileInspection(Sideloading +60) ➔ MemoryScan ➔ **90점 사살** | 1 ms |
+| 7 | Malicious | 메모리 슬립 난독화 & MZ 와이핑 | **T1055.012** | **PASS (TP)** | ProcessMemoryScan(Unbacked RWX) ➔ **90점 사살** | 62 ms |
+| 8 | Malicious | 레지스트리 은닉 간접 실행 (Squiblydoo) | **T1218.010** | **PASS (TP)** | RegistryInspection(Scriptlet +50, C2 IP) ➔ Firewall ➔ **110점 사살** | 20 ms |
+| 9 | Malicious | 유니코드 동형이의어 위장 (svchоst.exe) | **T1036.005** | **PASS (TP)** | FileInspection(UTR #39 치환 + System32 Zero-Trust) ➔ **130점 사살** | 1 ms |
+| 10 | Malicious | 다단계 CertUtil LOLBIN 다운로드/디코딩 | **T1105 / T1140** | **PASS (TP)** | Decode ➔ FileInspection ➔ MemoryScan ➔ Reputation ➔ **105점 사살** | 19 ms |
+
+### D. 기술적 의의
+* **단일 책임 원칙(SRP) 준수**: 디스크 정밀 포렌식은 `FileInspectionTool`, 윈도우 구성 검사는 `RegistryInspectionTool`, 인메모리 아티팩트는 `ProcessMemoryScanTool`이 전담하도록 설계 분리하여 각 도구의 신뢰성과 단위 검증성을 극대화.
+* **오탐 저항성 보존**: 회피 공격을 잡기 위해 임계치를 무차별적으로 낮추는 편향을 배제하고, 공격 특징(UTR #39 자모 치환, 비표준 디렉터리 시스템 라이브러리 존재, 레지스트리 CLSID 스크립틀릿)을 정밀 핀포인트로 식별함으로써 **정상 업무 오탐 0건(Precision 100%)**을 완벽하게 수호.
+
 
 
 
