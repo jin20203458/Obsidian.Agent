@@ -636,6 +636,55 @@ related:
    * `dotnet build Phalanx.sln -c Release -m:1` ➔ Exit Code 0 (경고 0, 오류 0).
    * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 47개 단위 테스트 전원 통과 (Exit Code 0, 916ms).
 
+---
+
+## 2026-09-30: [Resolved] 어택랩(Attack Lab) 프로세스 트리 고부하 스트레스 시나리오 제거 및 고난도 의심/정상 시나리오 4종 확충 개편
+
+### 1. 현상 및 과업 배경 (Background)
+* 어택랩 구 7번 시나리오("Process Tree DAG Burst", 50개 프로세스 연속 생성/종료 주입)는 단순 인메모리 프로세스 트리 및 UI 렌더링 성능(60FPS) 검증용 스트레스 테스트였음.
+* 실제 AI 자율 위협 헌터(Autonomous Hunter Agent)의 ReAct 수사 파이프라인(`_agent.InvestigateAsync`)을 거치지 않고 `if (sc.Id == 7)` 분기에서 단순 레이턴시 어설션만 수행하고 즉시 리턴하는 구조로 인해, AI 수사관의 실질적인 탐지/오탐 방지 역량을 시험하지 못함.
+* 보안 운영 환경에서 엔드포인트 보안 시스템을 우회하거나 오탐을 빈번하게 유발하는 고난도 침해 및 합법적 워크플로우에 대한 방어 검증 역량이 요구됨.
+
+### 2. 해결책 및 신규 시나리오 4종 상세 구현 (Resolution)
+1. **구 7번 DAG 스트레스 시나리오 및 전용 분기 완전 제거**:
+   * `AttackScenarioRegistry.cs`: 구 7번 DAG Burst 시나리오 제거.
+   * `AttackLabScenarioRunner.cs`: `if (sc.Id == 7)` 하드코딩 분기 완전 삭제. 모든 표준 시나리오가 Reflex Kill(#2) 또는 NtSuspendProcess 선제 동결 ➔ ReAct 심층 수사관 파이프라인으로 일관되게 진입하도록 일원화.
+2. **고난도 정상(Tricky Benign, ACTION_RESUME) 2종 신설 (오탐 방지 및 엔지니어링 연속성)**:
+   * **[시나리오 #7] SCCM Maintenance Script**:
+     * 부모 `taskhostw.exe`가 `powershell.exe -ExecutionPolicy Bypass -NoProfile -enc <Base64 WMI Hotfix Audit>` 실행.
+     * 정규 시스템 호스트의 난독화 파워셸 스폰으로 인해 단순 룰(T1059.001)에서 24μs 선제 동결 유발.
+     * `DecodePayloadTool`로 Base64 해독 시 사내 핫픽스 점검 및 인트라넷 로그(`\\corp-sccm.internal\patches\audit.log`) 기록 확인 ➔ `IsKnownInternalOrTrusted` 1ms 조기 복구(`ACTION_RESUME`).
+   * **[시나리오 #8] Developer Toolchain Loopback IPC**:
+     * 개발 도구(`code.exe`)가 `cmd.exe /c curl.exe -s http://127.0.0.1:8080/health` 실행.
+     * 개발자 IDE의 셸 스폰 및 네트워크 유틸리티 실행으로 의심 동결 유발.
+     * `DecodePayloadTool`에서 외부 C2가 아닌 로컬 루프백(`127.0.0.1`/`localhost`) IPC 통신임을 식별하고 `ACTION_RESUME` 조기 복구 집행.
+3. **고난도 비정상(Tricky Malicious, ACTION_KILL) 2종 신설 (탐지 회피 및 은닉 공격 분쇄)**:
+   * **[시나리오 #9] LOLBAS Rundll32 Proxy Execution (T1218.011)**:
+     * 공격자가 파워셸 감시 및 AMSI를 우회하기 위해 `powershell.exe` 없이 정품 서명 바이너리 `rundll32.exe`의 `RunHTMLApplication`을 악용하여 인라인 자바스크립트로 원격 COM 스크립트릿(`http://185.220.101.5/beacon.sct`) 로드.
+     * `DecodePayloadTool` ➔ `ThreatReputationTool`(APT29 Cobalt Strike 98점 확증) ➔ `MitreClassifierTool`(T1218.011 자동 분류) ➔ `SystemFirewallTool` 차단 ➔ `ACTION_KILL`.
+   * **[시나리오 #10] Process Injection via Unbacked Memory (T1055)**:
+     * 정상 윈도우 인쇄 스풀러 `spoolsv.exe (C:\Windows\System32\spoolsv.exe)`의 완전한 정상 명령줄로 위장하여 정적 커맨드라인 검사를 100% 무력화.
+     * 인메모리 VAD 가상 스캔(`ProcessMemoryScanTool`)을 통해 `PAGE_EXECUTE_READWRITE` 코드 케이브, 리플렉티브 DLL MZ 헤더, LockBit C2(`194.165.16.11`) 적발 ➔ `MitreClassifierTool`(T1055 매핑) ➔ `ACTION_KILL`.
+4. **Clean-Room VAD 가상 메모리 스캔 엔진 및 누수 방지 생명주기 구현**:
+   * `ProcessMemoryScanTool.cs`: `SimulatedMemoryEntry` 레코드 및 `ConcurrentDictionary<uint, ...> SimulatedMemoryDb` 구현.
+   * `AttackLabScenarioRunner.ExecuteScenarioAsync`의 `finally` 블록에서 `ProcessMemoryScanTool.ClearSimulatedMemory(targetPid)`를 호출하여 정적 캐시 메모리 누수를 원천 차단.
+5. **FSM 다차원 위험도 및 로컬 루프백 예외 로직 정밀화 (`AutonomousHunterAgent.cs`)**:
+   * `HasInlineC2Pattern`: `127.0.0.1`/`localhost` 단독 로컬 쿼리는 외부 C2 지표에서 제외.
+   * `InvestigateOfflineDeterministicAsync`:
+     * `memoryObservation`을 `combinedBehavior`에 병합하여 결백한 명령줄의 인메모리 공격도 MITRE T1055로 정확히 분류.
+     * 위험도 평가 시 `hasUnbackedMemory`(+50점)와 `threatScore >= 0.85`(+40점)를 분리 가산하여 인메모리 주입 단독으로 90점 도달 ➔ 즉각 사살 확정.
+     * 시스템 바이너리 위장 드로퍼(T1036.005) 검출 시 +50점 가산 적용.
+6. **커스텀 공작소 상수 격리 및 1~10번 전 시나리오 일괄 회귀 파이프라인 (`MainViewModel.cs`, `AttackLabWindow.xaml`)**:
+   * `public const int CustomScenarioId = 99;` 정의.
+   * `AttackLabWindow.xaml` 라인 723: `<DataTrigger Binding="{Binding Id}" Value="99">` 설정으로 8번 정규 시나리오 라벨 오염 해소.
+   * `RunAllScenariosBatchAsync`: `Scenarios.Where(s => s.Id != CustomScenarioId)`로 1~10번 10개 전 시나리오 일괄 회귀 테스트 및 100% PASS 검증 자동화.
+7. **단위 테스트 및 QA 검증 결과**:
+   * `ProcessTreeProjectionTests.cs`:
+     * `TestAttackLab_NewScenarios_EvasionAndDetection_Verdicts`: 신규 4종 시나리오 개별 판결 정합성 실측 통과.
+     * `TestAttackLab_AllTenScenarios_FullChainBatch_Passes100Percent`: 10개 전 시나리오 일괄 회귀 100% 통과 실측.
+   * `dotnet build Phalanx.sln -c Release -m:1` ➔ Exit Code 0 (경고 0, 오류 0).
+   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 49개 단위 테스트 전원 통과 (Exit Code 0, 1.0s).
+
 
 
 
