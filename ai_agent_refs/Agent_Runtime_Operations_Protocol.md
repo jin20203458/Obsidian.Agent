@@ -1,7 +1,7 @@
 ---
 description: >-
-  AI 에이전트 코드 수정 후 의무 QA 검증(Exit Code 0 Ground Truth), 3-Strike 서킷 브레이커, 원자적 롤백 및
-  휴먼 인수인계(HITL Hand-over) 트러블슈팅을 일원화한 런타임 신뢰성 통합 운영 프로토콜 (SSOT).
+  [Level 1: 헌법 / Hard Invariant] AI 에이전트 코드 수정 후 의무 QA 검증(Exit Code 0 Ground Truth),
+  3-Strike 서킷 브레이커, 원자적 롤백 및 휴먼 인수인계 트러블슈팅을 정의한 런타임 신뢰성 최상위 운영 프로토콜 (SSOT).
 related:
   - ../README.md
   - ./Knowledge_Base_Authoring_Guidelines.md
@@ -9,7 +9,7 @@ related:
   - ./Independent_Audit_Protocol_Guidelines.md
   - ./AI_Project_Integration_Guidelines.md
 ---
-# Agent Runtime Operations Protocol (에이전트 런타임 운영 및 신뢰성 프로토콜)
+# Agent Runtime Operations Protocol (런타임 운영 및 신뢰성 프로토콜 - Level 1 SSOT)
 
 > 
 > **근거 연구**:
@@ -18,7 +18,9 @@ related:
 > * *Xia et al. (2024, UIUC Agentless)* & *Yang et al. (2024, SWE-agent)*: 터미널 실행 기반 Ground Truth 실사
 > * *DeltaBox (2026)*: 에이전트 런타임 원자적 롤백(Atomic Rollback) 및 장애 격리 아키텍처
 
-본 문서는 `Obsidian.Agent` 환경 및 산하 모든 개발 프로젝트에서 AI 에이전트가 코드를 작성하거나 수정한 후, **눈먼 코딩(Blind Coding)을 원천 차단하고 무한 루프로 인한 코드 파괴를 방지하기 위해 반드시 준수해야 하는 5단계 런타임 폐루프 상태 머신(Closed-Loop State Machine)**을 정의합니다.
+본 문서는 `Obsidian.Agent` 환경 및 산하 모든 개발 프로젝트에서 AI 에이전트가 코드를 작성하거나 수정한 후, **눈먼 코딩(Blind Coding)을 원천 차단하고 무한 루프로 인한 코드 파괴를 방지하기 위해 반드시 준수해야 하는 최상위 런타임 안전 헌법(Level 1 Hard Invariants)**입니다.
+
+단독 작업(Solo Mode)이든 다중 에이전트 협동 워크플로우(Dual-Gated Team Mode)이든 상관없이, **모든 소스코드 수정 행위는 본 문서의 5단계 런타임 폐루프 상태 머신(Closed-Loop State Machine)을 단일 진실 공급원(SSOT)으로 강제 적용**받습니다.
 
 ---
 
