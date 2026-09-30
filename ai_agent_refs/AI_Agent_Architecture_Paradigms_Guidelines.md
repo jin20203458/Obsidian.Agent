@@ -1,4 +1,4 @@
-﻿---
+---
 description: >-
   글로벌 빅테크(Anthropic, Google DeepMind, Microsoft, OpenAI) 및 최신 학술 연구에 기반한 AI 에이전트 아키텍처 및 멀티 에이전트 협동(Teaming) 패러다임 완벽 가이드.
   고신뢰성 시스템 설계, 역할 분담(Orchestrator-Workers, Evaluator-Optimizer), 품질 계쇄(Quality Gate) 파이프라인 구축 시 공식 레퍼런스로 참조.

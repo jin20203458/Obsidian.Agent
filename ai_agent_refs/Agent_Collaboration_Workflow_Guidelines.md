@@ -1,8 +1,8 @@
 ---
 description: >-
   [Level 2: 작업 SOP / Orchestration] 최신 Agentic SE 연구(CodePlan, Agentless, AgentCoder, Magentic-One) 기반
-  일상 개발용 에이전트 협동 및 이중 계쇄(Dual-Gated: Plan Audit -> Code QA Audit) 오케스트레이션 표준 가이드라인.
-  작업 복잡도 정량 스코핑(경량 단독 모드 vs 중대형 협동 모드) 및 서브에이전트 역할 분담 정의.
+  복합/중대형 과업 전용 에이전트 협동 및 이중 계쇄(Dual-Gated: Plan Audit -> Code QA Audit) 오케스트레이션 표준 가이드라인.
+  협동 워크플로우 활성화 기준 및 서브에이전트 역할 분담 정의.
 related:
   - ../README.md
   - ./Knowledge_Base_Authoring_Guidelines.md
@@ -10,9 +10,9 @@ related:
   - ./AI_Agent_Architecture_Paradigms_Guidelines.md
   - ./Independent_Audit_Protocol_Guidelines.md
 ---
-# Agent Collaboration Workflow Guidelines (에이전트 협동 및 이중 계쇄 오케스트레이션 - Level 2 SOP)
+# Agent Collaboration Workflow Guidelines (이중 계쇄 에이전트 협동 오케스트레이션 - Level 2 SOP)
 
-본 문서는 **최신 AI 에이전트 소프트웨어 엔지니어링(Agentic SE) 연구 성과**(*CodePlan, Agentless, AgentCoder, Magentic-One*)를 집대성하여, 일상적인 기능 구현, 리팩토링, 버그 수정 시 **AI 환각을 원천 차단하고 오차율 0%의 코드 품질을 달성하기 위한 표준 협동 오케스트레이션 규격(Level 2 SOP)**을 정의합니다.
+본 문서는 **최신 AI 에이전트 소프트웨어 엔지니어링(Agentic SE) 연구 성과**(*CodePlan, Agentless, AgentCoder, Magentic-One*)를 집대성하여, 복잡한 기능 구현, 대규모 리팩토링, 아키텍처 변경 시 **AI 환각을 원천 차단하고 오차율 0%의 코드 품질을 달성하기 위한 이중 계쇄 협동 오케스트레이션 규격(Level 2 SOP)**을 정의합니다.
 
 > [!IMPORTANT]
 > **거버넌스 계층 원칙 (Hierarchy & SSOT Invariant)**
@@ -40,44 +40,36 @@ flowchart TD
 
 ---
 
-## 2. 작업 복잡도 기반 정량적 스코핑 (Quantitative Scoping Thresholds)
+## 2. 협동 워크플로우 활성화 기준 (Activation Thresholds)
 
-에이전트는 작업의 규모와 복잡도를 정량적으로 판별하여 **[Mode A] 경량 단독 모드** 또는 **[Mode B] 중대형 이중 계쇄 협동 모드** 중 하나를 결정론적으로 선택해야 합니다.
+본 가이드라인은 **오직 다중 에이전트 협동(Collaboration)과 교차 감사가 요구되는 중대형 과업에서만 선택적으로 활성화**되는 전용 공정입니다.
 
 ```mermaid
 flowchart TD
-    Task["과업 인입 (User Request / Task)"] --> ScopeJudge{"작업 복잡도 정량 판정"}
-
-    ScopeJudge -- "경량 조건 충족 (단일 파일 / 단순 픽스)" --> ModeA["[Mode A] 경량 단독 모드<br>• 서브에이전트 호출 생략 (토큰 절감)<br>• 메인 에이전트 직접 수정<br>• Level 1 Protocol Mandatory QA (Exit Code 0) 직접 검증"]
+    Task["과업 인입 (User Request)"] --> Threshold{"협동 워크플로우 활성화 조건 충족?"}
     
-    ScopeJudge -- "중대형 조건 해당 (다중 파일 / 아키텍처)" --> ModeB["[Mode B] 중대형 이중 계쇄 협동 모드<br>• Step 0: 사전 탐색 (Researcher)<br>• Step 1: 계획 & Gate 1 감사 (Plan Auditor)<br>• Step 2: 메인 책임 구현<br>• Step 3: Gate 2 QA 감사 (QA Auditor)<br>• Step 4: 지식베이스 동기화"]
+    Threshold -- "아니오 (단일 파일 / 단순 픽스)" --> Solo["[기본 상태] 협동 비활성화 (서브에이전트 0개)<br>• Level 1 Protocol 전역 규칙에 따라 메인 에이전트 단독 수행<br>• 백그라운드 터미널 Mandatory QA (Exit Code 0) 직접 검증"]
+    
+    Threshold -- "예 (다중 파일 / 아키텍처 / 사용자 요청)" --> Team["[협동 활성화] 5단계 이중 계쇄 사이클 가동<br>• Step 0: 사전 탐색 (Researcher)<br>• Step 1: 정형 계획 & Gate 1 감사 (Plan Auditor)<br>• Step 2: 메인 에이전트 책임 구현<br>• Step 3: Gate 2 QA 감사 (QA Auditor)<br>• Step 4: 지식베이스 동기화"]
 
-    ModeA --> Done["완료 보고"]
-    ModeB --> Done
+    Solo --> Complete["완료 보고"]
+    Team --> Complete
 ```
 
-### 2.1 [Mode A] 경량 단독 모드 (Lightweight Solo Mode)
-* **발동 조건 (아래 조건 중 하나라도 만족 시)**:
-  1. 수정 대상 파일이 단 1개인 경우 (`ModifiedFiles.Count == 1`)
-  2. 단순 오타, 주석, 로깅 문구, 문서 오탈자 수정
-  3. 신규 인터페이스/타입 선언이 없는 30라인 미만의 국소 버그 픽스
-* **실행 절차**:
-  1. Step 0/1/3 서브에이전트 호출을 전면 생략하여 컨텍스트 오염과 토큰 낭비를 차단합니다.
-  2. 메인 에이전트가 직접 소스코드를 수정합니다.
-  3. 수정 완료 후, Level 1 [`Agent_Runtime_Operations_Protocol.md`](./Agent_Runtime_Operations_Protocol.md)에 따라 백그라운드 터미널에서 Mandatory QA(`run_command` Exit Code 0)를 직접 수행하여 무결성을 검증하고 작업을 마감합니다.
+### 2.1 활성화 조건 (Activation Conditions)
+아래 조건 중 **하나라도 해당할 경우**, 에이전트는 본 가이드라인의 5단계 이중 계쇄 워크플로우를 반드시 가동해야 합니다:
+1. **다중 파일 동시 수정**: 2개 이상의 소스코드 파일을 수정하는 과업 (`ModifiedFiles.Count >= 2`)
+2. **신규 컴포넌트 추가**: 신규 모듈, 클래스, 인터페이스, 서비스 계층 또는 주요 서브시스템 추가
+3. **공개 계약 및 아키텍처 수정**: 공통 공개 계약(Public API, 스키마, 프로토콜, DTO, DB 모델) 또는 스레드/동시성/메모리 아키텍처 수정
+4. **사용자 명시적 요청**: 사용자가 *"워크플로우 가이드라인에 따라...", "계획 검토 후 진행해줘"* 등 이중 계쇄 프로세스를 명시적으로 지정한 경우
 
-### 2.2 [Mode B] 중대형 이중 계쇄 협동 모드 (Dual-Gated Team Mode)
-* **발동 조건 (아래 조건 중 하나라도 해당 시)**:
-  1. 2개 이상의 파일을 동시 수정하는 경우 (`ModifiedFiles.Count >= 2`)
-  2. 신규 모듈, 클래스, 인터페이스, 서비스 계층 또는 주요 서브시스템 컴포넌트 추가
-  3. 공통 공개 계약(Public API, 스키마, 프로토콜, DTO, DB 모델) 또는 스레드/동시성/메모리 아키텍처 수정
-  4. 사용자가 명시적으로 계획 검토나 이중 계쇄 감사를 요청한 경우
-* **실행 절차**:
-  - 아래 3절의 5단계 이중 계쇄 사이클을 단 하나의 생략 없이 엄격하게 준수합니다.
+### 2.2 기본 작업의 적용 제외 (Exclusion & Default to Level 1)
+* 단일 파일 국소 수정, 단순 오타/주석/로깅 문구 보정, 신규 인터페이스 선언이 없는 30라인 미만의 버그 수정 등 일반 작업은 **본 협동 가이드라인을 활성화하지 않습니다 (서브에이전트 소환 0건으로 컨텍스트 및 토큰 절감)**.
+* 이러한 기본 작업은 시스템 전역 규칙인 [`Agent_Runtime_Operations_Protocol.md`](./Agent_Runtime_Operations_Protocol.md)에 따라 메인 에이전트가 단독으로 코딩하고 터미널 Mandatory QA(`run_command` Exit Code 0)를 직접 수행하여 안전하게 종결합니다.
 
 ---
 
-## 3. 중대형 작업용 5단계 이중 계쇄 라이프사이클 (Dual-Gated Cycle)
+## 3. 5단계 이중 계쇄 라이프사이클 (Dual-Gated Cycle)
 
 > [!CRITICAL]
 > **단계별 서브에이전트 단독 소환 불변식 (Strict Single-Subagent Invariant)**
@@ -215,9 +207,9 @@ flowchart TD
 
 | 단계 | 수행 주체 | 핵심 산출물 / 검증 오라클 | 권한 범위 |
 |---|---|---|---|
-| **[Mode A] 경량 단독** | Main Agent | 직접 소스 수정 & 터미널 `Exit Code 0` | Write + Run (서브에이전트 0개) |
-| **[Mode B] Step 0 탐색** | Researcher Subagent | 핵심 포인터 목록 (관련 파일/인터페이스) | Read-Only |
-| **[Mode B] Step 1 계획/Gate 1** | Main Agent & Plan Auditor | `implementation_plan.md` & Gate 1 [PASS] | 소스 수정 금지 (Read-Only Audit) |
-| **[Mode B] Step 2 책임 구현** | Main Agent | 실제 소스코드 파일 수정 | Write |
-| **[Mode B] Step 3 QA/Gate 2** | QA Auditor Subagent | 터미널 `Exit Code 0` & Gate 2 [PASS] | 소스 수정 금지 + 터미널 `run_command` 실행 허용 |
-| **[Mode B] Step 4 지식 동기화** | Main Agent | Obsidian KB / `troubleshooting/` 갱신 | Write |
+| **기본 상태 (비활성)** | Main Agent | 직접 소스 수정 & Level 1 터미널 `Exit Code 0` | Write + Run (서브에이전트 0개) |
+| **Step 0: 사전 탐색** | Researcher Subagent | 핵심 포인터 목록 (관련 파일/인터페이스) | Read-Only |
+| **Step 1: 정형 계획 & Gate 1** | Main Agent & Plan Auditor | `implementation_plan.md` & Gate 1 [PASS] | 소스코드 수정 금지 (Read-Only Audit) |
+| **Step 2: 책임 구현** | Main Agent | 승인된 계획서 범위 내 소스코드 집필 | Write |
+| **Step 3: QA 검증 & Gate 2** | QA Auditor Subagent | 터미널 `Exit Code 0` & Gate 2 [PASS] | 소스 수정 금지 + 터미널 `run_command` 실행 허용 |
+| **Step 4: 지식 동기화** | Main Agent | Obsidian KB / `troubleshooting/` 갱신 | Write |
