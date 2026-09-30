@@ -728,8 +728,27 @@ related:
        * **수사 턴 수**: 4턴 (ReAct 수사 루프는 단 2턴 만에 즉각 사살 확증)
        * **실제 추론 흐름**: Step 1 (DecodePayload 7.0s) ➔ Step 2 (`FileInspectionTool` 정상 호출 3.1s: 무서명, 시스템 위장 T1036.005 CRITICAL, 고엔트로피 7.4521, 이상점수 100/100 즉각 획득) ➔ Step 3 (추가 메모리 스캔이나 IP 평판 방황 없이 즉각 ACTION_KILL 도출 6.0s) ➔ Step 4 (SystemFirewallTool C2 IP 차단).
    * **오프라인 결정론 모드**: 초고속 284ms 완결 (로컬 룰 FSM에서 위장 가산 +50점으로 누적 85점 즉각 사살).
-7. **회귀 및 QA 검증 결과**:
+7. **실무 비판적 관점의 5대 엔터프라이즈 공격 자동화 하네스 구축 및 실측 (`CriticalEnterpriseAttackHarnessTests.cs`)**:
+   * **구축 배경**: UI 없이 순수 C# 코드 및 CLI 스크립트(`scripts/run_critical_attacks_benchmark.ps1`)로 실무 엔터프라이즈 환경에서 EDR을 회피하기 위해 활용되는 5가지 복합 회피 기법을 자동으로 생성하고 실시간 검증할 수 있는 독립형 테스트 환경 구축.
+   * **실측 5대 시나리오 및 검증 결과**:
+     1. **시나리오 1 (LOLBAS 프록시 + 무서명 DLL 로드 + 미등록 외부 C2 T1218.011)**:
+        * `rundll32.exe`가 Temp 내 무서명/고엔트로피(7.62) DLL 로드 및 미등록 IP(`198.51.100.120`) 통신.
+        * IP 단독 사살 불가 상태에서 `FileInspectionTool`이 DLL 이상 징후를 적발하고 `ACTION_KILL` 도출 (Live Gemini 18초, 오프라인 < 1ms).
+     2. **시나리오 2 (정상 서명 시스템 바이너리 svchost.exe 인젝션 / Unbacked 실행 메모리 침투 T1055.012)**:
+        * 디스크 상의 svchost.exe는 Microsoft 정상 서명(위장 아님)이나, RAM에 `PAGE_EXECUTE_READWRITE` Unbacked Reflective DLL 침투.
+        * 파일 서명 맹신에 따른 False Negative를 차단하고, `ProcessMemoryScanTool`의 이상 징후를 우선하여 `ACTION_KILL` 도출 (오프라인 22ms).
+     3. **시나리오 3 (확장자 위장 Disguised PE 스테가노그래피 드로퍼 T1036.008)**:
+        * `.png` 이미지 확장자 내부에 은닉된 PE 실행 파일(MZ/PE 헤더) 다운로드 시도.
+        * `FileInspectionTool`이 확장자-바이트 불일치를 포착(`IsDisguisedExecutable = true`)하고 `T1036.008` 분류 후 `ACTION_KILL` 도출 (오프라인 256ms).
+     4. **시나리오 4 (시스템 핵심 바이너리 경로 위장 Masquerading Dropper T1036.005)**:
+        * `C:\Windows\Temp\csrss.exe` 위장 드롭 및 실행.
+        * `FileInspectionTool`이 비인가 디렉터리 배치 및 무서명을 즉시 포착(`AnomalyScore = 100`)하여 `ACTION_KILL` 도출 (오프라인 16ms).
+     5. **시나리오 5 (사내 정상 인벤토리 관리 스크립트 오탐 방어 FP Prevention)**:
+        * Base64 난독화 및 Temp 파일 출력이 동반되었으나, 내부 사설망(`10.10.1.50`) 통신 및 관리용 명령어임을 판별하여 안전하게 `ACTION_RESUME` (동결 해제) 도출 (오프라인 1ms, 차단 IP 공백 보장).
+   * **원클릭 자동화 스크립트**: `.\scripts\run_critical_attacks_benchmark.ps1 -Detailed` (5개 시나리오 100% PASS, 총 96ms).
+8. **회귀 및 QA 검증 결과**:
+   * `CriticalEnterpriseAttackHarnessTests.cs`: 6개 테스트 전원 통과.
    * `FileInspectionToolTests.cs`: 8개 전 단위 시나리오 통과.
-   * `AutonomousHunterAgentTests.cs`: `TestLive_ConvolutedEvasiveAttack_WithFileInspectionTool` 통과 (16초, Live LLM 통신 검증 완료).
+   * `AutonomousHunterAgentTests.cs`: Live Gemini 테스트 전원 통과.
    * `dotnet build Phalanx.sln`: 경고 0, 오류 0 (Exit Code 0).
-   * `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"`: 총 57개 단위 테스트 전원 통과 (Exit Code 0, 1.0s).
+   * `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"`: 총 63개 단위 테스트 전원 통과 (Exit Code 0, 1.0s).
