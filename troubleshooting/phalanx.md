@@ -1,4 +1,4 @@
-﻿---
+---
 description: >-
   Phalanx C++ 센서 및 C# 코어 트러블슈팅 런북. Phalanx 프로젝트 버그, ETW 수집 오류 및 gRPC 장애 발생 시 참조.
 related:
@@ -787,3 +787,28 @@ related:
         * **F1-Score**: 0.571 ➔ **0.750**
         * **미탐 (False Negative)**: 3건 ➔ **2건** (DLL 사이드로딩, 레지스트리 간접 실행 잔여)
         * **오탐 (False Positive)**: **0건 유지** (정밀도 100% 보존)
+
+11. **Phase 2: RegistryInspectionTool 7대 포렌식 도구 신설 및 LOLBAS 간접 실행(Squiblydoo T1218.010 / COM 하이재킹 T1546.015) 방어 구현 완료**:
+    * **해결 대상**: 10대 실무 벤치마크 중 시나리오 8(커맨드라인에 URL/Base64 없이 레지스트리 키 경로만 지정하여 은닉 실행하는 regsvr32 Squiblydoo 공격의 False Negative 미탐).
+    * **원인 규명**: 공격자가 `regsvr32.exe /s /u /i:Software\Classes\CLSID\{F0001111-...} scrobj.dll`과 같이 커맨드라인 상에 외부 C2 URL이나 인코딩된 스크립트를 일절 노출하지 않고 레지스트리 서브키에 원격 스크립틀릿 URL(`http://185.220.101.5/payload.sct`)을 은닉함. Phalanx 수사 도구 체계에 레지스트리 포렌식 도구가 결여되어 있어, LOLBAS 프록시 점수(+30)와 IP 평판 기본 점수(+40)의 합산 70점에 그쳐 사살 임계치(80점)를 넘지 못하고 미탐 발생.
+    * **구현 내역 (`RegistryInspectionTool.cs`, `AutonomousHunterAgent.cs`, `Program.cs`)**:
+      * **`RegistryInspectionTool.cs` 신설 (7대 OS 포렌식 도구)**:
+        * 윈도우 레지스트리(CLSID, InprocServer32, Run/RunOnce, ScriptletURL) 정밀 검사.
+        * 64비트 레지스트리 뷰(`RegistryView.Registry64`) 조회 및 인용부호/슬래시/선행 백슬래시 정규화(`NormalizeKeyPath`, `ParseHiveAndSubPath`).
+        * Squiblydoo 간접 실행(T1218.010, 점수 +50 및 C2 IP/URL 검출 시 +30), COM 하이재킹(T1546.015, AppData/Temp/Users 경로 바이너리 참조 시 +50), Run/RunOnce 지속성 악용(T1547.001, +40) 정밀 이상 징후 분석 엔진 구축.
+        * Clean-Room 메모리 모의 DB(`RegisterSimulatedKey`, `ClearSimulatedKeys`, `CreateSimulatedEntry`) 구축으로 테스트 간 독립 격리 보장.
+      * **`AutonomousHunterAgent.cs` ReAct 연계**:
+        * 시스템 프롬프트 `<tools>` 7번 명세 및 `<rules>` 6번 레지스트리 수사 지침 추가.
+        * LLM 도구 인자 누락 시 명령줄로부터 키를 자동 복구하는 정규화 핸들러 및 `ExtractTargetRegistryKey` 정규식 헬퍼(HTTP/HTTPS URL 제외 가드 장착) 구현.
+        * 오프라인 결정론 FSM에 `ReAct Step 1.8` 신설: 레지스트리 스크립틀릿 간접 실행 검출 시 C2 IP를 동적 갱신하고 위험도 +40점 가산. 총 위험도 110점 산출로 즉각 사살(`ActionKill`) 및 방화벽 차단(`SystemFirewallTool`) 완주.
+      * **DI 및 테스트 픽스처 전역 동기화**: `Program.cs` 싱글톤 등록 및 7개 테스트 픽스처 도구 배열에 `new RegistryInspectionTool()` 반영 완료.
+    * **실측 검증 결과**:
+      * `dotnet build Phalanx.sln`: 경고 0, 오류 0 (Exit Code 0).
+      * `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"`: 신규 단위 테스트 5종 포함 총 71개 단위 테스트 전원 통과 (Exit Code 0, 1.0s).
+      * `Scenario08_RegistryIndirectRegsvr32_Malicious`: `ActionKill` (PASS TP, 누적 위험도 110점, C2 IP 185.220.101.5 방화벽 차단 완료).
+      * **10대 실무 엔터프라이즈 벤치마크 지표 도약 (`neutral_enterprise_benchmark.json`)**:
+        * **성공률 (Accuracy)**: 80.0% ➔ **90.0%** (9개 PASS, 1개 FAIL)
+        * **재현율 (Recall)**: 60.0% ➔ **80.0%** (고도화 공격 5건 중 4건 정탐 사살)
+        * **정밀도 (Precision)**: **100.0% 유지** (정상 업무 5건 100% 복구, 오탐 0건)
+        * **F1-Score**: 0.750 ➔ **0.8889**
+        * **미탐 (False Negative)**: 2건 ➔ **단 1건 (시나리오 6: DLL 사이드로딩만 잔여)**
