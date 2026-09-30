@@ -638,3 +638,51 @@ related:
 
 ---
 
+## 2026-09-30: [Resolved] QuestPDF 2026.9+ 시스템 폰트 로드 예외 및 A4 포렌식 리포트 엔진 UI 디커플링 구축
+
+### 1. 현상 (Symptom)
+* QuestPDF 2026.9.1 기반 A4 사건 수사 보고서(`ForensicPdfReportGeneratorTests`) 단위 테스트 실행 시 `DocumentDrawingException: The text "CONFIDENTIAL & PROPRIETARY" uses font families that are not available: 'Segoe UI'` 예외와 함께 문서 생성이 중단되는 결함 발생.
+* `TextStyleExtensions.Fallback` 및 `TextSpanDescriptorExtensions.WrapAnywhere` 메서드 호출 시 컴파일러 비권장 경고(`CS0618: This setting is obsolete since the 2024.3 version`) 다수 발생.
+* 백그라운드 태스크에서 비동기로 PDF를 생성하여 디스크에 저장하는 도중, 관제사가 심층 수사실에서 다른 인시던트를 클릭하거나 필터링을 변경할 경우 엉뚱한 사건의 메타데이터가 로그에 기록되거나 `SelectedIncident`의 null 참조 경합(Race Condition) 위험 존재.
+
+### 2. 원인 (Root Cause)
+1. **QuestPDF 2026.9.0+ 폰트 관리 정책 변경**:
+   * QuestPDF v2026.9.0부터 OS 시스템 폰트 자동 조회가 기본값으로 비활성화(`Settings.UseSystemFonts = false`)되었으며, 등록되지 않은 폰트 패밀리 참조 시 예외를 던지도록(`Settings.ThrowOnMissingFontFamilies = true`) 기본 정책이 변경됨.
+   * 이에 따라 Windows 표준 폰트인 `Segoe UI` 및 `Malgun Gothic`을 사용하더라도 명시적 설정 없이는 내장된 `Lato` 외의 폰트를 찾지 못하고 예외가 발생함.
+2. **QuestPDF 2024.3+ API 변경**:
+   * 인라인 폰트 폴백 메서드(`TextStyle.Fallback`)가 폐기되고 엔진 레벨의 자동 텍스트 셰이핑 및 OS 폰트 폴백 메커니즘으로 대체됨.
+   * `WrapAnywhere`가 `BreakAnywhere`로 명칭 변경됨.
+3. **WPF UI 스레드 결합 및 비동기 상태 참조**:
+   * 보고서 생성 엔진이 WPF 컨트롤이나 다이얼로그(`SaveFileDialog`, `Dispatcher`)와 결합될 경우 Headless/CLI 환경 및 xUnit 단위 테스트 환경에서 구동 불가.
+   * `MainViewModel.ExportForensicPdfAsync` 진입 시점과 `Task.Run` 완료 시점 사이의 뷰모델 속성 변경 경합.
+
+### 3. 해결책 (Resolution)
+1. **`ForensicPdfReportGenerator.cs` 폰트 및 라이선스 복원력 확보**:
+   * `EnsureLicenseConfigured()`에서 이중 검사 잠금(Double-Checked Locking)을 통해 멀티스레드 안전 초기화 수행:
+     ```csharp
+     QuestPDF.Settings.License = LicenseType.Community;
+     QuestPDF.Settings.UseSystemFonts = true;
+     QuestPDF.Settings.ThrowOnMissingFontFamilies = false;
+     ```
+   * Windows 환경에서는 `Segoe UI` 및 `Malgun Gothic`을 실시간 로드하며, 폰트가 부재한 컨테이너/리눅스 환경에서도 번들 폰트(`Lato`)로 무중단/무예외 렌더링되도록 방어.
+2. **`ForensicPdfReportDocument.cs` API 현대화 및 5대 섹션 구성**:
+   * `.WrapAnywhere()`를 최신 API 규격인 `.BreakAnywhere()`로 전면 교체하여 0 경고(`warning 0개`) 달성.
+   * 5대 핵심 섹션 선언형 구현:
+     - Header: 시스템 브랜딩, 기밀 표기, 발급 메타데이터.
+     - Section 1: 처분 배너 뱃지(`ACTION_KILL`/`ACTION_RESUME`/`SUSPENDED`), AI 확신도, 수사 소요 지연시간.
+     - Section 2: 타깃/부모 프로세스 계통, 차단된 C2 IP, 다크 모노스페이스 명령줄(`Consolas`).
+     - Section 3: AI 자율 수사관 심층 서사(`Narrative`), MITRE ATT&CK 전술 뱃지.
+     - Section 4: ReAct 턴별 감사 추적표(Turn #, Action Tool, Thought, Observation, Latency ms).
+     - Section 5: 침해 대응 런북(`RemediationSteps`), 디지털 무결성 서명 푸터 및 동적 페이지 번호.
+3. **`MainViewModel.cs` 로컬 스냅샷 캡처 및 UI 디커플링**:
+   * `ExportForensicPdfAsync` 진입 즉시 `var incident = SelectedIncident;` 로컬 스냅샷을 캡처하여 비동기 파일 저장 도중 발생할 수 있는 참조 경합 원천 차단.
+   * `CanExportForensicPdf` 가드(`SelectedIncident != null && !SelectedIncident.IsInvestigating`) 장착 및 `OnSelectedIncidentChanged`, `OnInvestigationCompleted` 시점에 `NotifyCanExecuteChanged()` 연동.
+   * `IForensicReportGenerator` 인터페이스 분리 및 DI 싱글톤 등록.
+4. **회귀 및 고속 단위 검증**:
+   * `ForensicPdfReportGeneratorTests.cs` 단위 테스트 4종 신설 (`Category=Unit`, 195ms):
+     - `GenerateReportBytes_WithCriticalKillIncident_ReturnsValidPdfBytes` (`%PDF-` 매직 바이트 검증).
+     - `GenerateReportBytes_WithBenignResumeIncident_ReturnsValidPdfBytes` (정상 복구 렌더링).
+     - `ExportReportToFile_WritesPdfToSpecifiedDirectory` (파일명 살균 및 디스크 출력).
+     - `GenerateReportBytes_WithEmptyTracesAndLongCommandLine_DoesNotThrow` (5,000자 초장문 커맨드라인 무예외).
+   * 솔루션 전체 빌드: `dotnet build Phalanx.sln` ➔ Exit Code 0 (경고 0개, 오류 0개).
+   * 고속 단위 테스트: `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"` ➔ 84개 전원 통과 (Exit Code 0, 1초).

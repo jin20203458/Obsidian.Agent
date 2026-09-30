@@ -22,8 +22,8 @@ related:
   * 공식 스펙: `Phalanx/docs/`
   * 트러블슈팅 런북: `troubleshooting/phalanx.md`
 * **솔루션 파일**: `Phalanx.sln` (Visual Studio 2026 / Dev18 및 VS 2022 v17.x 호환)
-* **현재 활성 마일스톤**: Phase 5 (활성 백로그) - 차기 1순위 과제: `InvestigationView.xaml` A4 포렌식 리포트 (QuestPDF 연동)
-* **단위 테스트**: 56개 전원 통과 (2026-09-30 기준)
+* **현재 활성 마일스톤**: Phase 5 (활성 백로그) - 차기 1순위 과제: MITRE ATT&CK 내비게이터 뷰 (12대 전술 매트릭스 시각화)
+* **단위 테스트**: 84개 전원 통과 (Category=Unit, 2026-09-30 기준)
 
 ---
 
@@ -175,8 +175,8 @@ Phalanx Root
 | 우선순위 | 컴포넌트 | 현재 상태 | 기대 동작 |
 |---|---|---|---|
 | **완료** | `FileInspectionTool.cs` | **구현 완료 (Phase 5.1)** | `WinVerifyTrust` P/Invoke, 시스템 경로 위장(T1036.005) 감별, Shannon 엔트로피 연산, Clean-Room 모의 DB |
-| **1순위** | `InvestigationView.xaml` A4 리포트 | `Command` 미연동 (준비 중 툴팁) | QuestPDF 기반 A4 포렌식 PDF 렌더링/다운로드 |
-| **2순위** | MITRE ATT&CK 내비게이터 뷰 | 미구현 | 12대 공격 전술 매트릭스 미니맵 시각화 |
+| **완료** | `InvestigationView.xaml` A4 리포트 | **구현 완료 (Phase 5.2)** | QuestPDF 기반 A4 포렌식 PDF 렌더링(5개 핵심 섹션, UI 완전 디커플링, ReAct 감사 테이블) 및 MainViewModel 내보내기 커맨드 연동 |
+| **1순위** | MITRE ATT&CK 내비게이터 뷰 | 미구현 | 12대 공격 전술 매트릭스 미니맵 시각화 |
 
 ### 7.2 현재 유지 중인 설계 수준 목/스텁
 
