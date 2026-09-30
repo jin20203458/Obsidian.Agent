@@ -514,4 +514,30 @@ related:
    * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 총 46개 단위 테스트 전원 통과 (2.8초 소요, Exit Code 0).
    * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build` ➔ 총 51개 전체 테스트(Live 벤치마크 포함) 전원 통과 (Exit Code 0).
 
+---
+
+## 2026-09-30: [Resolved] 관제 콘솔 수동 프로세스 제어(동결/해제/사살) 시 하단 글로벌 텔레메트리 카운터 미갱신 및 ETW 사살 배지 덮어쓰기 결함
+
+### 1. 현상 (Symptom)
+* Phalanx Cockpit 프로세스 트리 뷰에서 관제사가 [원자적 동결], [동결 해제], [프로세스 사살] 버튼을 수동 클릭하여 조치하더라도 하단 글로벌 상태 표시줄의 `FROZEN`, `RESTORED`, `TERMINATED`, `MONITORED` 카운터가 전혀 갱신되지 않고 0으로 고정되는 현상.
+* 관제사 또는 자율 AI 수사관에 의해 현장 사살(`IsTerminated == true`, `[현장 사살]`)된 프로세스가 OS 상에서 완전히 소멸될 때 커널 ETW로부터 `LifecycleStop` 이벤트가 도착하면 `targetNode.UpdateStatus(LifecycleStop)`에 의해 `[현장 사살]` 배지가 `[정상 종료]`로 다운그레이드 덮어쓰기되는 레이스 컨디션 발생.
+
+### 2. 원인 (Root Cause)
+1. `MainViewModel.cs`의 `SuspendSelectedProcessAsync`, `ResumeSelectedProcessAsync`, `TerminateSelectedProcessAsync` 커맨드 내부에서 `SelectedProcessNode.UpdateStatus`만 호출하고 `ActiveSuspendedCount`, `TotalRestoredCount`, `TotalTerminatedCount`, `MonitoredProcessCount` 속성을 증감하는 로직이 완전히 누락되어 있었음.
+2. `ProcessTreeProjectionManager.HandleStop`에서 노드의 기존 사살 여부(`IsTerminated`)를 확인하지 않고 무조건 `UpdateStatus(LifecycleStop)`를 호출하여 사살 표식이 유실됨.
+
+### 3. 해결책 (Resolution)
+1. **`MainViewModel.cs` 수동 조치 커맨드 3종 카운터 실시간 동기화**:
+   * 비동기 gRPC 통신 대기 중 사용자 노드 선택 변경에 의한 타깃 역전 방지를 위해 메서드 진입 시 `var node = SelectedProcessNode;` 로컬 캡처 및 `!node.IsAlive` 사망 가드 완비.
+   * `SuspendSelectedProcessAsync`: `!wasSuspended` 시 `ActiveSuspendedCount++`.
+   * `ResumeSelectedProcessAsync`: `wasSuspended` 시 `ActiveSuspendedCount--` (0 하한 가드) 및 `TotalRestoredCount++`.
+   * `TerminateSelectedProcessAsync`: `wasSuspended` 시 `ActiveSuspendedCount--`, `TotalTerminatedCount++`, `MonitoredProcessCount--` (0 하한 가드), `HideTerminatedProcesses` 토글 시 `_treeManager.RebuildVisibleNodes()` 연동.
+2. **`ProcessTreeProjectionManager.cs` 사살 배지 불변성 보장**:
+   * `HandleStop` 내 UI Dispatcher 블록에서 `bool wasTerminated = targetNode.IsTerminated;` 검사를 수행하고 `!wasTerminated` 조건부로만 `UpdateStatus(LifecycleStop)`를 호출하여 `[현장 사살]` 배지 보존.
+3. **회귀 검증**:
+   * `ProcessTreeProjectionTests.TestMainViewModel_ManualActuation_SuspendResumeTerminateCommands`를 전면 보강하여 동결 ➔ 해제 ➔ 재동결 ➔ 동결 중 직접 사살(콤보) ➔ 사망 노드 조작 차단 ➔ ETW `LifecycleStop` 수신 시 사살 배지 보존까지 전 시나리오 단위 테스트 구축.
+   * `dotnet build Phalanx.sln -c Release` ➔ Exit Code 0 (경고 0, 오류 0).
+   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 46개 단위 테스트 전원 통과 (Exit Code 0).
+
+
 
