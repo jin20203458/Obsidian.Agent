@@ -22,8 +22,8 @@ related:
   * 공식 스펙: `Phalanx/docs/`
   * 트러블슈팅 런북: `troubleshooting/phalanx.md`
 * **솔루션 파일**: `Phalanx.sln` (Visual Studio 2026 / Dev18 및 VS 2022 v17.x 호환)
-* **현재 활성 마일스톤**: Phase 5 (활성 백로그) - 차기 1순위 과제: `FileInspectionTool.cs` 구현
-* **단위 테스트**: 49개 전원 통과 (2026-09-30 기준)
+* **현재 활성 마일스톤**: Phase 5 (활성 백로그) - 차기 1순위 과제: `InvestigationView.xaml` A4 포렌식 리포트 (QuestPDF 연동)
+* **단위 테스트**: 56개 전원 통과 (2026-09-30 기준)
 
 ---
 
@@ -161,6 +161,7 @@ Phalanx Root
 * **Phase 4** [완료]: 엔터프라이즈 4-View 관제 아키텍처, Flat Virtualized Tree 60FPS, Obsidian 다크 테마
 * **Phase 4.1** [완료]: 센서 UAC 자동 기동, 모의 침해 시뮬레이터 연동, Clean-Room 인증 분리
 * **Phase 4.2** [완료]: Dark/Light/System 동적 테마, 3계층 실시간 수사 UX 파이프라인, Gauge 모델 통일, 빈 화면 방어
+* **Phase 5.1** [완료]: `FileInspectionTool.cs` (WinVerifyTrust P/Invoke 서명 검증, T1036.005 시스템 경로 위장 적발, Shannon 엔트로피 연산, Clean-Room 모의 DB, 56개 단위 테스트 전원 통과)
 * **Phase 5.2** [완료]: 어택랩 10대 시나리오 체제 개편, 가상 VAD 스캔 어댑터, FSM 루프백 오탐 방지, 인젝션 독립 50점 가산
 
 > 각 Phase의 세부 구현 내역, DoD 및 벤치마크 데이터는 Git 히스토리 및 [`04_performance_benchmarks.md`](./04_performance_benchmarks.md)에서 확인할 수 있습니다.
@@ -173,9 +174,9 @@ Phalanx Root
 
 | 우선순위 | 컴포넌트 | 현재 상태 | 기대 동작 |
 |---|---|---|---|
-| **1순위** | `FileInspectionTool.cs` | 파일 미생성 (미구현) | `WinVerifyTrust` P/Invoke, 시스템 경로 위장(T1036.005) 감별, Shannon 엔트로피 연산 |
-| **2순위** | `InvestigationView.xaml` A4 리포트 | `Command` 미연동 (준비 중 툴팁) | QuestPDF 기반 A4 포렌식 PDF 렌더링/다운로드 |
-| **3순위** | MITRE ATT&CK 내비게이터 뷰 | 미구현 | 12대 공격 전술 매트릭스 미니맵 시각화 |
+| **완료** | `FileInspectionTool.cs` | **구현 완료 (Phase 5.1)** | `WinVerifyTrust` P/Invoke, 시스템 경로 위장(T1036.005) 감별, Shannon 엔트로피 연산, Clean-Room 모의 DB |
+| **1순위** | `InvestigationView.xaml` A4 리포트 | `Command` 미연동 (준비 중 툴팁) | QuestPDF 기반 A4 포렌식 PDF 렌더링/다운로드 |
+| **2순위** | MITRE ATT&CK 내비게이터 뷰 | 미구현 | 12대 공격 전술 매트릭스 미니맵 시각화 |
 
 ### 7.2 현재 유지 중인 설계 수준 목/스텁
 

@@ -685,6 +685,38 @@ related:
    * `dotnet build Phalanx.sln -c Release -m:1` ➔ Exit Code 0 (경고 0, 오류 0).
    * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 49개 단위 테스트 전원 통과 (Exit Code 0, 1.0s).
 
+---
 
+## 2026-09-30: [Resolved] WinVerifyTrust 64비트 P/Invoke 비관리 메모리 누수 방지 및 10초 세이프티 워치독 SLA 보호를 위한 FileInspectionTool 구현
 
+### 1. 현상 (Symptom)
+* 복합 회피 공격(T1036.005 Masquerading, Temp 디렉터리 내 가짜 svchost.exe 등) 인입 시, 디스크 파일 정밀 검증 도구의 부재로 인해 AI 수사관이 `ProcessMemoryScanTool`로 우회하면서 Turn 3에서 21.7초간 지연되고 최대 5턴(36.5초)을 전소하는 수사 병목 발생.
+* `WinVerifyTrust` 호출 시 네트워크 CRL/CTL 조회가 발생할 경우 최대 15~30초간 동기 블로킹되어 C++ 커널 센서의 기본 10초 세이프티 워치독 SLA 데드라인을 침해하고 프로세스가 조기 복구될 위험 존재.
+* 64비트 환경에서 `WINTRUST_DATA` 및 `WINTRUST_FILE_INFO` 구조체 포인터 비관리 메모리 할당(`Marshal.AllocHGlobal`) 후 해제 누락 시 반복 호출에 따른 메모리 누수 발생 위험.
 
+### 2. 원인 (Root Cause)
+1. EDR 수사 도구 체계에 디지털 서명(Authenticode), 시스템 바이너리 비인가 경로 배치 감별, Shannon 엔트로피 분석 도구가 결여되어 있었음.
+2. `WinVerifyTrust`의 기본 플래그는 인터넷 연결을 통한 인증서 폐기 목록(CRL/CTL) 조회를 시도하여 고립망 또는 지연 네트워크에서 스레드를 장시간 블로킹함.
+3. 무서명/위조 파일에 대해 `X509Certificate.CreateFromSignedFile` 호출 시 `CryptographicException`이 발생하며, 0바이트 빈 파일 엔트로피 연산 시 분모 0 나눗셈으로 `NaN`이 유발됨.
+
+### 3. 해결책 (Resolution)
+1. **`FileInspectionTool.cs` 구현 및 WinVerifyTrust P/Invoke 무누수 라이프사이클 확립**:
+   * `WINTRUST_DATA` 및 `WINTRUST_FILE_INFO` 64비트 구조체 마샬링.
+   * `Marshal.AllocHGlobal` 할당 및 이중 중첩 `try...finally` 블록 내 `Marshal.FreeHGlobal` 호출로 비관리 메모리 100% 안전 회수.
+   * `WTD_STATEACTION_IGNORE` 지정으로 상태 데이터 캐시 누수 차단.
+2. **세이프티 워치독 10초 SLA 보호**:
+   * `dwProvFlags`에 `WTD_CACHE_ONLY_URL_RETRIEVAL = 0x00001000` 및 `fdwRevocationChecks = WTD_REVOCATION_CHECK_NONE`을 명시하여 네트워크 CRL 조회를 원천 차단, 서명 검증을 수십 마이크로초 단위로 즉각 완결.
+3. **엣지 케이스 및 예외 방어**:
+   * `X509Certificate2` 서명자 주체(`SignerSubject`) 추출 시 `CryptographicException` 방어 핸들러 장착.
+   * 0바이트 파일 시 `Entropy = 0.0` 조기 반환(Division by Zero NaN 원천 차단).
+   * DOS 헤더 64바이트 미만 및 `e_lfanew` 경계 초과 검증으로 손상된 바이너리의 `IndexOutOfRangeException` 크래시 방어.
+   * 실행 중인 페이로드 잠금 충돌 방지를 위해 `FileShare.ReadWrite` 모드로 `FileStream` 개방.
+4. **Clean-Room 모의 DB 및 어택랩 시나리오 #5 연동**:
+   * `SimulatedFileEntry` 및 `RegisterSimulatedFile`/`ClearSimulatedFiles`를 제공하여 가상 환경에서도 디스크 IO 없이 무서명 svchost 위장 텔레메트리 주입 및 사후 안전 회수 완비.
+5. **자율 AI 헌터 FSM 및 수사 파이프라인 연계**:
+   * `AutonomousHunterAgent.cs`: 시스템 프롬프트에 6번째 도구 등록 및 파일 우선 수사 지침 명시.
+   * 오프라인 결정론적 엔진에 Step 1.5로 `FileInspectionTool`을 연계하여 `IsPathMasqueraded == true` 또는 `AnomalyScore >= 80` 시 `riskScore += 50` 가산 후 파이프라인(C2 IP 방화벽 차단 및 MITRE 매핑) 완주 보장.
+6. **회귀 및 QA 검증 결과**:
+   * `FileInspectionToolTests.cs`: 7대 검증 시나리오(정규 서명, 무서명 위장 100점, .dat 확장자 위장, 고엔트로피, 0바이트 빈 파일, 결측/무효 인자, Clean-Room 모의 주입) 전원 통과.
+   * `dotnet build Phalanx.sln`: 경고 0, 오류 0 (Exit Code 0).
+   * `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"`: 총 56개 단위 테스트 전원 통과 (Exit Code 0, 1.0s).
