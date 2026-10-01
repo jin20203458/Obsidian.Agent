@@ -753,3 +753,41 @@ related:
      - `TestInvestigationCompleted_WhenBrowsingDifferentIncident_PreservesCurrentSelectedIncident`: 타 사건 수사 완료 알림 인입 시 현재 열람 화면 보존 및 타 사건 백그라운드 상태 갱신 검증.
    * 고속 단위 테스트 96개 전원 통과 (Exit Code 0, 1.0s).
 
+---
+
+## 2026-10-01: [Resolved] Phalanx v1.0 정식 릴리스 대비 코드베이스 정밀 다이어트 및 무손실 최적화
+
+### 1. 현상 및 개선 배경 (Symptom & Background)
+* v1.0 정식 릴리스를 앞두고 전수 코드 감사 결과, 개발 단계의 잔재 코드 및 자원 비효율 발견:
+  1. `AttackSimulator`에서 전체 시나리오 실행(번호 8)과 단독 시나리오 8번("Developer Toolchain Loopback IPC")의 번호 충돌로 인해 시나리오 8번 단독 실행이 가로채지는 버그 존재.
+  2. `ProcessTreeProjectionManager.AllNodes`가 XAML에 바인딩되지 않는 내부 뷰임에도 `ObservableCollection`으로 유지되며 매 델타마다 UI 스레드 디스패치 및 WPF 동기화 락 경합 발생.
+  3. `MainViewModel`의 상시 `DispatcherTimer`(`_investigationTimer`)가 100ms 주기로 상시 틱을 발생시켜 UI 렌더링 스레드 부하 유발.
+  4. `AttackLabScenarioRunner`의 `finally` 클린업 블록에서 `RegistryInspectionTool.ClearSimulatedKeys()` 호출이 누락되어 시뮬레이션 레지스트리 키가 누수될 위험 존재.
+  5. UI 및 PDF 리포트에서 `v0.5.0-preview` 레거시 버전 문자열 잔존.
+  6. 미사용 프로퍼티, 미구독 이벤트, 콘솔 장식용 이모지 등 Dead Code 및 헌법 위반 잔재 존재.
+
+### 2. 원인 (Root Cause)
+* Phase 2~4 고속 기능 프로토타이핑 과정에서 작성된 하위 호환 오버로드 및 임시 이벤트가 정식 릴리스 전 정리되지 못함.
+* `AllNodes` 컬렉션이 과거 WPF 바인딩 용도로 설계되었으나 Phase 4 가상화(`VisibleNodes`) 도입 이후 XAML 바인딩이 해제되었음에도 불필요한 UI 동기화 루틴이 방치됨.
+
+### 3. 해결책 (Resolution)
+1. **`AttackSimulator` 시나리오 8번 충돌 해결 및 `--all` 분리**:
+   * 전체 순차 실행 번호를 `99`번 및 `--all` CLI 플래그로 분리하고, 8번 시나리오 단독 실행 복원.
+   * `run_attack_simulator.ps1`에 `-All` 스위치 지원 추가 및 주석 동기화.
+2. **`ProcessTreeProjectionManager` CQRS 무손실 최적화**:
+   * `AllNodes`를 `ObservableCollection`에서 `ICollection<ProcessNodeModel> AllNodes => _nodesByGuid.Values;` Zero-Allocation 읽기 전용 뷰로 전환.
+   * UI 디스패치(`AllNodes.Add`) 및 `BindingOperations.EnableCollectionSynchronization` 등록 완전 제거하여 UI 스레드 경합 100% 해소. (단위 테스트 100% 호환 보존)
+   * 미구독 이벤트 3종(`OnProcessSuspended`, `OnProcessTerminated`, `OnProcessStarted`) 및 Invoke 호출 5곳 삭제.
+3. **`MainViewModel` UI 타이머 주기 완화 및 Dead Code 제거**:
+   * `_investigationTimer` 주기를 100ms에서 250ms로 완화하여 UI 인터럽트 60% 절감.
+   * 미사용 필드 `_processSearchQuery`, 프로퍼티 `RootProcesses`, 릴레이 커맨드 `CloseInspector` 안전 삭제.
+4. **`AttackLabScenarioRunner` 누수 방지 및 레거시 정리**:
+   * `finally` 블록에 `RegistryInspectionTool.ClearSimulatedKeys();` 추가하여 안전 클린업 완결.
+   * 5번 시나리오 하드코딩 허위 진단 로그 및 미사용 하위 호환 오버로드 2종 삭제.
+5. **버전 정규화 및 장식용 이모지 제거**:
+   * `ForensicPdfReportDocument`, `SettingsViewModel`, `SettingsViewModelTests`를 `v1.0.0`으로 정규화.
+   * 프로덕션 콘솔 로그의 모든 장식용 유니코드 이모지를 표준 대괄호 태그(`[gRPC Server]`, `[SUSPEND]`, `[ERROR]`, `[COMMAND]` 등)로 교체 (Zero Decorative Emojis 헌법 충족).
+6. **Ground Truth 검증**:
+   * 솔루션 전체 빌드(Exit Code 0), 96개 단위 테스트 100% PASS(1.0s, 0 failed), AttackSimulator CLI 빌드(Exit Code 0) 완료.
+
+
