@@ -729,3 +729,27 @@ related:
      - `TestInvestigationCompleted_WhenResumed_UpdatesProcessNodeToRestoredAndEnablesSuspend`: 정상 복구 시 상태 배지 `[실시간 가동 중]` 및 동결 활성화 검증.
    * 단위 테스트 전체 94개 100% 통과 (Exit Code 0, 1.0s).
 
+---
+
+## 2026-10-01: [Resolved] 심층 수사실 열람 중 신규 위협 인입 시 화면 강제 전환(포커스 가로채기) 결함
+
+### 1. 현상 (Symptom)
+* 관제사가 심층 수사실(`InvestigationView`)에서 특정 침해사고의 포렌식 서사 및 턴별 로그를 열람하고 있는 도중, 새로운 공격/위협 프로세스가 인입되면 관제사의 의도와 무관하게 화면의 내용이 신규 위협으로 즉시 강제 전환되는 현상 발생.
+* 관제사가 사건 A를 열람하는 동안 백그라운드에서 진행 중이던 다른 사건 B의 AI 수사가 완료되면, 화면이 다시 완료된 사건 B로 강제 교체되는 문제 발생.
+
+### 2. 원인 (Root Cause)
+1. **`OnInvestigationStarted`의 무조건적 `SelectedIncident` 재할당**:
+   * 신규 수사 시작 시 관제사의 현재 뷰 상태(`CurrentView`)나 기존 선택 여부를 확인하지 않고 무조건 `SelectedIncident = item;`을 대입함.
+2. **`HandleInvestigationCompleted`의 무조건적 `SelectedIncident` 덮어쓰기**:
+   * 백그라운드 수사 완료 시 완료된 사건(`existing`)으로 무조건 `SelectedIncident = existing;`을 대입하여 현재 열람 중이던 사건을 덮어씀.
+
+### 3. 해결책 (Resolution)
+1. **`MainViewModel.cs` 심층 수사실 연속성 보호 조건 장착**:
+   * `OnInvestigationStarted`: 관제사가 심층 수사실을 열람 중(`CurrentView == CockpitViewType.Investigation`)이고 이미 사건을 선택 중인 경우 `SelectedIncident`를 유지하도록 방어 (`if (CurrentView != CockpitViewType.Investigation || SelectedIncident == null) SelectedIncident = item;`).
+   * `HandleInvestigationCompleted`: 관제사가 현재 보고 있는 사건(`SelectedIncident.IncidentId == existing.IncidentId`)이거나 선택된 사건이 없을 때만 `SelectedIncident = existing;`으로 갱신하고, 다른 사건 열람 시에는 백그라운드 데이터만 갱신.
+2. **회귀 및 불변식 검증 단위 테스트**:
+   * `MainViewModelCancellationTests.cs`에 단위 테스트 2종 추가:
+     - `TestInvestigationStarted_WhenBrowsingInvestigationView_PreservesCurrentSelectedIncident`: 심층 수사실 열람 중 신규 위협 인입 시 기존 사건 선택 보존 검증.
+     - `TestInvestigationCompleted_WhenBrowsingDifferentIncident_PreservesCurrentSelectedIncident`: 타 사건 수사 완료 알림 인입 시 현재 열람 화면 보존 및 타 사건 백그라운드 상태 갱신 검증.
+   * 고속 단위 테스트 96개 전원 통과 (Exit Code 0, 1.0s).
+
