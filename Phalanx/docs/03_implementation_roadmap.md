@@ -1,8 +1,8 @@
 ---
 description: >-
   Phalanx EDR 프로젝트 현재 상태 요약, 핵심 아키텍처 불변식, 컴포넌트 맵, 기술 스택,
-  운영 가이드, 완료된 마일스톤 요약, 활성 백로그(FileInspectionTool, QuestPDF, MITRE),
-  복합 회피 실험 한계점 및 FileInspectionTool 상세 규격.
+  운영 가이드, 완료된 마일스톤 요약(Phase 1~5.5), 차기 활성 백로그(MITRE ATT&CK 내비게이터),
+  및 후속 연구 과제.
 related:
   - ../README.md
   - ./00_project_overview.md
@@ -22,30 +22,25 @@ related:
   * 공식 스펙: `Phalanx/docs/`
   * 트러블슈팅 런북: `troubleshooting/phalanx.md`
 * **솔루션 파일**: `Phalanx.sln` (Visual Studio 2026 / Dev18 및 VS 2022 v17.x 호환)
-* **현재 활성 마일스톤**: Phase 5 (활성 백로그) - 차기 1순위 과제: MITRE ATT&CK 내비게이터 뷰 (12대 전술 매트릭스 시각화)
-* **단위 테스트**: 84개 전원 통과 (Category=Unit, 2026-09-30 기준)
+* **현재 활성 마일스톤**: Phase 6 (차기 과제) - 1순위 과제: MITRE ATT&CK 내비게이터 뷰 (12대 전술 매트릭스 시각화)
+* **단위 테스트**: 85개 전원 통과 (Category=Unit, 2026-10-01 기준)
 
 ---
 
-## 2. 핵심 아키텍처 불변식 (Architectural Invariants)
+## 2. 핵심 아키텍처 불변식 및 런타임 수명주기
 
-최상위 행동 수칙인 [`.agents/AGENTS.md`](../../../Phalanx/.agents/AGENTS.md)의 핵심 규칙들을 실제 코드베이스에서 안전하게 계승하기 위해, 후속 에이전트는 아래 5대 불변식을 준수해야 합니다:
+에이전트 개발 및 런타임 최상위 행동 규약(AI Decision SSOT, UI 스레드 마샬링, Headless Null-Safety, 이모지 배제, 시크릿 격리)은 [`.agents/AGENTS.md`](../../../Phalanx/.agents/AGENTS.md)에 단일 진실 공급원(SSOT)으로 정의되어 있으므로 이를 엄격히 준수합니다.
 
-1. **AI 수사관 단일 진실 공급원 (SSOT Decision Authority)**:
-   * ReAct 루프가 정상 종결(`reachedFinal == true && hasValidAction`)된 경우, Gemini 모델의 `VerdictAction`(`ACTION_KILL` vs `ACTION_RESUME`)은 절대적 최상위 결정권을 가집니다.
-   * `CommandLine.Contains("-enc")` 등 단순 정적 문자열 검사로 LLM의 정상 판결을 사살로 강제 오버라이드하는 하드코딩 if문을 절대 추가하지 마십시오.
-   * 시스템 가드는 **최대 턴(5턴) 초과 타임아웃** 또는 **API 완전 단절/예외** 시의 Fail-Secure 방어에만 국한되어야 합니다.
-2. **세이프티 워치독 SLA 계약 (10초 기본 / 50초 연장 티켓)**:
-   * C++ 센서는 기본 10초(10,000ms) 안전 타임아웃 적용 ([`SafetyWatchdog`](../../../Phalanx/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h)).
-   * C# AI 헌터가 외부 LLM 심층 수사에 진입할 경우 `ACTION_EXTEND_TIMEOUT` 티켓으로 1회 한정 +50초 연장(총 60초 예산).
-   * C# 최상위 타임아웃 CTS는 50초(50,000ms)로 엄격 제한.
-3. **UI 스레드 안전 마샬링 및 Headless 호환성**:
-   * 반드시 `CockpitUiBridge.Instance`를 거쳐 `Dispatcher.InvokeAsync`로 마샬링.
-   * `Application.Current`가 null이어도 예외 없이 안전 통과하는 Null-Safety 방어 유지.
-4. **무결성 레벨 분리 및 수명주기 정리 (Orderly Teardown)**:
-   * 종료 시 (1) gRPC `PHALANX_SENSOR_SHUTDOWN` 역전송, (2) Win32 `Local\PhalanxSensorShutdownEvent` 시그널링, (3) `sensorProcess.WaitForExit(3000)` 순서 유지.
-5. **모던 상용 EDR 룩앤필 (0 Emojis Policy)**:
-   * XAML 및 뷰모델에 유니코드 이모티콘을 일절 사용하지 않으며, 순수 XAML 벡터 지오메트리와 팔레트 토큰만 사용.
+본 문서에서는 시스템 런타임 통합 시 준수해야 하는 핵심 기술 불변식만을 유지합니다:
+
+1. **세이프티 워치독 SLA 계약 (10초 기본 / 50초 연장 티켓)**:
+   * C++ 센서는 기본 10초(10,000ms) 안전 타임아웃을 적용하며 ([`SafetyWatchdog.h:55`](../../../Phalanx/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h#L55)), AI 심층 수사 진입 시 `ACTION_EXTEND_TIMEOUT` 티켓을 통해 1회 한정 +50초 연장(총 60초 예산)을 집행합니다.
+   * C# 최상위 타임아웃 CTS는 **50초(50,000ms)**로 설정하여 워치독 만료 10초 전 안전 마진을 보장합니다.
+2. **무결성 레벨 분리 및 수명주기 정리 (Orderly Teardown)**:
+   * Cockpit과 Sensor 종료 시 역전송 및 동기화 순서를 엄격히 준수합니다:
+     1. gRPC `PHALANX_SENSOR_SHUTDOWN` 역전송
+     2. Win32 `Local\PhalanxSensorShutdownEvent` 시그널링
+     3. `sensorProcess.WaitForExit(3000)` 대기 후 안전 종료.
 
 ---
 
@@ -75,18 +70,20 @@ Phalanx Root
 │       ├── Scenarios/AttackScenarioRegistry.cs  # 10대 실무 시나리오 레지스트리
 │       ├── Services/AttackLabScenarioRunner.cs  # 어택랩 시나리오 실행 엔진
 │       ├── Storage/ForensicArchiveManager.cs    # LiteDB 포렌식 아카이브
-│       └── Tools/ (5대 OS 포렌식 도구)
+│       └── Tools/ (7대 OS 심층 포렌식 도구)
 │           ├── DecodePayloadTool.cs         # Base64/Gzip/Hex 해독
-│           ├── ProcessMemoryScanTool.cs     # VirtualQueryEx VAD 스캔
+│           ├── ProcessMemoryScanTool.cs     # VirtualQueryEx VAD 스캔 및 모듈 검증
 │           ├── ThreatReputationTool.cs      # IoC 평가
 │           ├── MitreClassifierTool.cs       # 26종 MITRE ATT&CK 매핑
-│           └── SystemFirewallTool.cs        # Windows 방화벽 C2 차단
+│           ├── SystemFirewallTool.cs        # Windows 방화벽 C2 차단
+│           ├── FileInspectionTool.cs        # Authenticode 서명/위장/엔트로피/사이드로딩 분석
+│           └── RegistryInspectionTool.cs    # 64비트 레지스트리/간접 실행/COM 하이재킹 검증
 ├── scripts/
 │   ├── run_attack_simulator.ps1             # 모의 공격 시뮬레이터 실행
 │   ├── run_fullchain_test.ps1               # 5대 풀체인 E2E 통합 검증
 │   └── build.ps1                            # C++ 센서 빌드
 └── tests/
-    ├── Phalanx.Agent.Tests/                 # C# 49개 단위 테스트 및 Live 풀체인 테스트
+    ├── Phalanx.Agent.Tests/                 # C# 85개 단위 테스트 및 Live 풀체인 테스트
     └── FullChainCrossE2ETest/               # C++ ↔ C# 크로스 랭귀지 E2E 테스트
 ```
 
@@ -116,21 +113,16 @@ Phalanx Root
 
 ---
 
-## 5. 운영 가이드 및 검증 체계
+## 5. 운영 가이드 및 시나리오 레지스트리
 
-### 5.1 LLM 인증 정보 구성
+빌드 및 테스트 명령어(`dotnet build`, `dotnet test --filter "Category=Unit"`, `run_fullchain_test.ps1`), 시크릿 파일 격리(`.gitignore`) 규약은 [`.agents/AGENTS.md`](../../../Phalanx/.agents/AGENTS.md)의 `<critical_rules>`를 단일 진실 공급원(SSOT)으로 준수합니다.
 
-1. **환경 변수 우선**: `GOOGLE_APPLICATION_CREDENTIALS` 환경 변수가 지정되어 있을 경우 최우선 로드.
-2. **Phalanx 자체 로컬 Config**: `src/Phalanx.Cockpit/Config/google-credentials.json` 및 `AppSettings.json`에서 탐색.
-3. **보안 규칙**: `google-credentials.json` 및 `AppSettings.json`은 `.gitignore`에 등록되어 엄격히 커밋에서 제외됨.
+### 5.1 LLM 인증 정보 로드 우선순위
 
-### 5.2 검증 체계
+1. **환경 변수**: `GOOGLE_APPLICATION_CREDENTIALS` 환경 변수 지정 시 최우선 로드.
+2. **로컬 파일**: `src/Phalanx.Cockpit/Config/google-credentials.json` 및 `AppSettings.json`에서 자동 탐색.
 
-기본 빌드/테스트 명령어는 [`.agents/AGENTS.md`](../../../Phalanx/.agents/AGENTS.md)의 `<critical_rules>`에 SSOT로 정의되어 있습니다.
-
-* **클라우드 Live AI Benchmark**: `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Live"` (실행 전 유효한 인증 정보 필수, 약 3.5분 소요)
-
-### 5.3 10대 실무 시나리오 레지스트리 ([`AttackScenarioRegistry.cs`](../../../Phalanx/src/Phalanx.Cockpit/Scenarios/AttackScenarioRegistry.cs))
+### 5.2 10대 실무 시나리오 레지스트리 ([`AttackScenarioRegistry.cs`](../../../Phalanx/src/Phalanx.Cockpit/Scenarios/AttackScenarioRegistry.cs))
 
 | ID | 시나리오 명칭 | 기대 처분 | 핵심 파이프라인 |
 |---|---|---|---|
@@ -161,24 +153,27 @@ Phalanx Root
 * **Phase 4** [완료]: 엔터프라이즈 4-View 관제 아키텍처, Flat Virtualized Tree 60FPS, Obsidian 다크 테마
 * **Phase 4.1** [완료]: 센서 UAC 자동 기동, 모의 침해 시뮬레이터 연동, Clean-Room 인증 분리
 * **Phase 4.2** [완료]: Dark/Light/System 동적 테마, 3계층 실시간 수사 UX 파이프라인, Gauge 모델 통일, 빈 화면 방어
-* **Phase 5.1** [완료]: `FileInspectionTool.cs` (WinVerifyTrust P/Invoke 서명 검증, T1036.005 시스템 경로 위장 적발, Shannon 엔트로피 연산, Clean-Room 모의 DB, 56개 단위 테스트 전원 통과)
+* **Phase 5.1** [완료]: `FileInspectionTool.cs` (WinVerifyTrust P/Invoke 서명 검증, T1036.005 시스템 경로 위장 적발, Shannon 엔트로피 연산, Clean-Room 모의 DB, 단위 테스트 전원 통과)
 * **Phase 5.2** [완료]: 어택랩 10대 시나리오 체제 개편, 가상 VAD 스캔 어댑터, FSM 루프백 오탐 방지, 인젝션 독립 50점 가산
+* **Phase 5.3** [완료]: `RegistryInspectionTool.cs` (64비트 레지스트리 뷰, CLSID/InprocServer32/ScriptletURL/Run 무결성 검증, COM 하이재킹 T1546.015 및 간접 실행 T1218.010 탐지, Clean-Room 모의 DB 연동, 10대 스트레스 벤치마크 100.0% All-Green 달성)
+* **Phase 5.4** [완료]: 심층 수사 취소 및 동결 보존 파이프라인 (Fail-Safe Freeze Invariant: 관제사 수동 취소 시 커널 동결 보존 `ACTION_SUSPEND`/`SUSPENDED_MANUAL_HOLD`, 스피너 피드백, 전역 프로세스 트리 위치 확인 연동 및 Human-in-the-Loop 수동 사살/해제 지원)
+* **Phase 5.5** [완료]: `ForensicPdfReportDocument.cs` 동적 적응형(Adaptive Dynamic Flow) 포렌식 A4 리포트 고도화 (단일 페이지 요약 ↔ 5턴 이상 다면 자동 확장, 자동 조치 vs 권고 조치 분리, MainViewModel 내보내기 연동)
 
 > 각 Phase의 세부 구현 내역, DoD 및 벤치마크 데이터는 Git 히스토리 및 [`04_performance_benchmarks.md`](./04_performance_benchmarks.md)에서 확인할 수 있습니다.
 
 ---
 
-## 7. 활성 백로그 (Phase 5 Active Backlog)
+## 7. 차기 활성 백로그 (Phase 6 Active Backlog)
 
 ### 7.1 차기 실체화 대기 항목
 
 | 우선순위 | 컴포넌트 | 현재 상태 | 기대 동작 |
 |---|---|---|---|
-| **완료** | `FileInspectionTool.cs` | **구현 완료 (Phase 5.1)** | `WinVerifyTrust` P/Invoke, 시스템 경로 위장(T1036.005) 감별, Shannon 엔트로피 연산, Clean-Room 모의 DB |
-| **완료** | `InvestigationView.xaml` A4 리포트 | **구현 완료 (Phase 5.2)** | QuestPDF 기반 A4 포렌식 PDF 렌더링(5개 핵심 섹션, UI 완전 디커플링, ReAct 감사 테이블) 및 MainViewModel 내보내기 커맨드 연동 |
-| **1순위** | MITRE ATT&CK 내비게이터 뷰 | 미구현 | 12대 공격 전술 매트릭스 미니맵 시각화 |
+| **1순위** | MITRE ATT&CK 내비게이터 뷰 | 미구현 | 12대 공격 전술 매트릭스 미니맵 시각화 및 사건 연계 TTP 매핑 |
+| **2순위** | 위협 인텔리전스 외부 연동 | 미구현 (설계 대기) | `ThreatReputationTool`에 VirusTotal / AlienVault OTX 외부 API 키 바인딩 옵션 추가 |
+| **3순위** | WFP 네이티브 API 전환 | 기술 부채 | `SystemFirewallTool`의 `netsh` CLI 호출을 Windows Filtering Platform Win32 API로 전환하여 지연 최소화 |
 
-### 7.2 현재 유지 중인 설계 수준 목/스텁
+### 7.2 유지 중인 설계 수준 목/스텁
 
 | 컴포넌트 | 현재 상태 | 비고 |
 |---|---|---|
@@ -187,97 +182,18 @@ Phalanx Root
 
 ---
 
-## 8. 복합 회피 공격 실험 결과 및 FileInspectionTool 필요성 (Phase 5.1 동기)
+## 8. 완료된 설계 아티팩트 이관 (Archived Specification SSOT)
 
-### 8.1 실험 개요
+Phase 5에서 실체화된 7대 포렌식 도구(`FileInspectionTool`, `RegistryInspectionTool`), 조사 취소 파이프라인 및 동적 적응형 리포트 엔진의 상세 규격과 실측 데이터는 지식베이스의 단일 진실 공급원(SSOT) 문서로 통합 관리됩니다:
 
-블랙리스트 미등록 외부 IP(`198.51.100.99`) + 시스템 파일명 위장(`C:\Windows\Temp\svchost.exe`)이 결합된 복합 회피 공격(T1036.005)을 모의하여 AI 수사관의 도구 연동 한계를 실측.
-
-### 8.2 실험 결과 (Ground Truth)
-
-* **총 소요**: 5턴, 36.5초 (최대 예산 완전 전소)
-* **최종 판결**: `ACTION_KILL` (확신도 96%, 방화벽 차단 완료)
-* **병목 원인**: 파일 검증 도구 부재로 `ProcessMemoryScanTool`로 우회 -> **Turn 3에서 21.7초 낭비** (워치독 SLA의 43.4% 잠식)
-
-### 8.3 FileInspectionTool 상세 규격
-
-#### A. 설계 목적
-
-* 디스크 파일의 존재 유무, 정적 메타데이터(크기, 시간, 해시) 수집
-* Win32 `WinVerifyTrust` 기반 Authenticode 체인 검증
-* 시스템 핵심 실행 파일의 비인가 디렉터리 위장 배치(Masquerading) 적발
-* PE 헤더 매직 바이트 검사 및 확장자 위장 감별
-
-#### B. 디지털 서명 검증
-
-* **구현**: `wintrust.dll` / `crypt32.dll`의 `WinVerifyTrust` API P/Invoke
-* **검증 GUID**: `WINTRUST_ACTION_GENERIC_VERIFY_V2` (`{00AAC56B-CD44-11d0-8CC2-00C04FC295EE}`)
-* **플래그**: `WTD_REVOCATION_CHECK_NONE` (오프라인 고속용) 또는 `WTD_REVOCATION_CHECK_CHAIN`
-* **판정**: Microsoft 정규 서명이 없는 `svchost.exe`, `csrss.exe`, `lsass.exe` 등은 즉시 위험 점수 100점
-
-#### C. 시스템 파일 경로 위장 탐지
-
-* **화이트리스트**: `svchost.exe`, `csrss.exe`, `smss.exe`, `wininit.exe`, `winlogon.exe`, `services.exe`, `lsass.exe` -> 정규 경로: `C:\Windows\System32\`
-* **탐지**: 파일명이 화이트리스트에 포함되나 실제 경로가 `\Temp\`, `\AppData\`, `\Users\Public\` 등에 위치할 경우 `IsPathMasqueraded = true`
-
-#### D. 파일 엔트로피 및 확장자 위장
-
-* **Shannon Entropy**: 파일 바이트 스트림(최대 1MB) 대상. 엔트로피 > 7.2 시 고밀도 암호화/패킹으로 분류.
-* **매직 바이트**: `.dat`, `.jpg` 등 비실행형 확장자이나 `MZ` + `PE\0\0` 헤더 존재 시 `IsDisguisedExecutable = true`
-
-#### E. 입출력 인터페이스 규격
-
-```csharp
-namespace Phalanx.Cockpit.Tools;
-
-public sealed class FileInspectionTool : IInvestigationTool
-{
-    public string Name => "FileInspectionTool";
-    public string Description => 
-        "디스크 상의 파일 경로, 디지털 서명(Authenticode), 시스템 파일 위장(Masquerading), " +
-        "PE 헤더 정합성, 엔트로피를 정밀 검증합니다. 인자: { \"filePath\": \"C:\\\\...\" }";
-
-    public async Task<ToolResult> ExecuteAsync(Dictionary<string, object> parameters) { ... }
-
-    public sealed class Input
-    {
-        [JsonPropertyName("filePath")]
-        public string FilePath { get; set; } = string.Empty;
-    }
-
-    public sealed class Output
-    {
-        public bool Exists { get; set; }
-        public string NormalizedPath { get; set; } = string.Empty;
-        public long FileSizeBytes { get; set; }
-        public string Sha256 { get; set; } = string.Empty;
-        public double Entropy { get; set; }
-        public bool IsSigned { get; set; }
-        public string SignerSubject { get; set; } = string.Empty;
-        public string SignatureStatus { get; set; } = string.Empty;
-        public bool IsPathMasqueraded { get; set; }
-        public bool IsDisguisedExecutable { get; set; }
-        public int AnomalyScore { get; set; } // 0 ~ 100
-        public string DiagnosticReason { get; set; } = string.Empty;
-    }
-}
-```
-
-#### F. DI 등록 및 프롬프트 통합
-
-* **DI**: `Program.cs`에서 `builder.Services.AddSingleton<IInvestigationTool, FileInspectionTool>();`
-* **프롬프트 수사 지침**: *"페이로드 해독이나 명령행에서 다운로드/생성되는 로컬 파일 경로가 포착되면, 메모리 스캔보다 먼저 FileInspectionTool을 호출하여 디지털 서명 및 시스템 경로 위장(Masquerading) 여부를 우선 확증하십시오."*
-
-#### G. 기대 효과 (가설)
-
-* 기존: 5턴, 36.5초 (Turn 3에서 메모리 스캔 21.7초 낭비)
-* 개선: Turn 2에서 `FileInspectionTool`로 Temp 내 svchost 무서명/위장 확증(0.05초) -> **총 2~3턴, 10초 내외 종결 (72% 단축)**
+* **7대 OS 심층 포렌식 도구 규격**: [`02_ai_agent_investigation_design.md#3-에이전트-전용-tool-calling-생태계`](./02_ai_agent_investigation_design.md)
+* **도구 결핍 극복 및 10대 스트레스 벤치마크 실측치 (38ms All-Green)**: [`04_performance_benchmarks.md#10-phase-35-final-중립적-10대-엔터프라이즈-스트레스-벤치마크-1000-all-green-완전-정복`](./04_performance_benchmarks.md)
+* **동적 적응형 A4 포렌식 리포트 레이아웃**: [`ForensicPdfReportDocument.cs`](../../../Phalanx/src/Phalanx.Cockpit/Reporting/ForensicPdfReportDocument.cs)
 
 ---
 
-## 9. 후속 실험 과제 (Future Empirical Research)
+## 9. 후속 연구 과제 (Future Empirical Research)
 
-1. **FileInspectionTool 주입 후 복합 회피 공격 수사 압축률 검증**: 동일 T1036.005 시나리오에서 턴 수 및 레이턴시 단축 효과 실측.
-2. **LOLBAS 듀얼 위장 분별 실험**: 정품 서명 바이너리 + 악성 인자 vs 가짜 바이너리 교체/위장의 이중 분별력 검증.
-3. **다중 프로세스 상속 체인 동시 동결/수사 확장성 실험**: 트리형 공격에서 동시 다중 동결 및 상속 체인 일괄 처분 검증.
-4. **고부하 텔레메트리 gRPC 스트리밍 I/O 병목 실측**: 초당 10,000건 이상 이벤트 폭주 시 이벤트 드롭률 및 메모리 풋프린트 측정.
+1. **다중 프로세스 상속 체인 동시 동결/수사 확장성 검증**: 트리형 공격에서 동시 다중 프로세스 원자적 동결 및 상속 체인 일괄 처분 검증.
+2. **초고부하 텔레메트리 gRPC 스트리밍 I/O 병목 실측**: 초당 10,000건 이상 이벤트 폭주 시 이벤트 드롭률 및 메모리 풋프린트 측정.
+3. **로컬 경량 SLM(Ollama Qwen 2.5 / Llama 3) 오프라인 ReAct 실증**: 완전 폐쇄망 환경에서의 로컬 SLM 추론 지연시간 및 기계어 판정 정확도 평가.
