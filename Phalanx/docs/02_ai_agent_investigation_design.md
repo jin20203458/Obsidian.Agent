@@ -174,6 +174,6 @@ C# 에이전트가 로컬 DAG 족보 분석기 및 센서 집행 결과와 합�
 * **사용자 수동 개입에 의한 심층 수사 취소 (Fail-Safe Freeze Invariant)**:
   * 관제자가 대시보드 또는 심층 수사실에서 [심층 조사 취소]를 실행하면 `CancellationTokenSource.Cancel()`이 즉각 호출되어 ReAct 추론 루프가 안전하게 중단됩니다.
   * 이때 오프라인 폴백이나 Fail-Secure 사살이 일체 동작하지 않으며, C++ 센서로 어떠한 사살/해제 완화 명령도 발송하지 않고 **커널 레벨의 동결(`SUSPENDED`) 상태를 100% 무조건 보존**합니다 (`VerdictAction: ActionSuspend`, `RemediationStatus: SUSPENDED_MANUAL_HOLD`).
-  * 취소 후 관제사는 UI 버튼을 통해 직접 [수동 사살(Kill)] 또는 [동결 해제(Resume)]를 안전하게 집행할 수 있는 Human-in-the-Loop 7단계 제어권을 행사합니다.
+  * 취소 후 관제사는 `[전역 프로세스 트리에서 위치 확인 ➔]` 또는 좌측 내비게이션을 통해 전역 프로세스 트리 인스펙터 패널로 이동하여 직접 [수동 사살(Kill)] 또는 [동결 해제(Resume)]를 안전하게 집행할 수 있는 Human-in-the-Loop 제어권을 행사합니다.
 * **로컬 LLM (Ollama) 지원**:
   * 외부 인터넷이 차단된 폐쇄망 환경에서는 `http://localhost:11434` 엔드포인트를 통해 로컬 Qwen 2.5 또는 Llama 3 모델로 추론을 라우팅할 수 있는 플러그인 구조를 갖춥니다.
