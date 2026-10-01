@@ -228,46 +228,6 @@ related:
 
 ---
 
-## 2026-09-20: [Resolved] C++ 커널 룰 엔진 0.1ms 즉각 현장 사살(Reflex Kill)의 관제 콕핏 누락 및 포렌식 즉시 등록 구현
-
-### 1. 현상 (Symptom)
-* 랜섬웨어(`vssadmin.exe delete shadows`, `bcdedit /set recoveryenabled no` 등)가 실행될 때 C++ 커널 센서의 `LocalRuleEngine`이 0.1ms(80μs) 이내에 즉각 현장 사살(`NtTerminateProcess`)을 집행하고 `Lifecycle = LIFECYCLE_TERMINATED` 텔레메트리를 C# Cockpit으로 전송함.
-* 그러나 WPF 관제 콕핏 UI 상단의 Monitored Processes 카운트 및 내부 CQRS 트리에서만 프로세스가 비활성화(`IsAlive = false`)될 뿐, 좌측 실시간 인시던트 작업 목록(Incident Worklist)에는 침해 대응 카드가 전혀 생성되지 않는 현상 발생.
-
-### 2. 원인 (Root Cause)
-1. **수사 파이프라인 트리거 조건의 단일화 (`PhalanxGrpcService.cs`)**:
-   * 기존 gRPC 서비스의 텔레메트리 루프는 `if (ev.IsSuspended)` 조건문만 검사하여 동결된 회색지대 프로세스만 `AutonomousHunterAgent.InvestigateThreatAsync`로 라우팅하고 있었음.
-   * C++ 로컬 룰 엔진에 의해 즉각 사살된 이벤트는 이미 종료되었으므로 `IsSuspended = false`, `IsTerminated = true`, `Lifecycle = LIFECYCLE_TERMINATED` 상태로 인입되어 사건 통지가 누락됨.
-2. **초고속 사건 레이턴시 절삭 및 DB 스키마 누락**:
-   * 10ms 미만 초고속 사건이 소수점 둘째 자리 초(`:F2` s) 변환으로 인해 `0.00s`로 절삭 표기됨.
-   * `IncidentRecord`에 `ElapsedMs` 필드가 누락되어 앱 재기동 후 과거 카드가 `Investigating...`으로 잘못 복원됨.
-
-### 3. 해결책 (Resolution)
-1. **현장 사살 즉각 보고 파이프라인 신설 (`AutonomousHunterAgent.HandleReflexKill`)**:
-   * AI ReAct 루프의 지연 없이 0.08ms 소요시간 레코드, `LocalRuleEngine` 사살 사유, MITRE ATT&CK T1490 전술을 담은 `IncidentRecord`를 즉각 생성하여 LiteDB 영구 적재 및 관제 UI에 `CRITICAL` / `SECURED` 카드로 즉시 표출.
-2. **gRPC 인입 라우팅 분기 보강 (`PhalanxGrpcService.cs`)**:
-   * `else if (ev.IsTerminated || ev.Lifecycle == ProcessLifecycle.LifecycleTerminated)` 분기를 추가하여 C++ 현장 사살 수신 시 `_agent.HandleReflexKill(node)`로 직결.
-3. **적응형 레이턴시 포맷터 및 DB 스키마 정규화**:
-   * 10ms 미만 소요시간은 마이크로초 단위(`80μs (0.08ms, Reflex)`)로 적응형 표기.
-   * `IncidentRecord.ElapsedMs` 스키마 필드를 신설하고 영구 복원 파이프라인 구축.
-
----
-
-## 2026-09-21: [Resolved] 관제 콕핏 인시던트 검색창 키워드 입력 시 NullReferenceException 크래시 결함
-
-### 1. 현상 (Symptom)
-* 관제 콕핏 상단 검색창에 키워드 입력 시 `MainViewModel.ApplyFilter()`에서 `NullReferenceException`이 발생하며 콕핏 애플리케이션 강제 종료.
-
-### 2. 원인 (Root Cause)
-* 과거 사건 기록 중 `BlockedIp`, `CommandLine` 등이 null인 상태에서 Null 조건부 연산자 없이 `.Contains()`를 직접 호출함.
-* LiteDB 역직렬화 시 null 필드가 뷰모델에 그대로 바인딩되어 필터 탐색 시 예외 발생.
-
-### 3. 해결책 (Resolution)
-* `MainViewModel.cs`의 `ApplyFilter()` 내 `TargetImage`, `CommandLine`, `SummaryTitle`, `BlockedIp` 프로퍼티 탐색에 `?.Contains(...) ?? false` 널-세이프 탐색 연산자 적용.
-* `LoadIncidentsFromDatabase`에서 역직렬화 시 null 필드를 `?? string.Empty`로 방어 초기화.
-
----
-
 ## 2026-09-23: [Resolved] Kestrel 백그라운드 스레드의 ObservableCollection 조작으로 인한 gRPC 스트림 단절 및 센서 ON/OFF 무한 루프
 
 ### 1. 현상 (Symptom)
@@ -290,40 +250,6 @@ related:
    * `DispatchUI` 헬퍼를 도입하여 `RootNodes`, `AllNodes`, `node.Children` 조작을 UI Dispatcher 스레드로 안전하게 마샬링 (헤드리스/테스트 환경 Null-Safety 보장).
 2. **gRPC 스냅샷 배치 보존 (`PhalanxGrpcService.cs`)**:
    * `batch.ProcessEvents` 중 `LifecycleSnapshot` 이벤트를 `ApplySnapshotBatch(snapshotEvents)`로 통째로 전달하여 단 1회의 Dispatcher 컨텍스트 스위치로 부모-자식 트리 전체를 0초 완결 투영.
-
----
-
-## 2026-09-28: [Resolved] 프로세스 트리(TreeView) 리프 노드 클릭 시 화면 좌측 쏠림 및 고착 결함
-
-### 1. 현상 (Symptom)
-* `ProcessGraphView`(인메모리 프로세스 족보 탐색기)에서 깊이 중첩된 자식/리프 노드를 클릭했을 때, 트리 뷰포트 전체가 우측으로 스크롤되면서 화면 내 프로세스 트리 내용이 좌측으로 밀려 사라짐.
-* 루트 노드와 확장 접기 화살표, 부모 프로세스들이 좌측 화면 밖으로 이탈하며, 다른 노드를 클릭하거나 마우스를 움직여도 원상태(가로 오프셋 0)로 돌아오지 않고 좌측 쏠림 상태로 영구 고착됨.
-
-### 2. 원인 (Root Cause)
-1. **WPF TreeView의 기본 포커스 BringIntoView() 호출 메커니즘**:
-   * WPF의 `TreeViewItem`은 마우스 클릭 또는 포커스 획득 시 자동으로 `BringIntoView()`를 호출하여 `FrameworkElement.RequestBringIntoViewEvent` 라우티드 이벤트를 발생시킴.
-2. **무제한 수평 측정 pass 및 가로 폭 오프셋 팽창**:
-   * `TreeView` 내부의 기본 템플릿에 내장된 `ScrollViewer`는 기본적으로 `HorizontalScrollBarVisibility="Auto"` 상태로 동작함.
-   * 이에 따라 자식 노드들에 대해 `availableSize.Width = double.PositiveInfinity`로 무한 가로 너비를 부여하며, `TreeViewItem` 템플릿 내의 `<ColumnDefinition Width="*" />`와 결합하여 자식 노드가 깊어질수록(19px * depth 계층 들여쓰기) 항목의 우측 바운딩 박스가 뷰포트 가시 영역 너비를 크게 초과함.
-3. **ScrollViewer의 일방향 수평 스크롤 및 복구 기전 부재**:
-   * `ScrollViewer`는 이벤트의 `TargetRect` 우측 경계가 화면 밖으로 나갔다고 판단하여 이를 화면 안에 넣기 위해 `HorizontalOffset`을 증가시킴 (콘텐츠가 화면 좌측으로 밀려남).
-   * WPF `ScrollViewer`는 항목 가시화 요청에 따른 일방향 스크롤만 수행할 뿐 클릭 완료 후 원점(X=0)으로 복귀시키는 메커니즘이 전무함.
-   * 또한 수평 스크롤바가 숨겨져 있어 사용자가 수동으로 되돌릴 수도 없으며, 다른 자식 노드를 클릭해도 해당 노드의 들여쓰기 바운딩 박스가 타깃이 되므로 수평 오프셋이 유지되거나 더 밀려남.
-
-### 3. 해결책 (Resolution)
-1. **1단계 프레임워크 제어 (WPF 표준 패턴)**:
-   * `TreeView`에 `ScrollViewer.HorizontalScrollBarVisibility="Disabled"` 선언 및 `RequestBringIntoView` 이벤트 차단(`e.Handled = true`)으로 1차 방어.
-2. **2단계 구조적 전면 해결: 플랫 가상화 트리 투영 (Flat Virtualized Tree Projection) 마이그레이션**:
-   * Microsoft WinUI 3(`TreeViewList`), VS Code(`Monaco Tree`), ILSpy(`SharpTreeView`)의 아키텍처 패턴을 Phalanx에 선제적 도입.
-   * **데이터 계층 (`ProcessTreeProjectionManager`)**:
-     * `ProcessNodeModel`에 `Depth` 및 `IndentMargin` 속성, `IsExpanded` 토글 추가.
-     * `VisibleNodes` (`ObservableCollection<ProcessNodeModel>`)를 구축하여 트리가 펼쳐질 때 DFS 전위 순서(Pre-order)로 1차원 평탄화 투영.
-     * `ToggleNodeExpanded` 메서드를 통해 노드 접힘/펼침 시 VS Code의 배열 `splice()` 방식으로 가시 노드만 부분 갱신.
-     * `EnsureNodeVisible` 메서드를 통해 심층 수사실에서 프로세스 트리 점프 시 상위 조상 노드 자동 언랩 지원.
-   * **UI 뷰 계층 (`ProcessGraphView.xaml` / `.cs`)**:
-     * 고전 재귀 `TreeView`를 제거하고, 하드웨어 가상화가 켜진 `ListView`(`VirtualizingStackPanel.IsVirtualizing="True"`, `VirtualizationMode="Recycling"`, `ScrollUnit="Pixel"`)로 교체.
-     * 순수 MVVM 데이터 바인딩(`SelectedItem="{Binding SelectedProcessNode, Mode=TwoWay}"`)으로 코드비하인드 이벤트 핸들러 제거.
-     * 1차원 수직 평면 렌더링으로 수평 스크롤 요동 및 쏠림 현상을 구조적으로 0% 원천 박멸하고, 60fps 가상화 스크롤과 향후 멀티컬럼(TreeGrid) 확장 기반 확보.
 
 ---
 
@@ -411,12 +337,7 @@ related:
 * 종료 코드: `3221226525 (0xc000041d)` (`STATUS_FATAL_USER_CALLBACK_EXCEPTION`).
 
 ### 2. 원인 (Root Cause)
-1. **WPF RadioButton의 기본 TwoWay 바인딩 특성**:
-   * WPF `RadioButton.IsChecked` 의존성 속성은 메타데이터 상 `BindsTwoWayByDefault = true`로 구성됨.
-   * `SettingsWindow.xaml`의 테마 선택 라디오 버튼에 `{Binding IsThemeSystem}`, `{Binding IsThemeDark}`, `{Binding IsThemeLight}`를 바인딩했으나, `SettingsViewModel.cs`의 세 프로퍼티는 게터 전용 람다 프로퍼티(`=> SelectedThemeMode == "..."`)로 선언되어 있었음.
-2. **Win32 네이티브 콜백 내 예외 전파**:
-   * 윈도우 생성 및 렌더링 초기화 단계(`HwndSource.SetLayoutSize` ➔ `ContextLayoutManager.UpdateLayout`)에서 WPF 바인딩 엔진의 `PropertyPathWorker.CheckReadOnly`가 호출되며 `System.InvalidOperationException: TwoWay 또는 OneWayToSource 바인딩은 'Phalanx.Cockpit.ViewModels.SettingsViewModel' 형식의 읽기 전용 속성 'IsThemeSystem'에서 작동하지 않습니다.` 예외를 발생시킴.
-   * 해당 예외가 Win32 메시지 디스패치 루프(`WM_CREATE` / `WM_SHOWWINDOW`) 내부에서 처리되지 않고 탈출하면서 Windows 커널에 의해 `STATUS_FATAL_USER_CALLBACK_EXCEPTION` (`0xc000041d`)으로 프로세스가 강제 사살됨.
+* 2026-09-28 `SettingsWindow TwoWay 바인딩 CLR 강제 종료(0xc000041d)` 엔트리와 동일한 근본 원인 패턴. 테마 선택용 `IsThemeSystem`, `IsThemeDark`, `IsThemeLight` 3개 프로퍼티가 게터 전용 람다(`=> SelectedThemeMode == "..."`)로 선언되어 TwoWay 역방향 쓰기 시 동일 크래시 유발.
 
 ### 3. 해결책 (Resolution)
 1. **ViewModel 양방향 세터 및 상태 안전성 구축 (`SettingsViewModel.cs`)**:
@@ -424,8 +345,6 @@ related:
    * 비활성화(`value == false`) 시그널이 주입될 때는 상태를 덮어쓰지 않고, 오직 활성화(`value == true`) 시그널일 때만 `SelectedThemeMode`를 원자적으로 변경하도록 방어 로직 적용.
 2. **XAML 바인딩 모드 방어 강화 (`SettingsWindow.xaml`)**:
    * 라디오 버튼의 `IsChecked` 바인딩에 `Mode=OneWay`를 명시적으로 부여하여 WPF 바인딩 엔진의 소스 갱신 시도를 원천 차단하고, 변경은 `Command="{Binding SetThemeModeCommand}"`로만 통제하도록 2중 방어선 확립.
-3. **STA 윈도우 인스턴스화 회귀 테스트 완비 (`SettingsViewModelTests.cs`)**:
-   * `TestSettingsWindow_InstantiationAndThemeToggle` 단위 테스트 추가: STA 스레드에서 `SettingsWindow`를 실제 생성, 렌더링(`Show()`), 테마 카테고리 전환 및 다크/라이트/시스템 모드 동적 토글 후 정상 종료(`Close()`)까지 전 구간 무결성 검증.
 
 ---
 
@@ -454,157 +373,6 @@ related:
 2. **유령 리소스 키 완전 제거 및 공식 테마 브러시 매핑**:
    * `[동결]` 트리거: `{StaticResource ThreatCriticalBrush}` ➔ `{DynamicResource SeveritySuspendedTextBrush}` (`#FBBF24` Amber Gold)
    * `[사살]` 트리거: `{StaticResource TextMutedBrush}` ➔ `{DynamicResource SeverityCriticalTextBrush}` (`#F87171` Crimson Red)
-3. **단위 테스트 검증**:
-   * `ProcessTreeProjectionTests.TestMainViewModel_FocusProcessInGraphCommand`를 통해 뷰 전환, 타깃 PID 탐색, 권한 레벨 바인딩 무결성을 검증 (Exit Code 0).
-
----
-
-## 2026-09-29: [Resolved] 프로세스 트리 정상 종료 노드의 EDR 사살(빨간색 DotCriticalBrush) 오표출 시각화 결함 해결 및 4색 상태 정규화
-
-### 1. 현상 (Symptom)
-* Obsidian의 백그라운드 Git 동기화 루틴 등 정상적인 백그라운드 프로세스가 완료 후 종료되었을 때, 프로세스 트리의 상태 점이 전부 크리티컬 위협 색상인 빨간색(`DotCriticalBrush`)으로 표출되어 정상 종료 프로세스가 EDR에 의해 사살된 침해 사고로 심각하게 오인되는 시각화 결함 발생.
-
-### 2. 원인 (Root Cause)
-* `ProcessGraphView.xaml`의 `<Ellipse.Style>` 트리거에서 `IsAlive == False` 조건에 무조건 `DotCriticalBrush`를 할당하여, EDR 긴급 사살(`IsTerminated == True`)과 OS 정상 종료(`LifecycleStop`)의 시각적 상태가 구별되지 않고 동일하게 처리됨.
-
-### 3. 해결책 (Resolution)
-1. **4단계 상태 점 시각화 정규화**:
-   * 기본값: `DotLiveBrush` (초록 `#10B981` - 정상 실행 중)
-   * `IsAlive == False`: `DotBenignBrush` (회색 `#71717A` - 정상 종료 프로세스 명확 분리)
-   * `IsSuspended == True`: `DotSuspendedBrush` (호박색 `#D97706` - 원자적 동결)
-   * `IsTerminated == True`: `DotCriticalBrush` (빨강 `#E11D48` - EDR 긴급 사살 최우선 덮어쓰기)
-   * `ImageName` TextBlock에 `IsAlive == False` 시 `TextMutedBrush` 딤 처리를 적용하여 시각적 가독성 개선.
-2. **회귀 검증**:
-   * `ProcessTreeProjectionTests`를 통해 프로세스 상태별 브러시 매핑 및 족보 가시성 무결성 확인 (Exit Code 0).
-
----
-
-## 2026-09-29: [Resolved] FullChainSystemTests 동시성 타이밍 결함 및 Category=Live 벤치마크 미분리로 인한 테스트 지연
-
-### 1. 현상 (Symptom)
-* `FullChainSystemTests.TestPhalanxGrpcService_MultiClientConcurrentStreams_MaintainsConnectionState`에서 `Assert.True(lastReportedConnection)` (line 572) 간헐적 실패 (`Expected: True, Actual: False`, 615ms 시점).
-* 카테고리 필터 없이 `dotnet test` 실행 시 콘솔에 아무런 진척 없이 3분 이상 멈춰 있는 현상 발생.
-
-### 2. 원인 (Root Cause)
-1. **gRPC 다중 스트림 테스트의 500ms 협소 타임아웃 및 자원 미회수**:
-   * `for (int i = 0; i < 20; i++) await Task.Delay(25)` 구조로 최대 대기시간이 500ms에 불과하여, CPU 스레드풀 지연 시 이벤트 수신 전에 조기 단언문 실패 발생.
-   * `finally` 블록의 부재로 인해 단언문 실패 시 백그라운드 `StreamTelemetry` 태스크와 채널 리더가 정상 회수되지 않고 잔존.
-   * `MockAsyncStreamReader.Complete()`가 `ChannelWriter.Complete()`를 호출하여 중복 완료 시 `ChannelClosedException` 유발.
-2. **무필터 테스트 실행 시 실제 클라우드 AI 벤치마크 트리거**:
-   * 프로젝트 규약상 기본 단위 테스트는 `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"` (2.8초 소요).
-   * 필터 생략 시 `Category=Live`에 속한 `TestLive_MultiScenario_AverageTurnAndLatencyBenchmark`가 실행됨.
-   * 해당 테스트는 실제 Google Cloud Vertex AI / Gemini 3.7 Flash와 10대 복합 위협 시나리오에 대해 멀티턴 ReAct 통신을 수행하며, RPM 버퍼링(시나리오당 1.5초)을 포함하여 2~3분이 소요되는 대규모 엔드투엔드 AI 벤치마크임.
-   * xUnit 기본 콘솔 출력 정책으로 인해 중간 진행 상황이 보이지 않아 무한 대기/프리징으로 오인됨.
-
-### 3. 해결책 (Resolution)
-1. **`FullChainSystemTests.cs` 동시성 및 진단 내구성 강화**:
-   * `[Fact(Timeout = 10000)]` 10초 타임아웃 속성 부여.
-   * 500ms 하드코딩 루프를 `WaitForConditionAsync` (최대 5초 적응형 폴링 및 실패 컨텍스트 출력)로 교체.
-   * `try ... finally` 블록을 구성하여 `req1.Complete()`, `req2.Complete()`, `cts.Cancel()`, `await Task.WhenAll(task1, task2)`를 통해 모든 백그라운드 태스크의 완벽한 생명주기 회수 보장.
-   * `MockAsyncStreamReader<T>.Complete()`를 멱등한 `ChannelWriter.TryComplete()`로 수정하여 중복 채널 닫힘 예외 방지.
-   * 단계별(1~5단계) 상세 진단 로깅(`_output.WriteLine`) 탑재.
-2. **`AutonomousHunterAgentTests.cs` Live 테스트 방어 및 가시성 개선**:
-   * `agent.IsOnlineGemini`를 검증하여 로컬 인증 정보 부재 시 안전하게 건너뛰도록 방어 가드 장착.
-   * `[Fact(Timeout = 300000)]` 5분 타임아웃 부여 및 각 시나리오별 실시간 진행 상황 및 예외 출력(`try-catch`).
-   * 수사 결과 상세 내역(Trace, Thought, Verdict)을 Assertion 전에 선제 출력하도록 순서 재정렬.
-3. **규약 표준화 및 테스트 가이드 문서화**:
-   * `[`.agents/AGENTS.md`](../../../Phalanx/.agents/AGENTS.md)` 및 `[`Phalanx/README.md`](../../../Phalanx/README.md)`에 Fast QA 단위 테스트 커맨드(`--filter "Category=Unit"`, 2.8s)와 Live 클라우드 벤치마크 커맨드(`--filter "Category=Live" --logger "console;verbosity=normal"`)를 공식 분리 명시.
-4. **검증**:
-   * `dotnet build Phalanx.sln -c Release` ➔ Exit Code 0 (경고 0, 오류 0).
-   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 총 46개 단위 테스트 전원 통과 (2.8초 소요, Exit Code 0).
-   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build` ➔ 총 51개 전체 테스트(Live 벤치마크 포함) 전원 통과 (Exit Code 0).
-
----
-
-## 2026-09-30: [Resolved] 관제 콘솔 수동 프로세스 제어(동결/해제/사살) 시 하단 글로벌 텔레메트리 카운터 미갱신 및 ETW 사살 배지 덮어쓰기 결함
-
-### 1. 현상 (Symptom)
-* Phalanx Cockpit 프로세스 트리 뷰에서 관제사가 [원자적 동결], [동결 해제], [프로세스 사살] 버튼을 수동 클릭하여 조치하더라도 하단 글로벌 상태 표시줄의 `FROZEN`, `RESTORED`, `TERMINATED`, `MONITORED` 카운터가 전혀 갱신되지 않고 0으로 고정되는 현상.
-* 관제사 또는 자율 AI 수사관에 의해 현장 사살(`IsTerminated == true`, `[현장 사살]`)된 프로세스가 OS 상에서 완전히 소멸될 때 커널 ETW로부터 `LifecycleStop` 이벤트가 도착하면 `targetNode.UpdateStatus(LifecycleStop)`에 의해 `[현장 사살]` 배지가 `[정상 종료]`로 다운그레이드 덮어쓰기되는 레이스 컨디션 발생.
-
-### 2. 원인 (Root Cause)
-1. `MainViewModel.cs`의 `SuspendSelectedProcessAsync`, `ResumeSelectedProcessAsync`, `TerminateSelectedProcessAsync` 커맨드 내부에서 `SelectedProcessNode.UpdateStatus`만 호출하고 `ActiveSuspendedCount`, `TotalRestoredCount`, `TotalTerminatedCount`, `MonitoredProcessCount` 속성을 증감하는 로직이 완전히 누락되어 있었음.
-2. `ProcessTreeProjectionManager.HandleStop`에서 노드의 기존 사살 여부(`IsTerminated`)를 확인하지 않고 무조건 `UpdateStatus(LifecycleStop)`를 호출하여 사살 표식이 유실됨.
-
-### 3. 해결책 (Resolution)
-1. **`MainViewModel.cs` 수동 조치 커맨드 3종 카운터 실시간 동기화**:
-   * 비동기 gRPC 통신 대기 중 사용자 노드 선택 변경에 의한 타깃 역전 방지를 위해 메서드 진입 시 `var node = SelectedProcessNode;` 로컬 캡처 및 `!node.IsAlive` 사망 가드 완비.
-   * `SuspendSelectedProcessAsync`: `!wasSuspended` 시 `ActiveSuspendedCount++`.
-   * `ResumeSelectedProcessAsync`: `wasSuspended` 시 `ActiveSuspendedCount--` (0 하한 가드) 및 `TotalRestoredCount++`.
-   * `TerminateSelectedProcessAsync`: `wasSuspended` 시 `ActiveSuspendedCount--`, `TotalTerminatedCount++`, `MonitoredProcessCount--` (0 하한 가드), `HideTerminatedProcesses` 토글 시 `_treeManager.RebuildVisibleNodes()` 연동.
-2. **`ProcessTreeProjectionManager.cs` 사살 배지 불변성 보장**:
-   * `HandleStop` 내 UI Dispatcher 블록에서 `bool wasTerminated = targetNode.IsTerminated;` 검사를 수행하고 `!wasTerminated` 조건부로만 `UpdateStatus(LifecycleStop)`를 호출하여 `[현장 사살]` 배지 보존.
-3. **회귀 검증**:
-   * `ProcessTreeProjectionTests.TestMainViewModel_ManualActuation_SuspendResumeTerminateCommands`를 전면 보강하여 동결 ➔ 해제 ➔ 재동결 ➔ 동결 중 직접 사살(콤보) ➔ 사망 노드 조작 차단 ➔ ETW `LifecycleStop` 수신 시 사살 배지 보존까지 전 시나리오 단위 테스트 구축.
-   * `dotnet build Phalanx.sln -c Release` ➔ Exit Code 0 (경고 0, 오류 0).
-   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 46개 단위 테스트 전원 통과 (Exit Code 0).
-
----
-
-## 2026-09-30: [Resolved] 단일 프로세스 반복 동결/해제 시 RESTORED 카운터 무한 증가 결함 및 엔터프라이즈 Gauge 모델 전면 통일
-
-### 1. 현상 (Symptom)
-* 단일 프로세스에 대해 관제사가 [원자적 동결]과 [동결 해제]를 반복 클릭할 때마다 `RESTORED` 카운터가 무한히 증가(`1 -> 2 -> 3... -> 10`)하는 현상 발생.
-* 이는 CrowdStrike Falcon, SentinelOne, Defender XDR 등 엔터프라이즈 EDR의 상황 인식(Situational Awareness) 상태 표시줄 표준인 Gauge(현재 활성 상태 유지 수) 방식과 불일치하여 관제사에게 혼선을 유발함.
-
-### 2. 원인 (Root Cause)
-1. `TotalRestoredCount`가 단순 누적 액션 카운터(`++`)로만 동작하여, 프로세스가 다시 동결되거나 사살되거나 OS 상에서 자연 종료되더라도 복원 수치가 회수되지 않고 무한 누적됨.
-2. `ProcessNodeModel`에 현재 복원 상태인지 여부를 나타내는 상태 플래그(`IsRestored`)가 부재하였음.
-3. `ProcessTreeProjectionManager.HandleStop`에서 상태 리셋 전 사전 플래그(`wasRestored`, `wasSuspended`) 캡처 및 UI 스레드 마샬링 파이프라인이 부재하여 자연 종료 시 카운터 차감이 누락됨.
-
-### 3. 해결책 (Resolution)
-1. **`ProcessNodeModel.cs` 상태 플래그 확장**:
-   * `[ObservableProperty] private bool _isRestored;` 추가 및 동결/사살/종료 시 리셋.
-2. **`ProcessTreeProjectionManager.cs` 이벤트 시그니처 및 사전 캡처 확장**:
-   * `OnProcessStopped`를 `Action<ProcessNodeModel, bool, bool>` (`node, wasSuspended, wasRestored`)로 확장하고, `HandleStop`에서 UI Dispatcher 진입 전 원자적으로 플래그를 캡처하여 전달.
-3. **`MainViewModel.cs` Gauge 라이프사이클 및 안전 마샬링 완비**:
-   * `ActiveRestoredCount`를 신설하고 `TotalRestoredCount` 양방향 호환 브리지를 제공하여 CS0200 에러 및 XAML 하위 호환성 100% 보장.
-   * `HandleProcessStopped`에서 `Application.Current?.Dispatcher` 안전 마샬링 및 Headless 환경 분기를 구성하여, 프로세스 자연 종료 시 `ActiveRestoredCount--`, `ActiveSuspendedCount--`, `MonitoredProcessCount` 동기화 보장.
-   * `SuspendSelectedProcessAsync`: 복원 상태 노드 재동결 시 `ActiveRestoredCount--` 회수 및 `ActiveSuspendedCount++`.
-   * `ResumeSelectedProcessAsync`: 동결 노드 해제 시 `ActiveSuspendedCount--`, `ActiveRestoredCount++`, `node.IsRestored = true`.
-   * `TerminateSelectedProcessAsync`: 복원/동결 상태 노드 사살 시 각 Gauge 회수, `TotalTerminatedCount++`, `MonitoredProcessCount--`.
-   * AI Hunter 수사 라이프사이클(`OnInvestigationStarted`, `OnInvestigationCompleted`) 내 `FindNodeByPid` 역참조 및 `ActiveRestoredCount` 동기화.
-   * `LoadIncidentsFromDatabase`: Gauge 모델 원칙에 따라 과거 DB 수치 덮어쓰기 배제.
-4. **`MainWindow.xaml` 바인딩 정규화**:
-   * 하단 RESTORED 텍스트 바인딩을 `ActiveRestoredCount`로 정규화.
-5. **회귀 검증**:
-   * `ProcessTreeProjectionTests.cs` 단위 테스트에 3회 추가 동결/해제 루프(`RESTORED: 1` 상한 유지, 무한 증가 차단), 복원 상태 자연 종료 회수, 동결 중 사살 회수 검증을 추가하여 46개 단위 테스트 전원 통과 (Exit Code 0).
-
----
-
-## 2026-09-30: [Resolved] AI 자율 수사 진행 중 시각적 정체감 해소 및 실시간 ReAct 턴 스트리밍 생동감 UX 파이프라인 구축
-
-### 1. 현상 (Symptom)
-* C++ 커널 센서가 선제 동결한 회색지대 프로세스를 AI 헌터(`AutonomousHunterAgent`)가 수사하는 동안(3초~36초), 관제 UI 상의 사건 카드가 단일 정적 텍스트로 고정되어 에이전트의 작동 여부를 체감하기 어려움.
-* 심층 포렌식 수사 기록(ReAct 추론 단계별 Thought, Action, Observation)이 수사가 모두 종료된 후에야 일괄 갱신되어, 관제사가 수사관의 실시간 추론 과정을 지켜볼 수 없는 정체된 UX 발생.
-
-### 2. 원인 (Root Cause)
-1. `AutonomousHunterAgent` 내에서 각 도구 호출(`IInvestigationTool.ExecuteAsync`) 및 판결 추론 시점에 외부로 진행 상태를 통지하는 실시간 이벤트 파이프라인이 부재하여, 오직 수사 종결 시점의 `OnInvestigationCompleted` 이벤트에만 의존함.
-2. `CockpitUiBridge` 및 `MainViewModel`에 개별 ReAct 턴 단위의 UI 스레드 안전 마샬링 및 수사 경과시간 타이머가 구현되어 있지 않았음.
-3. `IncidentItemViewModel` 및 XAML 뷰템플릿(`IncidentsView.xaml`, `InvestigationView.xaml`)에 수사 진행 중 상태(`IsInvestigating`), 실시간 진행 텍스트, 펄스 애니메이션, 아코디언 양방향 펼침 제어(`IsExpanded`)가 결여되어 있었음.
-
-### 3. 해결책 (Resolution)
-1. **`AutonomousHunterAgent.cs` 실시간 턴 이벤트 신설**:
-   * `public event Action<string, ReActTraceRecord>? OnReActStepProgress;` 추가.
-   * 온라인 Gemini ReAct 루프(최종 판결, 각 도구 완료, 최대 루프 소진 Fail-Secure 스텝, 방화벽 후속 조치) 및 오프라인 결정론적 추론 5개 단계 전역에서 턴 완료 시 즉시 이벤트 발생.
-2. **`CockpitUiBridge.cs` UI 안전 마샬링**:
-   * `ReActStepCompleted` 이벤트 및 `NotifyReActStepCompleted` 구현 (UI 스레드 안전 Dispatcher 마샬링 및 Headless null 가드 적용).
-3. **`Program.cs` 이벤트 배선**:
-   * `agent.OnReActStepProgress` ➔ `uiBridge.NotifyReActStepCompleted` 연결.
-4. **뷰모델 상태 전이 및 100ms 경과 타이머 구현**:
-   * `ReActStepViewModel`: `[ObservableProperty] private bool _isExpanded;` 추가.
-   * `IncidentItemViewModel`: `_investigationProgressText`, `_isInvestigating`, `_activeElapsedSeconds` 프로퍼티 추가 및 `[NotifyPropertyChangedFor(nameof(FormattedLatency))]` 어트리뷰트 적용으로 타이머 틱 시 실시간 지연시간 UI 갱신 보장.
-   * `MainViewModel`:
-     * `OnInvestigationStarted`: `IsInvestigating = true`, 100ms 간격 `DispatcherTimer` 가동 (`Application.Current == null` 가드 포함).
-     * `OnReActStepCompleted`: 이전 턴 자동 접힘, 신규 턴 `IsExpanded = true` 생성 및 증식, `InvestigationProgressText = "Turn N • [ActionTool] 완료"` 갱신.
-     * `OnInvestigationCompleted`: `IsInvestigating = false`, 다중 수사 안전 가드 타이머 정지, `Traces.Clear()`를 지양하고 누락분만 보충 동기화하여 아코디언 펼침 상태 보존.
-5. **WPF XAML 3계층 생동감 UI 고도화**:
-   * `IncidentsView.xaml`: 사건 카드 좌측 점에 `IsInvestigating=True` 시 부드러운 Glow 호흡 펄스(Opacity 0.35 ↔ 1.0, 0.8초 주기, `AutoReverse="True"`) 적용. Line 2 TextBlock에서 태그 내 로컬 하드코딩 속성을 제거하고 `Style.Setters` 및 `DataTrigger`로 완전 위임하여 의존성 프로퍼티 우선순위 충돌 방지.
-   * `InvestigationView.xaml`: ReAct 아코디언 `<Expander>`를 `IsExpanded="{Binding IsExpanded, Mode=TwoWay}"`로 양방향 바인딩하여 턴 증식 시 최신 턴 자동 펼침 지원.
-6. **회귀 및 수명주기 검증**:
-   * `ProcessTreeProjectionTests.cs`에 `TestInvestigation_RealtimeProgressAndTraceStreaming_Lifecycle` 단위 테스트 추가: 수사 개시 ➔ 100ms 지연시간 통지 ➔ Turn 1 스트리밍 및 자동 펼침 ➔ Turn 2 스트리밍(Turn 1 자동 접힘 및 Turn 2 자동 펼침) ➔ 수사 완료 후 아코디언 상태 보존 전 과정 검증.
-   * `dotnet build Phalanx.sln -c Release -m:1` ➔ Exit Code 0 (경고 0, 오류 0).
-   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 47개 단위 테스트 전원 통과 (Exit Code 0, 908ms).
 
 ---
 
@@ -630,11 +398,7 @@ related:
    * `ApplyFilter()` 시작 시 `var previousSelected = SelectedIncident;`로 원자적 스냅샷을 캡처하고, 필터링 루프 완료 후 `if (previousSelected != null && FilteredIncidents.Contains(previousSelected)) { SelectedIncident = previousSelected; }`를 통해 ListBox 초기화로 인한 null 코어션을 원천 차단.
    * `OnInvestigationCompleted` 종료 시 `ApplyFilter()` 직후 `SelectedIncident = existing; OnPropertyChanged(nameof(SelectedIncident));`를 명시적으로 실행하여 수사가 완료된 사건의 상세 포렌식 데이터가 심층수사실에 100% 온전히 유지되도록 보장.
 2. **`ReActStepViewModel.cs` 최종 판결 엔터프라이즈 용어 정규화**:
-   * `FormattedStep`에서 `string.Equals(ActionTool, "None", StringComparison.OrdinalIgnoreCase)` 분기를 적용하여, 최종 턴일 경우 날것의 `NONE` 대신 `PHASE {02} : FINAL VERDICT`로 품격 있게 렌더링되도록 개선.
-3. **회귀 및 수명주기 검증**:
-   * `ProcessTreeProjectionTests.cs` 내 `TestInvestigation_RealtimeProgressAndTraceStreaming_Lifecycle`에 "None" 턴의 `FINAL VERDICT` 표기 검증 및 수사 완료 후 `SelectedIncident` 인스턴스 동일성 보존(`Assert.Same(incident, vm.SelectedIncident)`) 검증 추가.
-   * `dotnet build Phalanx.sln -c Release -m:1` ➔ Exit Code 0 (경고 0, 오류 0).
-   * `dotnet test tests/Phalanx.Agent.Tests/ -c Release --no-build --filter "Category=Unit"` ➔ 47개 단위 테스트 전원 통과 (Exit Code 0, 916ms).
+   * `FormattedStep`에서 `string.Equals(ActionTool, "None", StringComparison.OrdinalIgnoreCase)` 분기를 적용하여, 최종 턴일 경우 날것의 `NONE` 대신 `PHASE {02} : FINAL VERDICT`로 렌더링.
 
 ---
 
@@ -665,161 +429,9 @@ related:
      QuestPDF.Settings.ThrowOnMissingFontFamilies = false;
      ```
    * Windows 환경에서는 `Segoe UI` 및 `Malgun Gothic`을 실시간 로드하며, 폰트가 부재한 컨테이너/리눅스 환경에서도 번들 폰트(`Lato`)로 무중단/무예외 렌더링되도록 방어.
-2. **`ForensicPdfReportDocument.cs` API 현대화 및 5대 섹션 구성**:
-   * `.WrapAnywhere()`를 최신 API 규격인 `.BreakAnywhere()`로 전면 교체하여 0 경고(`warning 0개`) 달성.
-   * 5대 핵심 섹션 선언형 구현:
-     - Header: 시스템 브랜딩, 기밀 표기, 발급 메타데이터.
-     - Section 1: 처분 배너 뱃지(`ACTION_KILL`/`ACTION_RESUME`/`SUSPENDED`), AI 확신도, 수사 소요 지연시간.
-     - Section 2: 타깃/부모 프로세스 계통, 차단된 C2 IP, 다크 모노스페이스 명령줄(`Consolas`).
-     - Section 3: AI 자율 수사관 심층 서사(`Narrative`), MITRE ATT&CK 전술 뱃지.
-     - Section 4: ReAct 턴별 감사 추적표(Turn #, Action Tool, Thought, Observation, Latency ms).
-     - Section 5: 침해 대응 런북(`RemediationSteps`), 디지털 무결성 서명 푸터 및 동적 페이지 번호.
+2. **`ForensicPdfReportDocument.cs` API 현대화**:
+   * `.WrapAnywhere()`를 최신 API 규격인 `.BreakAnywhere()`로 전면 교체.
 3. **`MainViewModel.cs` 로컬 스냅샷 캡처 및 UI 디커플링**:
    * `ExportForensicPdfAsync` 진입 즉시 `var incident = SelectedIncident;` 로컬 스냅샷을 캡처하여 비동기 파일 저장 도중 발생할 수 있는 참조 경합 원천 차단.
    * `CanExportForensicPdf` 가드(`SelectedIncident != null && !SelectedIncident.IsInvestigating`) 장착 및 `OnSelectedIncidentChanged`, `OnInvestigationCompleted` 시점에 `NotifyCanExecuteChanged()` 연동.
    * `IForensicReportGenerator` 인터페이스 분리 및 DI 싱글톤 등록.
-4. **회귀 및 고속 단위 검증**:
-   * `ForensicPdfReportGeneratorTests.cs` 단위 테스트 4종 신설 (`Category=Unit`, 195ms):
-     - `GenerateReportBytes_WithCriticalKillIncident_ReturnsValidPdfBytes` (`%PDF-` 매직 바이트 검증).
-     - `GenerateReportBytes_WithBenignResumeIncident_ReturnsValidPdfBytes` (정상 복구 렌더링).
-     - `ExportReportToFile_WritesPdfToSpecifiedDirectory` (파일명 살균 및 디스크 출력).
-     - `GenerateReportBytes_WithEmptyTracesAndLongCommandLine_DoesNotThrow` (5,000자 초장문 커맨드라인 무예외).
-   * 솔루션 전체 빌드: `dotnet build Phalanx.sln` ➔ Exit Code 0 (경고 0개, 오류 0개).
-   * 고속 단위 테스트: `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"` ➔ 84개 전원 통과 (Exit Code 0, 1초).
-
----
-
-## 2026-10-01: [Resolved] AI 수사 및 사살 후 프로세스 트리 인스펙터 상태 고착 및 버튼 활성화 결함
-
-### 1. 현상 (Symptom)
-* AI 수사가 진행 중일 때 프로세스 트리 화면으로 이동하여 해당 프로세스 노드를 선택한 경우:
-  1. 이후 백그라운드에서 AI 수사가 완료되어 프로세스가 현장 사살(`ACTION_KILL`)되었음에도, 인스펙터 패널(선택된 프로세스 정보)의 상태 배지가 `[원자적 동결 (수사 중)]`에서 변경되지 않고 고착됨.
-  2. 이미 사살된 프로세스임에도 `[동결 해제 (Resume)]` 및 `[프로세스 사살 (Kill)]` 버튼이 계속 활성화되어 있어 관제사가 중복 사살이나 불가능한 동결 해제를 클릭할 수 있는 문제 발생.
-  3. AI 수사가 진행 중인 동안에도 수동 동결/해제/사살 버튼이 활성화되어 있어 수사 도중 관제사의 개입으로 인한 경쟁 상태(Race Condition) 위험 존재.
-
-### 2. 원인 (Root Cause)
-1. **`HandleInvestigationCompleted`의 프로세스 노드 라이프사이클 갱신 누락**:
-   * 수사 완료 시 `targetNode.IsTerminated = true;`만 설정하고 `targetNode.IsAlive = false;`, `targetNode.IsSuspended = false;`, `targetNode.UpdateStatus(...)`를 호출하지 않음.
-   * `targetNode.IsAlive`가 `true`이고 `targetNode.IsSuspended`가 `true`로 남아있어, XAML의 `DataTrigger`에 의해 `동결 해제` 및 `사살` 버튼이 활성화 상태로 유지됨.
-2. **`ProcessNodeModel`의 반응형 상태 배지 갱신 결여**:
-   * `StatusBadge`가 `UpdateStatus()` 함수 내에서만 수동 대입되었으며, 속성 변경(`IsTerminated`, `IsSuspended`, `IsInvestigating`, `IsAlive` 등)에 대한 자동 갱신 트리거가 부재하여 UI 텍스트가 이전 값에 머무름.
-3. **수사 진행 중(`IsInvestigating`) 프로세스에 대한 가드 부재**:
-   * 수사 중인 노드에 대한 인스펙터 버튼 비활성화 트리거 및 뷰모델 커맨드 가드가 결여되어 있었음.
-
-### 3. 해결책 (Resolution)
-1. **`ProcessNodeModel.cs` 반응형 상태 엔진 구축**:
-   * `[ObservableProperty] private bool _isInvestigating;` 추가.
-   * `RefreshStatusBadge()` 메서드 구축 및 각 속성 변경 partial 메서드(`OnIsAliveChanged`, `OnIsSuspendedChanged`, `OnIsTerminatedChanged`, `OnIsInvestigatingChanged` 등)에서 자동 호출 연동.
-   * 사살 시 `IsAlive = false`, `IsSuspended = false`, `IsInvestigating = false`, `StatusBadge = "[현장 사살]"`.
-   * 수사 중 동결 시 `[원자적 동결 (수사 중)]`, 수사 취소 등 수동 대기 시 `[원자적 동결 (수동 대기)]`, 복원 시 `[실시간 가동 중]`으로 완벽히 동기화.
-2. **`MainViewModel.cs` 수사 시작/완료/수동 조치 라이프사이클 동기화 및 가드**:
-   * `OnInvestigationStarted`: `targetNode.IsInvestigating = true;`, `targetNode.IsSuspended = true;`, `RefreshStatusBadge();`.
-   * `HandleInvestigationCompleted`:
-     - 사살(`isKill`): `targetNode.IsInvestigating = false;`, `targetNode.IsAlive = false;`, `targetNode.IsSuspended = false;`, `targetNode.IsTerminated = true;`, `UpdateStatus(LifecycleTerminated, false, true);`.
-     - 복구(`else`): `targetNode.IsInvestigating = false;`, `targetNode.IsAlive = true;`, `targetNode.IsSuspended = false;`, `targetNode.IsRestored = true;`, `UpdateStatus(LifecycleStart, false, false);`.
-     - 취소 동결 유지(`isSuspend`): `targetNode.IsInvestigating = false;`, `targetNode.IsSuspended = true;`, `RefreshStatusBadge();`.
-   * 수동 제어 커맨드(`SuspendSelectedProcessAsync`, `ResumeSelectedProcessAsync`, `TerminateSelectedProcessAsync`)에 `IsInvestigating`, `!IsAlive`, 중복 상태 가드 장착.
-3. **`ProcessGraphView.xaml` 인스펙터 버튼 스타일 및 상태 배지 트리거 강화**:
-   * `SelectedProcessNode.IsInvestigating == True`일 때 3개 버튼 모두 비활성화 및 안내 툴팁(`"AI 심층 수사가 진행 중입니다. (수사 완료 또는 취소 후 수동 제어 가능)"`) 표시.
-   * `SelectedProcessNode.IsAlive == False` 또는 `IsTerminated == True`일 때 모든 버튼 비활성화 및 동결 해제 버튼 숨김 처리.
-   * 상태 배지에 사살(Critical Red), 동결(Suspended Amber), 정상(Benign Green) 시맨틱 컬러 트리거 적용.
-4. **회귀 검증 및 단위 테스트**:
-   * `MainViewModelCancellationTests.cs`에 단위 테스트 2종 신설:
-     - `TestInvestigationCompleted_WhenTerminated_UpdatesProcessNodeToTerminatedAndDisablesButtons`: 사살 전이 시 상태 배지 `[현장 사살]` 및 버튼 차단 검증.
-     - `TestInvestigationCompleted_WhenResumed_UpdatesProcessNodeToRestoredAndEnablesSuspend`: 정상 복구 시 상태 배지 `[실시간 가동 중]` 및 동결 활성화 검증.
-   * 단위 테스트 전체 94개 100% 통과 (Exit Code 0, 1.0s).
-
----
-
-## 2026-10-01: [Resolved] 심층 수사실 열람 중 신규 위협 인입 시 화면 강제 전환(포커스 가로채기) 결함
-
-### 1. 현상 (Symptom)
-* 관제사가 심층 수사실(`InvestigationView`)에서 특정 침해사고의 포렌식 서사 및 턴별 로그를 열람하고 있는 도중, 새로운 공격/위협 프로세스가 인입되면 관제사의 의도와 무관하게 화면의 내용이 신규 위협으로 즉시 강제 전환되는 현상 발생.
-* 관제사가 사건 A를 열람하는 동안 백그라운드에서 진행 중이던 다른 사건 B의 AI 수사가 완료되면, 화면이 다시 완료된 사건 B로 강제 교체되는 문제 발생.
-
-### 2. 원인 (Root Cause)
-1. **`OnInvestigationStarted`의 무조건적 `SelectedIncident` 재할당**:
-   * 신규 수사 시작 시 관제사의 현재 뷰 상태(`CurrentView`)나 기존 선택 여부를 확인하지 않고 무조건 `SelectedIncident = item;`을 대입함.
-2. **`HandleInvestigationCompleted`의 무조건적 `SelectedIncident` 덮어쓰기**:
-   * 백그라운드 수사 완료 시 완료된 사건(`existing`)으로 무조건 `SelectedIncident = existing;`을 대입하여 현재 열람 중이던 사건을 덮어씀.
-
-### 3. 해결책 (Resolution)
-1. **`MainViewModel.cs` 심층 수사실 연속성 보호 조건 장착**:
-   * `OnInvestigationStarted`: 관제사가 심층 수사실을 열람 중(`CurrentView == CockpitViewType.Investigation`)이고 이미 사건을 선택 중인 경우 `SelectedIncident`를 유지하도록 방어 (`if (CurrentView != CockpitViewType.Investigation || SelectedIncident == null) SelectedIncident = item;`).
-   * `HandleInvestigationCompleted`: 관제사가 현재 보고 있는 사건(`SelectedIncident.IncidentId == existing.IncidentId`)이거나 선택된 사건이 없을 때만 `SelectedIncident = existing;`으로 갱신하고, 다른 사건 열람 시에는 백그라운드 데이터만 갱신.
-2. **회귀 및 불변식 검증 단위 테스트**:
-   * `MainViewModelCancellationTests.cs`에 단위 테스트 2종 추가:
-     - `TestInvestigationStarted_WhenBrowsingInvestigationView_PreservesCurrentSelectedIncident`: 심층 수사실 열람 중 신규 위협 인입 시 기존 사건 선택 보존 검증.
-     - `TestInvestigationCompleted_WhenBrowsingDifferentIncident_PreservesCurrentSelectedIncident`: 타 사건 수사 완료 알림 인입 시 현재 열람 화면 보존 및 타 사건 백그라운드 상태 갱신 검증.
-   * 고속 단위 테스트 96개 전원 통과 (Exit Code 0, 1.0s).
-
----
-
-## 2026-10-01: [Resolved] Phalanx v1.0 정식 릴리스 대비 코드베이스 정밀 다이어트 및 무손실 최적화
-
-### 1. 현상 및 개선 배경 (Symptom & Background)
-* v1.0 정식 릴리스를 앞두고 전수 코드 감사 결과, 개발 단계의 잔재 코드 및 자원 비효율 발견:
-  1. `AttackSimulator`에서 전체 시나리오 실행(번호 8)과 단독 시나리오 8번("Developer Toolchain Loopback IPC")의 번호 충돌로 인해 시나리오 8번 단독 실행이 가로채지는 버그 존재.
-  2. `ProcessTreeProjectionManager.AllNodes`가 XAML에 바인딩되지 않는 내부 뷰임에도 `ObservableCollection`으로 유지되며 매 델타마다 UI 스레드 디스패치 및 WPF 동기화 락 경합 발생.
-  3. `MainViewModel`의 상시 `DispatcherTimer`(`_investigationTimer`)가 100ms 주기로 상시 틱을 발생시켜 UI 렌더링 스레드 부하 유발.
-  4. `AttackLabScenarioRunner`의 `finally` 클린업 블록에서 `RegistryInspectionTool.ClearSimulatedKeys()` 호출이 누락되어 시뮬레이션 레지스트리 키가 누수될 위험 존재.
-  5. UI 및 PDF 리포트에서 `v0.5.0-preview` 레거시 버전 문자열 잔존.
-  6. 미사용 프로퍼티, 미구독 이벤트, 콘솔 장식용 이모지 등 Dead Code 및 헌법 위반 잔재 존재.
-
-### 2. 원인 (Root Cause)
-* Phase 2~4 고속 기능 프로토타이핑 과정에서 작성된 하위 호환 오버로드 및 임시 이벤트가 정식 릴리스 전 정리되지 못함.
-* `AllNodes` 컬렉션이 과거 WPF 바인딩 용도로 설계되었으나 Phase 4 가상화(`VisibleNodes`) 도입 이후 XAML 바인딩이 해제되었음에도 불필요한 UI 동기화 루틴이 방치됨.
-
-### 3. 해결책 (Resolution)
-1. **`AttackSimulator` 시나리오 8번 충돌 해결 및 `--all` 분리**:
-   * 전체 순차 실행 번호를 `99`번 및 `--all` CLI 플래그로 분리하고, 8번 시나리오 단독 실행 복원.
-   * `run_attack_simulator.ps1`에 `-All` 스위치 지원 추가 및 주석 동기화.
-2. **`ProcessTreeProjectionManager` CQRS 무손실 최적화**:
-   * `AllNodes`를 `ObservableCollection`에서 `ICollection<ProcessNodeModel> AllNodes => _nodesByGuid.Values;` Zero-Allocation 읽기 전용 뷰로 전환.
-   * UI 디스패치(`AllNodes.Add`) 및 `BindingOperations.EnableCollectionSynchronization` 등록 완전 제거하여 UI 스레드 경합 100% 해소. (단위 테스트 100% 호환 보존)
-   * 미구독 이벤트 3종(`OnProcessSuspended`, `OnProcessTerminated`, `OnProcessStarted`) 및 Invoke 호출 5곳 삭제.
-3. **`MainViewModel` UI 타이머 주기 완화 및 Dead Code 제거**:
-   * `_investigationTimer` 주기를 100ms에서 250ms로 완화하여 UI 인터럽트 60% 절감.
-   * 미사용 필드 `_processSearchQuery`, 프로퍼티 `RootProcesses`, 릴레이 커맨드 `CloseInspector` 안전 삭제.
-4. **`AttackLabScenarioRunner` 누수 방지 및 레거시 정리**:
-   * `finally` 블록에 `RegistryInspectionTool.ClearSimulatedKeys();` 추가하여 안전 클린업 완결.
-   * 5번 시나리오 하드코딩 허위 진단 로그 및 미사용 하위 호환 오버로드 2종 삭제.
-5. **버전 정규화 및 장식용 이모지 제거**:
-   * `ForensicPdfReportDocument`, `SettingsViewModel`, `SettingsViewModelTests`를 `v1.0.0`으로 정규화.
-   * 프로덕션 콘솔 로그의 모든 장식용 유니코드 이모지를 표준 대괄호 태그(`[gRPC Server]`, `[SUSPEND]`, `[ERROR]`, `[COMMAND]` 등)로 교체 (Zero Decorative Emojis 헌법 충족).
-6. **Ground Truth 검증**:
-   * 솔루션 전체 빌드(Exit Code 0), 96개 단위 테스트 100% PASS(1.0s, 0 failed), AttackSimulator CLI 빌드(Exit Code 0) 완료.
-
----
-
-## 2026-10-01: [Resolved] Phalanx v1.0 아키텍처 우아성 확보 및 3대 핵심 품질 개선 리팩토링
-
-### 1. 현상 및 배경 (Symptom & Background)
-* 1차 리팩토링(76줄 감소) 이후, 실질적인 코드 일관성(SSOT)과 유지보수성(DRY)을 개선할 수 있는 핵심 구조를 재점검한 결과 3가지 구조적 중복 식별:
-  1. `AttackLabScenarioRunner.ExecuteCustomScenarioAsync`(175줄)가 `ExecuteScenarioAsync`(237줄)의 OS 프로세스 스폰, CQRS 주입, AI 에이전트 수사, Win32 프로세스 사살 집행, 결과 어설션 생성, finally 클린업 로직을 95% 이상 그대로 복제하여 유지보수 시 버그 수정 누락 위험 존재.
-  2. `MainViewModel.cs`의 `Scenarios` 컬렉션에 10대 시나리오 및 커스텀 스튜디오 데이터가 145줄에 걸쳐 하드코딩되어 있으며, `AttackScenarioRegistry.cs`의 도메인 시나리오 데이터와 2중 관리되는 SSOT(Single Source of Truth) 위반 발생.
-  3. `FileInspectionTool.cs`와 `ProcessMemoryScanTool.cs`에 17개의 사이드로딩 의심 DLL 해시셋(`KnownSideloadCandidateDlls`)이 100% 동일하게 2중 선언되어 있어 위협 인텔리전스 데이터 갱신 누락 위험 존재.
-
-### 2. 해결책 (Resolution)
-1. **`AttackLabScenarioRunner` DRY 실행 파이프라인 통합**:
-   * `ExecuteCustomScenarioAsync`의 150줄 복제 로직을 전면 제거하고, 커스텀 입력 파라미터를 기반으로 가상 `AttackScenario` 객체를 조립한 뒤 `ExecuteScenarioAsync(customSc, mode, cancellationToken)` 단일 진입점으로 위임 호출하도록 일원화.
-   * 복제 로직 완전 해소 및 향후 사살/수사 파이프라인 변경 시 단일 지점 수정 보장.
-2. **시나리오 메타데이터 SSOT 일원화 및 도메인 격리**:
-   * `AttackScenario` 도메인 모델에 프레젠테이션용 프로퍼티(`TargetProcess`, `ParentProcess`, `MitreTactic`, `CommandLine`) 4종을 추가하고, `AttackScenarioRegistry.AllScenarios` 각 인스턴스에 메타데이터를 완전 통합.
-   * **AttackSimulator 장애 방지**: 커스텀 스튜디오 99번 시나리오는 `AllScenarios`에 직접 포함하지 않고 `CustomStudioScenario` 정적 필드로 분리 선언하여, `AttackSimulator`의 전체 자동 실행(`RunAllScenariosAsync`)이 99번 더미 배치에 걸려 타임아웃되는 문제를 원천 차단.
-   * `MainViewModel.cs`: 중복 DTO인 `record AttackScenarioItem` 및 145줄 하드코딩 완전 삭제. `Scenarios` 컬렉션을 `new(AllScenarios) { CustomStudioScenario }`로 초기화하여 UI 표시(11개 항목)와 시뮬레이터 실행(1~10번)을 완벽 격리.
-   * `AttackLabWindow.xaml`: DataTemplate의 `DataType="{x:Type vm:AttackScenarioItem}"` 속성을 제거하여 `<DataTemplate>`으로 단순화, BAML 빌드 에러 방지 및 바인딩 100% 무손실 보존.
-3. **위협 인텔리전스 사이드로딩 의심 DLL 상수 단일화**:
-   * `FileInspectionTool.KnownSideloadCandidateDlls`를 `internal`로 전환하고, `ProcessMemoryScanTool.cs`의 중복 해시셋 선언을 삭제하여 공유 참조로 일원화.
-5. **테스트 스위트 정밀 다이어트 및 더미/중복 제거**:
-   * `IconGeneratorTests.cs` (107줄): EDR 기능 검증 코드가 없는 일회성 에셋 생성기 스크립트 삭제 (1개 제거).
-   * `ProcessTreeProjectionTests.cs` L706 (52줄): 상위 10대 시나리오 배치 테스트에 100% 포섭되는 구형 과도기적 중복 테스트 삭제 (1개 제거).
-   * `ToolInvocationTraceAuditingTests.cs` (308줄): 단편적 도구 호출 감사 중복 파일 삭제 (3개 제거).
-   * `CriticalEnterpriseAttackHarnessTests.cs` (536줄): Phase 1~3 프로토타입 하네스 삭제 및 정식 규격 `NeutralEnterpriseStressBenchmarkTests`로 단일화 (6개 제거).
-   * `AutonomousHunterAgentCancellationTests.cs`: 스레드 풀 스케줄링 레이스 컨디션 제거, 동기식 취소 트리거로 플래키 현상 원천 해소.
-   * 최종 테스트 결과: 고속 단위 테스트 85개 100% PASS(1.0s), 10대 벤치마크 11개 100% PASS(0.46s).
-   * 최종 코드 통계: `git diff --stat`: **19 files changed, 163 insertions(+), 1436 deletions(-)** (순수 1,273줄 영구 삭감).
-
-
-
-
