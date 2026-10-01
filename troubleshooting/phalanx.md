@@ -686,3 +686,46 @@ related:
      - `GenerateReportBytes_WithEmptyTracesAndLongCommandLine_DoesNotThrow` (5,000자 초장문 커맨드라인 무예외).
    * 솔루션 전체 빌드: `dotnet build Phalanx.sln` ➔ Exit Code 0 (경고 0개, 오류 0개).
    * 고속 단위 테스트: `dotnet test tests/Phalanx.Agent.Tests/ --filter "Category=Unit"` ➔ 84개 전원 통과 (Exit Code 0, 1초).
+
+---
+
+## 2026-10-01: [Resolved] AI 수사 및 사살 후 프로세스 트리 인스펙터 상태 고착 및 버튼 활성화 결함
+
+### 1. 현상 (Symptom)
+* AI 수사가 진행 중일 때 프로세스 트리 화면으로 이동하여 해당 프로세스 노드를 선택한 경우:
+  1. 이후 백그라운드에서 AI 수사가 완료되어 프로세스가 현장 사살(`ACTION_KILL`)되었음에도, 인스펙터 패널(선택된 프로세스 정보)의 상태 배지가 `[원자적 동결 (수사 중)]`에서 변경되지 않고 고착됨.
+  2. 이미 사살된 프로세스임에도 `[동결 해제 (Resume)]` 및 `[프로세스 사살 (Kill)]` 버튼이 계속 활성화되어 있어 관제사가 중복 사살이나 불가능한 동결 해제를 클릭할 수 있는 문제 발생.
+  3. AI 수사가 진행 중인 동안에도 수동 동결/해제/사살 버튼이 활성화되어 있어 수사 도중 관제사의 개입으로 인한 경쟁 상태(Race Condition) 위험 존재.
+
+### 2. 원인 (Root Cause)
+1. **`HandleInvestigationCompleted`의 프로세스 노드 라이프사이클 갱신 누락**:
+   * 수사 완료 시 `targetNode.IsTerminated = true;`만 설정하고 `targetNode.IsAlive = false;`, `targetNode.IsSuspended = false;`, `targetNode.UpdateStatus(...)`를 호출하지 않음.
+   * `targetNode.IsAlive`가 `true`이고 `targetNode.IsSuspended`가 `true`로 남아있어, XAML의 `DataTrigger`에 의해 `동결 해제` 및 `사살` 버튼이 활성화 상태로 유지됨.
+2. **`ProcessNodeModel`의 반응형 상태 배지 갱신 결여**:
+   * `StatusBadge`가 `UpdateStatus()` 함수 내에서만 수동 대입되었으며, 속성 변경(`IsTerminated`, `IsSuspended`, `IsInvestigating`, `IsAlive` 등)에 대한 자동 갱신 트리거가 부재하여 UI 텍스트가 이전 값에 머무름.
+3. **수사 진행 중(`IsInvestigating`) 프로세스에 대한 가드 부재**:
+   * 수사 중인 노드에 대한 인스펙터 버튼 비활성화 트리거 및 뷰모델 커맨드 가드가 결여되어 있었음.
+
+### 3. 해결책 (Resolution)
+1. **`ProcessNodeModel.cs` 반응형 상태 엔진 구축**:
+   * `[ObservableProperty] private bool _isInvestigating;` 추가.
+   * `RefreshStatusBadge()` 메서드 구축 및 각 속성 변경 partial 메서드(`OnIsAliveChanged`, `OnIsSuspendedChanged`, `OnIsTerminatedChanged`, `OnIsInvestigatingChanged` 등)에서 자동 호출 연동.
+   * 사살 시 `IsAlive = false`, `IsSuspended = false`, `IsInvestigating = false`, `StatusBadge = "[현장 사살]"`.
+   * 수사 중 동결 시 `[원자적 동결 (수사 중)]`, 수사 취소 등 수동 대기 시 `[원자적 동결 (수동 대기)]`, 복원 시 `[실시간 가동 중]`으로 완벽히 동기화.
+2. **`MainViewModel.cs` 수사 시작/완료/수동 조치 라이프사이클 동기화 및 가드**:
+   * `OnInvestigationStarted`: `targetNode.IsInvestigating = true;`, `targetNode.IsSuspended = true;`, `RefreshStatusBadge();`.
+   * `HandleInvestigationCompleted`:
+     - 사살(`isKill`): `targetNode.IsInvestigating = false;`, `targetNode.IsAlive = false;`, `targetNode.IsSuspended = false;`, `targetNode.IsTerminated = true;`, `UpdateStatus(LifecycleTerminated, false, true);`.
+     - 복구(`else`): `targetNode.IsInvestigating = false;`, `targetNode.IsAlive = true;`, `targetNode.IsSuspended = false;`, `targetNode.IsRestored = true;`, `UpdateStatus(LifecycleStart, false, false);`.
+     - 취소 동결 유지(`isSuspend`): `targetNode.IsInvestigating = false;`, `targetNode.IsSuspended = true;`, `RefreshStatusBadge();`.
+   * 수동 제어 커맨드(`SuspendSelectedProcessAsync`, `ResumeSelectedProcessAsync`, `TerminateSelectedProcessAsync`)에 `IsInvestigating`, `!IsAlive`, 중복 상태 가드 장착.
+3. **`ProcessGraphView.xaml` 인스펙터 버튼 스타일 및 상태 배지 트리거 강화**:
+   * `SelectedProcessNode.IsInvestigating == True`일 때 3개 버튼 모두 비활성화 및 안내 툴팁(`"AI 심층 수사가 진행 중입니다. (수사 완료 또는 취소 후 수동 제어 가능)"`) 표시.
+   * `SelectedProcessNode.IsAlive == False` 또는 `IsTerminated == True`일 때 모든 버튼 비활성화 및 동결 해제 버튼 숨김 처리.
+   * 상태 배지에 사살(Critical Red), 동결(Suspended Amber), 정상(Benign Green) 시맨틱 컬러 트리거 적용.
+4. **회귀 검증 및 단위 테스트**:
+   * `MainViewModelCancellationTests.cs`에 단위 테스트 2종 신설:
+     - `TestInvestigationCompleted_WhenTerminated_UpdatesProcessNodeToTerminatedAndDisablesButtons`: 사살 전이 시 상태 배지 `[현장 사살]` 및 버튼 차단 검증.
+     - `TestInvestigationCompleted_WhenResumed_UpdatesProcessNodeToRestoredAndEnablesSuspend`: 정상 복구 시 상태 배지 `[실시간 가동 중]` 및 동결 활성화 검증.
+   * 단위 테스트 전체 94개 100% 통과 (Exit Code 0, 1.0s).
+
