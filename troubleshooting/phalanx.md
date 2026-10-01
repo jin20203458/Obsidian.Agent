@@ -790,4 +790,36 @@ related:
 6. **Ground Truth 검증**:
    * 솔루션 전체 빌드(Exit Code 0), 96개 단위 테스트 100% PASS(1.0s, 0 failed), AttackSimulator CLI 빌드(Exit Code 0) 완료.
 
+---
+
+## 2026-10-01: [Resolved] Phalanx v1.0 아키텍처 우아성 확보 및 3대 핵심 품질 개선 리팩토링
+
+### 1. 현상 및 배경 (Symptom & Background)
+* 1차 리팩토링(76줄 감소) 이후, 실질적인 코드 일관성(SSOT)과 유지보수성(DRY)을 개선할 수 있는 핵심 구조를 재점검한 결과 3가지 구조적 중복 식별:
+  1. `AttackLabScenarioRunner.ExecuteCustomScenarioAsync`(175줄)가 `ExecuteScenarioAsync`(237줄)의 OS 프로세스 스폰, CQRS 주입, AI 에이전트 수사, Win32 프로세스 사살 집행, 결과 어설션 생성, finally 클린업 로직을 95% 이상 그대로 복제하여 유지보수 시 버그 수정 누락 위험 존재.
+  2. `MainViewModel.cs`의 `Scenarios` 컬렉션에 10대 시나리오 및 커스텀 스튜디오 데이터가 145줄에 걸쳐 하드코딩되어 있으며, `AttackScenarioRegistry.cs`의 도메인 시나리오 데이터와 2중 관리되는 SSOT(Single Source of Truth) 위반 발생.
+  3. `FileInspectionTool.cs`와 `ProcessMemoryScanTool.cs`에 17개의 사이드로딩 의심 DLL 해시셋(`KnownSideloadCandidateDlls`)이 100% 동일하게 2중 선언되어 있어 위협 인텔리전스 데이터 갱신 누락 위험 존재.
+
+### 2. 해결책 (Resolution)
+1. **`AttackLabScenarioRunner` DRY 실행 파이프라인 통합**:
+   * `ExecuteCustomScenarioAsync`의 150줄 복제 로직을 전면 제거하고, 커스텀 입력 파라미터를 기반으로 가상 `AttackScenario` 객체를 조립한 뒤 `ExecuteScenarioAsync(customSc, mode, cancellationToken)` 단일 진입점으로 위임 호출하도록 일원화.
+   * 복제 로직 완전 해소 및 향후 사살/수사 파이프라인 변경 시 단일 지점 수정 보장.
+2. **시나리오 메타데이터 SSOT 일원화 및 도메인 격리**:
+   * `AttackScenario` 도메인 모델에 프레젠테이션용 프로퍼티(`TargetProcess`, `ParentProcess`, `MitreTactic`, `CommandLine`) 4종을 추가하고, `AttackScenarioRegistry.AllScenarios` 각 인스턴스에 메타데이터를 완전 통합.
+   * **AttackSimulator 장애 방지**: 커스텀 스튜디오 99번 시나리오는 `AllScenarios`에 직접 포함하지 않고 `CustomStudioScenario` 정적 필드로 분리 선언하여, `AttackSimulator`의 전체 자동 실행(`RunAllScenariosAsync`)이 99번 더미 배치에 걸려 타임아웃되는 문제를 원천 차단.
+   * `MainViewModel.cs`: 중복 DTO인 `record AttackScenarioItem` 및 145줄 하드코딩 완전 삭제. `Scenarios` 컬렉션을 `new(AllScenarios) { CustomStudioScenario }`로 초기화하여 UI 표시(11개 항목)와 시뮬레이터 실행(1~10번)을 완벽 격리.
+   * `AttackLabWindow.xaml`: DataTemplate의 `DataType="{x:Type vm:AttackScenarioItem}"` 속성을 제거하여 `<DataTemplate>`으로 단순화, BAML 빌드 에러 방지 및 바인딩 100% 무손실 보존.
+3. **위협 인텔리전스 사이드로딩 의심 DLL 상수 단일화**:
+   * `FileInspectionTool.KnownSideloadCandidateDlls`를 `internal`로 전환하고, `ProcessMemoryScanTool.cs`의 중복 해시셋 선언을 삭제하여 공유 참조로 일원화.
+5. **테스트 스위트 정밀 다이어트 및 더미/중복 제거**:
+   * `IconGeneratorTests.cs` (107줄): EDR 기능 검증 코드가 없는 일회성 에셋 생성기 스크립트 삭제 (1개 제거).
+   * `ProcessTreeProjectionTests.cs` L706 (52줄): 상위 10대 시나리오 배치 테스트에 100% 포섭되는 구형 과도기적 중복 테스트 삭제 (1개 제거).
+   * `ToolInvocationTraceAuditingTests.cs` (308줄): 단편적 도구 호출 감사 중복 파일 삭제 (3개 제거).
+   * `CriticalEnterpriseAttackHarnessTests.cs` (536줄): Phase 1~3 프로토타입 하네스 삭제 및 정식 규격 `NeutralEnterpriseStressBenchmarkTests`로 단일화 (6개 제거).
+   * `AutonomousHunterAgentCancellationTests.cs`: 스레드 풀 스케줄링 레이스 컨디션 제거, 동기식 취소 트리거로 플래키 현상 원천 해소.
+   * 최종 테스트 결과: 고속 단위 테스트 85개 100% PASS(1.0s), 10대 벤치마크 11개 100% PASS(0.46s).
+   * 최종 코드 통계: `git diff --stat`: **19 files changed, 163 insertions(+), 1436 deletions(-)** (순수 1,273줄 영구 삭감).
+
+
+
 
