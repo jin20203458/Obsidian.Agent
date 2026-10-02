@@ -27,7 +27,7 @@ related:
 
 ---
 
-## 2026-09-08: [Resolved] Windows Winsock/NOMINMAX 충돌 및 MSVC UAC 매니페스트 링크 에러
+## 2026-09-29: [Resolved] Windows Winsock/NOMINMAX 충돌 및 MSVC UAC 매니페스트 링크 에러
 
 ### 1. 현상 (Symptom)
 * `ws2ipdef.h` / `ws2tcpip.h` 컴파일 시 `error C2011: 'ip_mreq': 'struct' type redefinition`, `error C2065: 'PADDRINFOA'`, `error C3861: 'WSAIoctl'` 등 100여 건의 Winsock 심볼 충돌 발생.
@@ -46,7 +46,7 @@ related:
 
 ---
 
-## 2026-09-10: [Resolved] EtwKernelCollector::Start() 동시성 레이스 컨디션 해결 및 원자적 CAS 적용
+## 2026-09-29: [Resolved] EtwKernelCollector::Start() 동시성 레이스 컨디션 해결 및 원자적 CAS 적용
 
 ### 1. 현상 (Symptom)
 * `EtwKernelCollector::Start()`를 복수의 스레드가 동시에 호출할 경우, 이미 가동 중인 스레드가 덮어씌워지며 C++ 런타임에 의해 `std::terminate()` 크래시가 유발될 수 있는 잠재적 취약점 존재.
@@ -61,7 +61,7 @@ related:
 
 ---
 
-## 2026-09-14: [Resolved] ProcessTree PID 재사용 시 유령 부모(Ghost Parent) 족보 왜곡 방어
+## 2026-09-30: [Resolved] ProcessTree PID 재사용 시 유령 부모(Ghost Parent) 족보 왜곡 방어
 
 ### 1. 현상 (Symptom)
 * 윈도우 OS는 종료된 프로세스의 PID를 빠른 속도로 재할당함.
@@ -79,7 +79,7 @@ related:
 
 ---
 
-## 2026-09-14: [Resolved] CQRS 프로젝션 파이프라인 콜드 스타트 및 초기 스냅샷 핸드셰이크
+## 2026-09-30: [Resolved] CQRS 프로젝션 파이프라인 콜드 스타트 및 초기 스냅샷 핸드셰이크
 
 ### 1. 현상 (Symptom)
 * C# Cockpit이 가동되었을 때 C++ 센서로부터 실시간 증분 이벤트만 수신할 경우, 센서 기동 전이나 Cockpit 기동 전부터 실행 중이던 프로세스(약 300여 개)의 계층 관계를 알지 못해 자식 프로세스 인입 시 족보 추적(`GetAncestry`)이 루트에서 단절되는 콜드 스타트 문제 발생.
@@ -95,7 +95,7 @@ related:
 
 ---
 
-## 2026-09-15: [Resolved] Google Cloud Vertex AI OAuth2 인증 및 JsonElement 매개변수 언래핑 결함
+## 2026-09-30: [Resolved] Google Cloud Vertex AI OAuth2 인증 및 JsonElement 매개변수 언래핑 결함
 
 ### 1. 현상 (Symptom)
 * Google AI Studio의 단순 API 키 방식 외에, Google Cloud Vertex AI 서비스 어카운트(`Config/google-credentials.json`)를 연동할 때 인증 실패 발생.
@@ -112,7 +112,7 @@ related:
 
 ---
 
-## 2026-09-15: [Resolved] Gemini responseSchema CFG 루프/토큰 고갈 결함 및 JSON Mode 최적화
+## 2026-09-30: [Resolved] Gemini responseSchema CFG 루프/토큰 고갈 결함 및 JSON Mode 최적화
 
 ### 1. 현상 (Symptom)
 * EDR 환경에서 Gemini API 호출 시 `responseSchema`를 적용했을 때, 간헐적으로 15초 타임아웃에 도달하며 응답이 실패하거나 도구 선택 정확도가 40%로 급락하는 현상 발생.
@@ -128,7 +128,7 @@ related:
 
 ---
 
-## 2026-09-15: [Resolved] EDR 수사 도구 5대 실무 맹점 해결
+## 2026-09-30: [Resolved] EDR 수사 도구 5대 실무 맹점 해결
 
 ### 1. 현상 (Symptom)
 * 실전 환경 검증 시 식별된 핵심 수사 도구 결함:
@@ -150,7 +150,7 @@ related:
 
 ---
 
-## 2026-09-16: [Resolved] C# 생성자 내 Sync-over-Async(GetAwaiter().GetResult()) 스레드풀 데드락 제거
+## 2026-10-01: [Resolved] C# 생성자 내 Sync-over-Async(GetAwaiter().GetResult()) 스레드풀 데드락 제거
 
 ### 1. 현상 (Symptom)
 * `AutonomousHunterAgent` 클래스 생성자 내부에서 Vertex AI 서비스 계정 토큰 발급 및 설정 로딩 시 `.GetAwaiter().GetResult()`를 호출하는 동기 블로킹 코드가 잔존하여, 스레드풀 고갈(Thread Pool Starvation) 시 데드락 발생 위험 존재.
@@ -163,7 +163,7 @@ related:
 
 ---
 
-## 2026-09-16: [Resolved] AI 수사관 판정 왜곡(Decision Hijacking) 및 결정권 침해 결함 해결 (SSOT 아키텍처 확립)
+## 2026-10-01: [Resolved] AI 수사관 판정 왜곡(Decision Hijacking) 및 결정권 침해 결함 해결 (SSOT 아키텍처 확립)
 
 ### 1. 현상 (Symptom)
 * 정상 관리 스크립트(`explorer.exe ➔ powershell.exe -enc <Get-Service ... *.internal>`) 인입 시, Gemini 모델이 정상 판결(`ACTION_RESUME`, 확신도 98%)을 내렸음에도 C# 호스트 코드가 이를 가로채 `ActionKill`로 변조하고 피싱 기법(`T1566.001`)을 조작 주입하는 치명적 오탐 발생.
@@ -180,7 +180,7 @@ related:
 
 ---
 
-## 2026-09-16: [Resolved] WPF 관제 콕핏과 Kestrel gRPC 백그라운드 서버 하이브리드 호스팅 및 STA 스레드 안전성 확보
+## 2026-10-01: [Resolved] WPF 관제 콕핏과 Kestrel gRPC 백그라운드 서버 하이브리드 호스팅 및 STA 스레드 안전성 확보
 
 ### 1. 현상 (Symptom)
 * Phase 4에서 WPF 관제 콕핏(`Phalanx.Cockpit`)과 C++ 센서와의 통신을 위한 Kestrel gRPC 서버(포트 50051)를 단일 실행 바이너리(`Program.cs`)에 통합할 때, 비동기 `async Task Main`에서 `new MainWindow()`를 인스턴스화할 경우 STA(Single-Threaded Apartment) 스레드 제약 위반으로 `InvalidOperationException`이 발생하거나, 반대로 WPF STA 스레드에서 gRPC 네트워크 IO를 블로킹하여 UI 프리징이 발생하는 아키텍처 충돌 발생.
@@ -202,7 +202,7 @@ related:
 
 ---
 
-## 2026-09-20: [Resolved] gRPC 스트림 다중 클라이언트 세션 덮어쓰기 및 거짓 DISCONNECTED 상태 전이 결함 해결
+## 2026-10-01: [Resolved] gRPC 스트림 다중 클라이언트 세션 덮어쓰기 및 거짓 DISCONNECTED 상태 전이 결함 해결
 
 ### 1. 현상 (Symptom)
 * C++ 커널 센서(`Phalanx.Sensor`)가 백그라운드에서 정상 기동되어 gRPC 스트림을 유지하고 있음에도 불구하고, 모의 공격 도구(`Phalanx.AttackSimulator`) 실행 종료 직후 또는 유휴 상태 경과 시 WPF 관제 콘솔의 상단 통신 상태가 주기적으로 빨간색 `[DISCONNECTED]`로 반전되는 현상 발생.
@@ -228,7 +228,7 @@ related:
 
 ---
 
-## 2026-09-23: [Resolved] Kestrel 백그라운드 스레드의 ObservableCollection 조작으로 인한 gRPC 스트림 단절 및 센서 ON/OFF 무한 루프
+## 2026-10-01: [Resolved] Kestrel 백그라운드 스레드의 ObservableCollection 조작으로 인한 gRPC 스트림 단절 및 센서 ON/OFF 무한 루프
 
 ### 1. 현상 (Symptom)
 * WPF 관제 콘솔 UI에서 C++ 센서 연결 상태가 `LIVE`와 `OFFLINE` 사이를 수 초 주기로 계속해서 자동으로 반복 전환(플리핑)됨.
@@ -253,7 +253,7 @@ related:
 
 ---
 
-## 2026-09-28: [Resolved] SettingsWindow 오픈 시 TwoWay 바인딩 읽기 전용 속성 충돌로 인한 CLR 강제 종료(0xc000041d)
+## 2026-10-02: [Resolved] SettingsWindow 오픈 시 TwoWay 바인딩 읽기 전용 속성 충돌로 인한 CLR 강제 종료(0xc000041d)
 
 ### 1. 현상 (Symptom)
 * 대시보드에서 `SETTINGS` 버튼 클릭 시 `PresentationUI.resources.dll` 로드 직후 `STATUS_FATAL_USER_CALLBACK_EXCEPTION (0xc000041d)`가 발생하며 Cockpit 프로세스가 즉시 비정상 종료됨.
@@ -286,7 +286,7 @@ related:
 
 ---
 
-## 2026-09-29: [Resolved] SettingsWindow 재오픈 시 RadioButton TwoWay 바인딩 순환 피드백에 의한 StackOverflowException (0x800703E9)
+## 2026-10-02: [Resolved] SettingsWindow 재오픈 시 RadioButton TwoWay 바인딩 순환 피드백에 의한 StackOverflowException (0x800703E9)
 
 ### 1. 현상 (Symptom)
 * Cockpit 상단 헤더 또는 네비게이션 레일에서 `환경 설정(SETTINGS)` 창을 열었다가 닫은 후, 다시 `환경 설정` 창을 열 때 `System.StackOverflowException (HResult: 0x800703E9)` 크래시 발생.
@@ -330,14 +330,14 @@ related:
 
 ---
 
-## 2026-09-29: [Resolved] 설정 창(SettingsWindow) 진입 시 테마 RadioButton 읽기 전용 속성 바인딩 충돌 및 0xc000041d 크래시
+## 2026-10-02: [Resolved] 설정 창(SettingsWindow) 진입 시 테마 RadioButton 읽기 전용 속성 바인딩 충돌 및 0xc000041d 크래시
 
 ### 1. 현상 (Symptom)
 * 메인 관제 콘솔 좌측 네비게이션 레일에서 [환경 설정] 버튼 클릭 시 `Phalanx.Cockpit.exe`가 즉각 비정상 종료됨.
 * 종료 코드: `3221226525 (0xc000041d)` (`STATUS_FATAL_USER_CALLBACK_EXCEPTION`).
 
 ### 2. 원인 (Root Cause)
-* 2026-09-28 `SettingsWindow TwoWay 바인딩 CLR 강제 종료(0xc000041d)` 엔트리와 동일한 근본 원인 패턴. 테마 선택용 `IsThemeSystem`, `IsThemeDark`, `IsThemeLight` 3개 프로퍼티가 게터 전용 람다(`=> SelectedThemeMode == "..."`)로 선언되어 TwoWay 역방향 쓰기 시 동일 크래시 유발.
+* 2026-10-02 `SettingsWindow TwoWay 바인딩 CLR 강제 종료(0xc000041d)` 엔트리와 동일한 근본 원인 패턴. 테마 선택용 `IsThemeSystem`, `IsThemeDark`, `IsThemeLight` 3개 프로퍼티가 게터 전용 람다(`=> SelectedThemeMode == "..."`)로 선언되어 TwoWay 역방향 쓰기 시 동일 크래시 유발.
 
 ### 3. 해결책 (Resolution)
 1. **ViewModel 양방향 세터 및 상태 안전성 구축 (`SettingsViewModel.cs`)**:
@@ -348,7 +348,7 @@ related:
 
 ---
 
-## 2026-09-29: [Resolved] ProcessGraphView 내 WPF DataTrigger 기본값 부재 및 유령 리소스 키(ThreatCriticalBrush)로 인한 DependencyProperty.UnsetValue 크래시
+## 2026-10-02: [Resolved] ProcessGraphView 내 WPF DataTrigger 기본값 부재 및 유령 리소스 키(ThreatCriticalBrush)로 인한 DependencyProperty.UnsetValue 크래시
 
 ### 1. 현상 (Symptom)
 * 심층 포렌식 분석(`InvestigationView`) 화면에서 '전역 프로세스 트리에서 위치 확인 ➔'(`FocusProcessInGraphCommand`) 버튼 클릭 시 크래시 발생.
@@ -376,7 +376,7 @@ related:
 
 ---
 
-## 2026-09-30: [Resolved] AI 수사 완료 시 심층수사실 빈 화면(SelectedIncident null) 유실 버그 및 최종 판결 턴 'NONE' 표기 개선
+## 2026-10-02: [Resolved] AI 수사 완료 시 심층수사실 빈 화면(SelectedIncident null) 유실 버그 및 최종 판결 턴 'NONE' 표기 개선
 
 ### 1. 현상 (Symptom)
 * AI 자율 수사관의 실시간 ReAct 턴 스트리밍 중 마지막 판결 단계 헤더에 날것의 `PHASE 03 : NONE`이 노출되어 미구현 또는 오류처럼 보이는 현상 발생.
@@ -402,7 +402,7 @@ related:
 
 ---
 
-## 2026-09-30: [Resolved] QuestPDF 2026.9+ 시스템 폰트 로드 예외 및 A4 포렌식 리포트 엔진 UI 디커플링 구축
+## 2026-10-03: [Resolved] QuestPDF 2026.9+ 시스템 폰트 로드 예외 및 A4 포렌식 리포트 엔진 UI 디커플링 구축
 
 ### 1. 현상 (Symptom)
 * QuestPDF 2026.9.1 기반 A4 사건 수사 보고서(`ForensicPdfReportGeneratorTests`) 단위 테스트 실행 시 `DocumentDrawingException: The text "CONFIDENTIAL & PROPRIETARY" uses font families that are not available: 'Segoe UI'` 예외와 함께 문서 생성이 중단되는 결함 발생.
