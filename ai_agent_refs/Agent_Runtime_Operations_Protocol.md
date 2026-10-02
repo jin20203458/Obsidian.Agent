@@ -15,20 +15,33 @@ related:
 
 ---
 
-## 1. 런타임 폐루프 상태 흐름 (Runtime Lifecycle Flow)
+## 1. 런타임 폐루프 상태 머신 (Runtime Lifecycle State Machine)
 
-코드 수정 → Mandatory QA(`Exit Code 0`) → **성공 시** 완료 보고 / **실패 시** 재시도(최대 2회) → **3회 연속 실패 시** 서킷 브레이커 발동 → 원자적 롤백(§2) → 트러블슈팅 로그 박제 + 휴먼 인수인계(§3, §4)
+에이전트의 모든 소스코드 변경 작업은 아래의 결정론적 5단계 상태 전이 규칙을 따릅니다.
+
+```mermaid
+flowchart TD
+    Start["[1단계] 코드 작성 / 수정 (Execution)"] --> QA{"[2단계] Mandatory QA<br/>실제 터미널 run_command 실사"}
+    
+    QA -- "Exit Code 0 & Zero Error" --> Pass["[성공] 최종 완료 보고 (Ground Truth 공인)"]
+    QA -- "빌드/테스트 에러 적발" --> FailCount{"[3단계] 실패 횟수 판정"}
+    
+    FailCount -- "실패 1~2회 (Count <= 2)" --> Retry["[재시도] 원인 정밀 분석 후 코드 재수정"]
+    Retry --> QA
+    
+    FailCount -- "실패 3회 연속 (Count >= 3)" --> CB["[4단계] 🛑 3-Strike 서킷 브레이커 발동<br/>추가 수정 즉각 강제 중단"]
+    
+    CB --> Rollback["[4.1단계] 훼손된 코드 원자적 롤백 (Atomic Rollback)"]
+    Rollback --> Log["[5단계] troubleshooting/ 프로젝트 로그 박제"]
+    Log --> Handover["[5.1단계] 인간 개발자에게 대안 제시 및 제어권 이관"]
+```
 
 ---
 
 ## 2. 의무 검증 상세 절차 (Mandatory QA Implementation)
 
-### 2.1 언어별 빌드/테스트 명령어 (`run_command`)
+### 2.1 실제 터미널(`run_command`) 구동
 * 코드 작성이 완료되면, 해당 프로젝트의 규격(`.agents/AGENTS.md`에 정의된 빌드/테스트 명령어)에 맞춰 터미널 명령어를 직접 실행합니다.
-  * **C# / .NET**: `dotnet build`, `dotnet test`
-  * **C++ / LLVM**: `cmake --build build --config Release`, `ctest`
-  * **TypeScript / Node**: `npm run build`, `npm test`
-  * **Rust**: `cargo check`, `cargo test`
 
 ### 2.2 사이드 이펙트(Side-Effect) 전체 빌드 검사
 * 특정 파일 하나를 수정했다고 해서 전체 프로젝트가 안전한 것은 아닙니다. 특히 정적 타입 언어 환경에서는 단일 인터페이스 변경이 연쇄적인 컴파일 에러를 유발할 수 있습니다.
