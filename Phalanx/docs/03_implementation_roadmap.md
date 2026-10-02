@@ -15,9 +15,9 @@ related:
 
 ## 1. 프로젝트 현재 상태 요약
 
-* **메인 리포지토리**: `../Phalanx`
-  * 활성 작업 브랜치: `feature/phase3-ai-hunter`
-  * 원격 저장소: `https://github.com/jin20203458/phalanx`
+* **메인 리포지토리**: `../phalanx-edr`
+  * 활성 작업 브랜치: `main`
+  * 원격 저장소: `https://github.com/jin20203458/phalanx-edr`
 * **지식베이스 리포지토리**: `../Obsidian.Agent`
   * 공식 스펙: `Phalanx/docs/`
   * 트러블슈팅 런북: `troubleshooting/phalanx.md`
@@ -29,12 +29,12 @@ related:
 
 ## 2. 핵심 아키텍처 불변식 및 런타임 수명주기
 
-에이전트 개발 및 런타임 최상위 행동 규약(AI Decision SSOT, UI 스레드 마샬링, Headless Null-Safety, 이모지 배제, 시크릿 격리)은 [`.agents/AGENTS.md`](../../../Phalanx/.agents/AGENTS.md)에 단일 진실 공급원(SSOT)으로 정의되어 있으므로 이를 엄격히 준수합니다.
+에이전트 개발 및 런타임 최상위 행동 규약(AI Decision SSOT, UI 스레드 마샬링, Headless Null-Safety, 이모지 배제, 시크릿 격리)은 [`.agents/AGENTS.md`](../../../phalanx-edr/.agents/AGENTS.md)에 단일 진실 공급원(SSOT)으로 정의되어 있으므로 이를 엄격히 준수합니다.
 
 본 문서에서는 시스템 런타임 통합 시 준수해야 하는 핵심 기술 불변식만을 유지합니다:
 
 1. **세이프티 워치독 SLA 계약 (10초 기본 / 50초 연장 티켓)**:
-   * C++ 센서는 기본 10초(10,000ms) 안전 타임아웃을 적용하며 ([`SafetyWatchdog.h:55`](../../../Phalanx/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h#L55)), AI 심층 수사 진입 시 `ACTION_EXTEND_TIMEOUT` 티켓을 통해 1회 한정 +50초 연장(총 60초 예산)을 집행합니다.
+   * C++ 센서는 기본 10초(10,000ms) 안전 타임아웃을 적용하며 ([`SafetyWatchdog.h:55`](../../../phalanx-edr/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h#L55)), AI 심층 수사 진입 시 `ACTION_EXTEND_TIMEOUT` 티켓을 통해 1회 한정 +50초 연장(총 60초 예산)을 집행합니다.
    * C# 최상위 타임아웃 CTS는 **50초(50,000ms)**로 설정하여 워치독 만료 10초 전 안전 마진을 보장합니다.
 2. **무결성 레벨 분리 및 수명주기 정리 (Orderly Teardown)**:
    * Cockpit과 Sensor 종료 시 역전송 및 동기화 순서를 엄격히 준수합니다:
@@ -115,14 +115,14 @@ Phalanx Root
 
 ## 5. 운영 가이드 및 시나리오 레지스트리
 
-빌드 및 테스트 명령어(`dotnet build`, `dotnet test --filter "Category=Unit"`, `run_fullchain_test.ps1`), 시크릿 파일 격리(`.gitignore`) 규약은 [`.agents/AGENTS.md`](../../../Phalanx/.agents/AGENTS.md)의 `<critical_rules>`를 단일 진실 공급원(SSOT)으로 준수합니다.
+빌드 및 테스트 명령어(`dotnet build`, `dotnet test --filter "Category=Unit"`, `run_fullchain_test.ps1`), 시크릿 파일 격리(`.gitignore`) 규약은 [`.agents/AGENTS.md`](../../../phalanx-edr/.agents/AGENTS.md)의 `<critical_rules>`를 단일 진실 공급원(SSOT)으로 준수합니다.
 
 ### 5.1 LLM 인증 정보 로드 우선순위
 
 1. **환경 변수**: `GOOGLE_APPLICATION_CREDENTIALS` 환경 변수 지정 시 최우선 로드.
 2. **로컬 파일**: `src/Phalanx.Cockpit/Config/google-credentials.json` 및 `AppSettings.json`에서 자동 탐색.
 
-### 5.2 10대 실무 시나리오 레지스트리 ([`AttackScenarioRegistry.cs`](../../../Phalanx/src/Phalanx.Cockpit/Scenarios/AttackScenarioRegistry.cs))
+### 5.2 10대 실무 시나리오 레지스트리 ([`AttackScenarioRegistry.cs`](../../../phalanx-edr/src/Phalanx.Cockpit/Scenarios/AttackScenarioRegistry.cs))
 
 | ID | 시나리오 명칭 | 기대 처분 | 핵심 파이프라인 |
 |---|---|---|---|
@@ -188,7 +188,7 @@ Phase 5에서 실체화된 7대 포렌식 도구(`FileInspectionTool`, `Registry
 
 * **7대 OS 심층 포렌식 도구 규격**: [`02_ai_agent_investigation_design.md#3-에이전트-전용-tool-calling-생태계`](./02_ai_agent_investigation_design.md)
 * **도구 결핍 극복 및 10대 스트레스 벤치마크 실측치 (38ms All-Green)**: [`04_performance_benchmarks.md#10-phase-35-final-중립적-10대-엔터프라이즈-스트레스-벤치마크-1000-all-green-완전-정복`](./04_performance_benchmarks.md)
-* **동적 적응형 A4 포렌식 리포트 레이아웃**: [`ForensicPdfReportDocument.cs`](../../../Phalanx/src/Phalanx.Cockpit/Reporting/ForensicPdfReportDocument.cs)
+* **동적 적응형 A4 포렌식 리포트 레이아웃**: [`ForensicPdfReportDocument.cs`](../../../phalanx-edr/src/Phalanx.Cockpit/Reporting/ForensicPdfReportDocument.cs)
 
 ---
 

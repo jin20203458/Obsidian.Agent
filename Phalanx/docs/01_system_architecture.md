@@ -66,18 +66,18 @@ flowchart TD
 
 | 계층 | 컴포넌트 | 핵심 구현체 소스 링크 | 전담 역할 및 성능 SLA |
 | :--- | :--- | :--- | :--- |
-| **Layer 1** | **ETW 세션 관리자** | [EtwKernelCollector.h](../../../Phalanx/src/Phalanx.Sensor/Collector/EtwKernelCollector.h) | `krabs-etw` 기반 무중단 유저모드 커널 이벤트 수집 (Zero BSOD) |
-| **Layer 1** | **더블 버퍼 락-스왑 큐** | [DoubleBufferedSwapQueue.h](../../../Phalanx/src/Phalanx.Sensor/Queue/DoubleBufferedSwapQueue.h) | 100만 건 무손실, 생산자 락 점유 < 1μs, 10ms 주기 포인터 스왑 |
-| **Layer 1** | **인메모리 프로세스 트리** | [ProcessTree.h](../../../Phalanx/src/Phalanx.Sensor/Process/ProcessTree.h) | `std::unordered_map` 기반 O(1) DAG 유지, 족보 역추적 0.436μs |
-| **Layer 1** | **초고속 로컬 룰 엔진** | [LocalRuleEngine.h](../../../Phalanx/src/Phalanx.Sensor/Rules/LocalRuleEngine.h) | 비할당 `string_view` 기반 0.354μs (초당 257만 건) 결정론적 룰 평가 |
-| **Layer 1** | **프로세스 제어 액추에이터** | [ProcessActuator.h](../../../Phalanx/src/Phalanx.Sensor/Actuator/ProcessActuator.h) | 0.1ms 현장 사살(`TerminateProcess`) 및 24μs 원자적 동결(`NtSuspendProcess`) |
-| **Layer 1** | **세이프티 워치독** | [SafetyWatchdog.h](../../../Phalanx/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h) | 기본 10초 타임아웃, AI 수사 시 +50초 1회 연장 가드, 만료 시 자동 복구 |
-| **Layer 1** | **비동기 gRPC 클라이언트** | [GrpcStreamClient.h](../../../Phalanx/src/Phalanx.Sensor/Ipc/GrpcStreamClient.h) | `asio-grpc` 기반 단방향 텔레메트리 스트리밍 및 대응 명령 수신 |
-| **Layer 2** | **gRPC 수신 서비스** | [PhalanxGrpcService.cs](../../../Phalanx/src/Phalanx.Cockpit/Services/PhalanxGrpcService.cs) | Kestrel HTTP/2 기반 텔레메트리 배치 수신 및 양방향 대응 명령 스트림 |
-| **Layer 2** | **CQRS 트리 프로젝션** | [ProcessTreeProjectionManager.cs](../../../Phalanx/src/Phalanx.Cockpit/CQRS/ProcessTreeProjectionManager.cs) | C++ 덤프 및 델타 이벤트 기반 C# 로컬 RAM `FlatNodeList` 가상화 트리 유지 (O(K) 슬라이스 갱신, 0초 족보 조회) |
-| **Layer 2** | **엔터프라이즈 4-View 관제 콕핏** | [Views/](../../../Phalanx/src/Phalanx.Cockpit/Views/) | IncidentsView, ProcessGraphView, InvestigationView, AttackLabWindow 4분할 MVVM 관제 UI |
-| **Layer 2** | **자율 AI 위협 헌터** | [AutonomousHunterAgent.cs](../../../Phalanx/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs) | Gemini 3.7 Flash ReAct 루프 기반 7대 OS 도구 자율 호출 및 최종 판결 |
-| **Layer 2** | **포렌식 아카이브 매니저** | [ForensicArchiveManager.cs](../../../Phalanx/src/Phalanx.Cockpit/Storage/ForensicArchiveManager.cs) | 임베디드 `LiteDB 5.0.21` 기반 침해사고 영구 보존 및 서사 관리 |
+| **Layer 1** | **ETW 세션 관리자** | [EtwKernelCollector.h](../../../phalanx-edr/src/Phalanx.Sensor/Collector/EtwKernelCollector.h) | `krabs-etw` 기반 무중단 유저모드 커널 이벤트 수집 (Zero BSOD) |
+| **Layer 1** | **더블 버퍼 락-스왑 큐** | [DoubleBufferedSwapQueue.h](../../../phalanx-edr/src/Phalanx.Sensor/Queue/DoubleBufferedSwapQueue.h) | 100만 건 무손실, 생산자 락 점유 < 1μs, 10ms 주기 포인터 스왑 |
+| **Layer 1** | **인메모리 프로세스 트리** | [ProcessTree.h](../../../phalanx-edr/src/Phalanx.Sensor/Process/ProcessTree.h) | `std::unordered_map` 기반 O(1) DAG 유지, 족보 역추적 0.436μs |
+| **Layer 1** | **초고속 로컬 룰 엔진** | [LocalRuleEngine.h](../../../phalanx-edr/src/Phalanx.Sensor/Rules/LocalRuleEngine.h) | 비할당 `string_view` 기반 0.354μs (초당 257만 건) 결정론적 룰 평가 |
+| **Layer 1** | **프로세스 제어 액추에이터** | [ProcessActuator.h](../../../phalanx-edr/src/Phalanx.Sensor/Actuator/ProcessActuator.h) | 0.1ms 현장 사살(`TerminateProcess`) 및 24μs 원자적 동결(`NtSuspendProcess`) |
+| **Layer 1** | **세이프티 워치독** | [SafetyWatchdog.h](../../../phalanx-edr/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h) | 기본 10초 타임아웃, AI 수사 시 +50초 1회 연장 가드, 만료 시 자동 복구 |
+| **Layer 1** | **비동기 gRPC 클라이언트** | [GrpcStreamClient.h](../../../phalanx-edr/src/Phalanx.Sensor/Ipc/GrpcStreamClient.h) | `asio-grpc` 기반 단방향 텔레메트리 스트리밍 및 대응 명령 수신 |
+| **Layer 2** | **gRPC 수신 서비스** | [PhalanxGrpcService.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Services/PhalanxGrpcService.cs) | Kestrel HTTP/2 기반 텔레메트리 배치 수신 및 양방향 대응 명령 스트림 |
+| **Layer 2** | **CQRS 트리 프로젝션** | [ProcessTreeProjectionManager.cs](../../../phalanx-edr/src/Phalanx.Cockpit/CQRS/ProcessTreeProjectionManager.cs) | C++ 덤프 및 델타 이벤트 기반 C# 로컬 RAM `FlatNodeList` 가상화 트리 유지 (O(K) 슬라이스 갱신, 0초 족보 조회) |
+| **Layer 2** | **엔터프라이즈 4-View 관제 콕핏** | [Views/](../../../phalanx-edr/src/Phalanx.Cockpit/Views/) | IncidentsView, ProcessGraphView, InvestigationView, AttackLabWindow 4분할 MVVM 관제 UI |
+| **Layer 2** | **자율 AI 위협 헌터** | [AutonomousHunterAgent.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs) | Gemini 3.7 Flash ReAct 루프 기반 7대 OS 도구 자율 호출 및 최종 판결 |
+| **Layer 2** | **포렌식 아카이브 매니저** | [ForensicArchiveManager.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Storage/ForensicArchiveManager.cs) | 임베디드 `LiteDB 5.0.21` 기반 침해사고 영구 보존 및 서사 관리 |
 
 ---
 
@@ -122,17 +122,17 @@ flowchart LR
   1. **ETW 콜백 및 실시간 룰 집행 스레드**: 유저모드 ETW 수집, 0.436μs 족보 탐색, 0.354μs 로컬 룰 판정, 24μs 원자적 동결 집행 및 큐 `Push`.
   2. **asio-grpc I/O 및 100Hz 스트리밍 스레드**: 10ms 주기 `SwapAndFlush`, `TelemetryBatch` 직렬화, HTTP/2 양방향 스트리밍 송수신.
   3. **SafetyWatchdog 백그라운드 감시 스레드**: 200ms 주기(5Hz) 만료 시한 검사 루프, 데드락 방지 10s/50s 타이머 관리 및 만료 시 자동 복구(Auto-Resume).
-* **상세 구현 참조**: [DoubleBufferedSwapQueue.h](../../../Phalanx/src/Phalanx.Sensor/Queue/DoubleBufferedSwapQueue.h), [EtwKernelCollector.cpp](../../../Phalanx/src/Phalanx.Sensor/Collector/EtwKernelCollector.cpp), [GrpcStreamClient.cpp](../../../Phalanx/src/Phalanx.Sensor/Ipc/GrpcStreamClient.cpp)
+* **상세 구현 참조**: [DoubleBufferedSwapQueue.h](../../../phalanx-edr/src/Phalanx.Sensor/Queue/DoubleBufferedSwapQueue.h), [EtwKernelCollector.cpp](../../../phalanx-edr/src/Phalanx.Sensor/Collector/EtwKernelCollector.cpp), [GrpcStreamClient.cpp](../../../phalanx-edr/src/Phalanx.Sensor/Ipc/GrpcStreamClient.cpp)
 
 ### B. 인메모리 프로세스 트리(DAG) 및 로컬 룰 엔진
-* **인메모리 프로세스 트리 ([ProcessTree.h](../../../Phalanx/src/Phalanx.Sensor/Process/ProcessTree.h))**:
+* **인메모리 프로세스 트리 ([ProcessTree.h](../../../phalanx-edr/src/Phalanx.Sensor/Process/ProcessTree.h))**:
   * `std::unordered_map<uint32_t, ProcessNode>`를 통해 활성 프로세스의 부모-자식 관계망을 C++ RAM 상에 유지합니다.
   * 기동 시 `InitializeFromSnapshot()`으로 335개 OS 프로세스를 사전 웜업 적재하고, PID 재사용 방어 및 10,000개 Tombstone 상한으로 메모리를 30MB 이내로 엄격히 통제합니다.
   * 부모 프로세스의 족보 역추적(`GetAncestry`)을 **실측 0.436μs (< 10μs 기준 통과)** 만에 즉시 완료합니다.
-* **로컬 룰 판정 (< 100μs / [LocalRuleEngine.h](../../../Phalanx/src/Phalanx.Sensor/Rules/LocalRuleEngine.h))**:
+* **로컬 룰 판정 (< 100μs / [LocalRuleEngine.h](../../../phalanx-edr/src/Phalanx.Sensor/Rules/LocalRuleEngine.h))**:
   * 힙 메모리 할당이 없는 `std::string_view`와 고속 ASCII 대소문자 무시 비교(< 20ns)를 통해 룰을 평가합니다.
   * 50,000회 연속 평가 실측 결과 **평균 0.354μs (초당 257만 건 처리, P99 0.7μs)**를 기록하여 요구 기준(100μs) 대비 280배 고속 판정을 달성했습니다.
-* **이원화 즉각 조치 (Dual Mitigation Actuator / [ProcessActuator.h](../../../Phalanx/src/Phalanx.Sensor/Actuator/ProcessActuator.h))**:
+* **이원화 즉각 조치 (Dual Mitigation Actuator / [ProcessActuator.h](../../../phalanx-edr/src/Phalanx.Sensor/Actuator/ProcessActuator.h))**:
   1. **고신뢰도 악성 사살 (Immediate Kill, 0.1ms)**: 볼륨 섀도 복사본 삭제(`vssadmin.exe delete shadows`) 등 확정적 악성 행위 감지 시 `TerminateProcess`를 현장에서 즉각 집행합니다 (`is_terminated = true`).
   2. **회색지대 선제 동결 (Atomic Suspend, 24μs)**: 오피스/브라우저의 스크립트 실행기 스폰 등 LOLBAS 행위 감지 시 `ntdll!NtSuspendProcess`를 동적 호출하여 **24~27μs** 만에 프로세스 전체를 원자적으로 동결합니다. 타깃 RAM을 보존한 후 세이프티 워치독(10초)을 가동하고 C# AI 관제기에 수사를 의뢰합니다 (`is_suspended = true`).
 
@@ -211,7 +211,7 @@ Phalanx는 고성능 엔드포인트 보안 시스템의 정형적 패턴인 **C
 
 ### B. 프로토콜 버퍼 스키마 명세 (`phalanx.proto`)
 
-`[IMPLEMENTED]` 센서/엔진과 관제 콘솔 간의 통신은 [phalanx.proto](../../../Phalanx/proto/phalanx.proto) 규격으로 직렬화됩니다.
+`[IMPLEMENTED]` 센서/엔진과 관제 콘솔 간의 통신은 [phalanx.proto](../../../phalanx-edr/proto/phalanx.proto) 규격으로 직렬화됩니다.
 
 ```protobuf
 syntax = "proto3";
@@ -309,31 +309,31 @@ service PhalanxService {
   2. **프로세스 맵 (`ProcessGraphView.xaml`)**: `FlatNodeList` 기반 300여 개 OS 활성 프로세스 트리 60FPS 가상화 렌더링 및 선택 노드 메타데이터 인스펙터.
   3. **위협 분석실 (`InvestigationView.xaml`)**: Gemini ReAct 다단계 자율 수사 트레이스(Thought, Action, Observation) 아코디언, 실측 지연시간(`ElapsedMs`), 동적 공격 계통도.
   4. **모의 침해 연구실 (`AttackLabWindow.xaml`)**: 10대 엔터프라이즈 실무 침해 시나리오 (+ 커스텀 공작소) 모의 주입 및 텔레메트리 스트리밍 랩.
-* **CQRS 로컬 트리 프로젝션 ([ProcessTreeProjectionManager.cs](../../../Phalanx/src/Phalanx.Cockpit/CQRS/ProcessTreeProjectionManager.cs))**:
+* **CQRS 로컬 트리 프로젝션 ([ProcessTreeProjectionManager.cs](../../../phalanx-edr/src/Phalanx.Cockpit/CQRS/ProcessTreeProjectionManager.cs))**:
   * C++ 엔진에서 수신한 초기 스냅샷 및 생명주기 델타 이벤트를 바탕으로 C# 로컬 RAM 상에 O(K) 슬라이스 기반 `FlatNodeList` 가상화 트리 DAG를 실시간 유지합니다.
   * 계층형 재귀 트리 탐색 대신 1차원 평탄화(Flat Virtualized) 배열을 투영하여 깊은 트리의 렌더링 부하를 원천 배제하고, C++로의 추가 쿼리 없이 로컬 0초 족보 조회를 지원합니다.
 * **인터랙티브 프로세스 상태 시각화**:
   * 안전 프로세스(초록), 동결 수사 중 프로세스(파랑 펄스 애니메이션), 사살 완료 프로세스(빨강 및 `[KILLED]` 배지), 정상 종료 프로세스(회색 톰스톤) 상태 가시화.
 
-### B. 자율 AI 위협 헌터 ([AutonomousHunterAgent.cs](../../../Phalanx/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs))
+### B. 자율 AI 위협 헌터 ([AutonomousHunterAgent.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs))
 * **ReAct 추론 루프**:
   * C++ 엔진에서 회색지대 위협(`is_suspended = true`)이 인입되는 순간에만 활성화됩니다 (평상시 API 비용 0원).
   * **Gemini 3.7 Flash** (`gemini-3.7-flash`) 기반의 ReAct(Thought ➔ Action ➔ Observation) 루프를 통해 7대 OS 도구를 직접 호출합니다.
 * **상용 1티어 7대 OS 심층 포렌식 도구 (Tools)**:
-  1. `DecodePayloadTool`: [DecodePayloadTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/DecodePayloadTool.cs) - Base64, Hex, Gzip 압축 다단계 난독화 인자 재귀적 디코딩.
-  2. `ProcessMemoryScanTool`: [ProcessMemoryScanTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/ProcessMemoryScanTool.cs) - 동결된 타깃 RAM 가상 메모리(`ReadProcessMemory`) 정규식/C2 도메인 및 VAD 스캔.
-  3. `ThreatReputationTool`: [ThreatReputationTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/ThreatReputationTool.cs) - 로컬 내장 위협 DB 및 IP/도메인 평판 조회.
-  4. `MitreClassifierTool`: [MitreClassifierTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/MitreClassifierTool.cs) - 관찰된 행위를 MITRE ATT&CK Matrix 기법(ID)으로 자동 매핑.
-  5. `SystemFirewallTool`: [SystemFirewallTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/SystemFirewallTool.cs) - 식별된 C2 IP에 대한 Windows 방화벽(Netsh) 인/아웃바운드 즉시 차단.
-  6. `FileInspectionTool`: [FileInspectionTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/FileInspectionTool.cs) - Authenticode 디지털 서명, 시스템 경로 위장(Masquerading T1036.005), UTR #39 Confusable 스켈레톤, Shannon 엔트로피, DLL 사이드로딩(T1574.002) 정밀 분석.
-  7. `RegistryInspectionTool`: [RegistryInspectionTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/RegistryInspectionTool.cs) - 윈도우 64비트 레지스트리(CLSID, InprocServer32, ScriptletURL, Run/RunOnce) 간접 실행(T1218.010) 및 COM 하이재킹(T1546.015) 검증.
+  1. `DecodePayloadTool`: [DecodePayloadTool.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Tools/DecodePayloadTool.cs) - Base64, Hex, Gzip 압축 다단계 난독화 인자 재귀적 디코딩.
+  2. `ProcessMemoryScanTool`: [ProcessMemoryScanTool.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Tools/ProcessMemoryScanTool.cs) - 동결된 타깃 RAM 가상 메모리(`ReadProcessMemory`) 정규식/C2 도메인 및 VAD 스캔.
+  3. `ThreatReputationTool`: [ThreatReputationTool.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Tools/ThreatReputationTool.cs) - 로컬 내장 위협 DB 및 IP/도메인 평판 조회.
+  4. `MitreClassifierTool`: [MitreClassifierTool.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Tools/MitreClassifierTool.cs) - 관찰된 행위를 MITRE ATT&CK Matrix 기법(ID)으로 자동 매핑.
+  5. `SystemFirewallTool`: [SystemFirewallTool.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Tools/SystemFirewallTool.cs) - 식별된 C2 IP에 대한 Windows 방화벽(Netsh) 인/아웃바운드 즉시 차단.
+  6. `FileInspectionTool`: [FileInspectionTool.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Tools/FileInspectionTool.cs) - Authenticode 디지털 서명, 시스템 경로 위장(Masquerading T1036.005), UTR #39 Confusable 스켈레톤, Shannon 엔트로피, DLL 사이드로딩(T1574.002) 정밀 분석.
+  7. `RegistryInspectionTool`: [RegistryInspectionTool.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Tools/RegistryInspectionTool.cs) - 윈도우 64비트 레지스트리(CLSID, InprocServer32, ScriptletURL, Run/RunOnce) 간접 실행(T1218.010) 및 COM 하이재킹(T1546.015) 검증.
 * **판결 집행 및 수동 취소 (Fail-Safe Freeze Invariant)**:
   * 수사 결과 악성 확신도 90% 이상 시 `ACTION_KILL` 하달.
   * 정상 관리자 작업 확인 시 `ACTION_RESUME` 하달 (오탐 복구).
   * 관제사 수동 [심층 조사 취소] 시 프로세스를 임의 사살/해제하지 않고 커널 동결(`ACTION_SUSPEND`, `SUSPENDED_MANUAL_HOLD`)을 안전하게 유지하여 프로세스 트리에서 Human-in-the-Loop 수동 처분을 보장.
 
 ### C. 포렌식 인과 저장소 및 리포트 엔진
-* **LiteDB 아카이브 ([ForensicArchiveManager.cs](../../../Phalanx/src/Phalanx.Cockpit/Storage/ForensicArchiveManager.cs))**:
+* **LiteDB 아카이브 ([ForensicArchiveManager.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Storage/ForensicArchiveManager.cs))**:
   * 종결된 사건의 침해사고 서사(JSON), AI 사고 추적 로그(Thought/Action Traces), 대응 내역을 임베디드 `LiteDB 5.0.21`에 영구 보관합니다.
-* **QuestPDF 리포트 엔진 ([ForensicPdfReportGenerator.cs](../../../Phalanx/src/Phalanx.Cockpit/Reporting/ForensicPdfReportGenerator.cs))**:
+* **QuestPDF 리포트 엔진 ([ForensicPdfReportGenerator.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Reporting/ForensicPdfReportGenerator.cs))**:
   * AI 수사 완료 시, 침해 일시, 공격 체인 다이어그램, 발견된 C2 IoC, MITRE 매핑, 대응 조치 내역(자동 조치 vs 권고 조치 분리)을 포함하는 상용 등급 **동적 적응형(Adaptive Dynamic Flow) A4 벡터 PDF 리포트**를 1초 이내에 자동 렌더링합니다 (3턴 이하 단일 페이지 완결, 5턴 이상 안전한 다면 확장).

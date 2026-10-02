@@ -56,7 +56,7 @@ flowchart TD
   * 1턴 조기 판결(One-Shot Guess) 숏컷을 원천 차단하고, LLM이 도구 실행 결과를 실제로 관찰(Observation)한 후 결론을 내리도록 대화 히스토리(`List<Content>`) 핑퐁을 유지합니다.
 * **세이프티 워치독 SLA 계약 및 레이스 컨디션 방어**:
   * C++ `SafetyWatchdog`는 기본 10초(10,000ms) 안전 타임아웃을 적용하며, C# 오프라인 결정론적 수사 엔진(실측 23.1ms) 동작 시에는 타임아웃 연장 없이 기본 10초 내에 즉시 완결되어 데드락 복구를 보장합니다 (C++ 로컬 룰 엔진은 0.354μs 만에 사전 선제 조치 완료).
-  * 외부 LLM(Gemini) 심층 수사 진입 시 다중 왕복 통신 지연을 수용하기 위해 즉시 1회성 `ACTION_EXTEND_TIMEOUT`(+50,000ms) 티켓을 선제 발송하여 총 60초 예산을 확보합니다 ([SafetyWatchdog.h:55](../../../Phalanx/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h#L55), [AutonomousHunterAgent.cs:465-475](../../../Phalanx/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs#L465-L475)).
+  * 외부 LLM(Gemini) 심층 수사 진입 시 다중 왕복 통신 지연을 수용하기 위해 즉시 1회성 `ACTION_EXTEND_TIMEOUT`(+50,000ms) 티켓을 선제 발송하여 총 60초 예산을 확보합니다 ([SafetyWatchdog.h:55](../../../phalanx-edr/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h#L55), [AutonomousHunterAgent.cs:465-475](../../../phalanx-edr/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs#L465-L475)).
   * C++ 워치독 자동 동결 해제(Auto-Resume)와의 데드락/좀비 프로세스 레이스 컨디션을 원천 차단하기 위해 C# 상위 타임아웃 CTS는 **50초(50,000ms)**로 설정하여 워치독 만료 10초 전 안전 마진을 보장합니다 ([troubleshooting/phalanx.md#L43](../../troubleshooting/phalanx.md#L43)).
 * **루프 한계 도달 시 Fail-Secure 정책**:
   * 최대 5턴(`MaxSteps = 5`) 소진 시까지 결론이 도출되지 않을 경우, 선제 동결된 회색지대 타깃을 방치하지 않고 즉시 사살(`ACTION_KILL`) 격리를 집행하여 시스템 안전을 최우선 보장합니다.
@@ -71,13 +71,13 @@ flowchart TD
 
 | 도구명 (Tool Name) | 매개변수 (Parameters) | 수행 작업 (Functionality) | 반환값 (Return) | 구현 소스 링크 |
 | :--- | :--- | :--- | :--- | :--- |
-| `DecodePayloadTool` | `string encodedCommand` | Base64, Hex 등 다단계 난독화 인자 재귀적 디코딩 | 원본 텍스트 스크립트 및 URL 목록 | [DecodePayloadTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/DecodePayloadTool.cs) |
-| `ProcessMemoryScanTool` | `uint32 targetPid` | 타깃 RAM 가상 메모리(`ReadProcessMemory`) VAD 스캔 및 Win32 Toolhelp32 무누수 모듈 열거 | C2 도메인/IP, Unbacked 실행 메모리, 비표준 디렉터리 로드 모듈 | [ProcessMemoryScanTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/ProcessMemoryScanTool.cs) |
-| `ThreatReputationTool` | `string targetIndicator` | 로컬 내장 위협 인텔리전스 IoC 캐시 및 악성 IP/도메인 블랙리스트 조회 | 평판 점수 (0~100) 및 알려진 악성 그룹명 | [ThreatReputationTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/ThreatReputationTool.cs) |
-| `MitreClassifierTool` | `string observedBehavior` | 관찰된 행위 문자열을 MITRE ATT&CK Matrix 기법(ID)으로 자동 매핑 | `T1059.001`, `T1566` 등의 기법 코드 및 설명 | [MitreClassifierTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/MitreClassifierTool.cs) |
-| `SystemFirewallTool` | `string maliciousIp` | Windows Filtering Platform(WFP) 또는 Netsh 명령으로 해당 IP 인/아웃바운드 즉시 차단 | 차단 성공 여부 (bool) | [SystemFirewallTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/SystemFirewallTool.cs) |
-| `FileInspectionTool` | `string filePath` | Authenticode 디지털 서명, 시스템 경로 위장(Masquerading T1036.005), UTR #39 Confusable 스켈레톤, Shannon 엔트로피, DLL 사이드로딩(T1574.002) 정밀 분석 | 서명 유효성, 엔트로피, 위장 여부, 사이드로딩 DLL 목록, 복합 이상 점수 | [FileInspectionTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/FileInspectionTool.cs) |
-| `RegistryInspectionTool` | `string registryKey` | 윈도우 64비트 레지스트리(CLSID, InprocServer32, ScriptletURL, Run/RunOnce) 간접 실행(T1218.010) 및 COM 하이재킹(T1546.015) 검증 | 간접 실행/하이재킹 여부, 추출 C2 URL/IP, 복합 이상 점수 | [RegistryInspectionTool.cs](../../../Phalanx/src/Phalanx.Cockpit/Tools/RegistryInspectionTool.cs) |
+| `DecodePayloadTool` | `string encodedCommand` | Base64, Hex 등 다단계 난독화 인자 재귀적 디코딩 | 원본 텍스트 스크립트 및 URL 목록 | [DecodePayloadTool.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Tools/DecodePayloadTool.cs) |
+| `ProcessMemoryScanTool` | `uint32 targetPid` | 타깃 RAM 가상 메모리(`ReadProcessMemory`) VAD 스캔 및 Win32 Toolhelp32 무누수 모듈 열거 | C2 도메인/IP, Unbacked 실행 메모리, 비표준 디렉터리 로드 모듈 | [ProcessMemoryScanTool.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Tools/ProcessMemoryScanTool.cs) |
+| `ThreatReputationTool` | `string targetIndicator` | 로컬 내장 위협 인텔리전스 IoC 캐시 및 악성 IP/도메인 블랙리스트 조회 | 평판 점수 (0~100) 및 알려진 악성 그룹명 | [ThreatReputationTool.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Tools/ThreatReputationTool.cs) |
+| `MitreClassifierTool` | `string observedBehavior` | 관찰된 행위 문자열을 MITRE ATT&CK Matrix 기법(ID)으로 자동 매핑 | `T1059.001`, `T1566` 등의 기법 코드 및 설명 | [MitreClassifierTool.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Tools/MitreClassifierTool.cs) |
+| `SystemFirewallTool` | `string maliciousIp` | Windows Filtering Platform(WFP) 또는 Netsh 명령으로 해당 IP 인/아웃바운드 즉시 차단 | 차단 성공 여부 (bool) | [SystemFirewallTool.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Tools/SystemFirewallTool.cs) |
+| `FileInspectionTool` | `string filePath` | Authenticode 디지털 서명, 시스템 경로 위장(Masquerading T1036.005), UTR #39 Confusable 스켈레톤, Shannon 엔트로피, DLL 사이드로딩(T1574.002) 정밀 분석 | 서명 유효성, 엔트로피, 위장 여부, 사이드로딩 DLL 목록, 복합 이상 점수 | [FileInspectionTool.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Tools/FileInspectionTool.cs) |
+| `RegistryInspectionTool` | `string registryKey` | 윈도우 64비트 레지스트리(CLSID, InprocServer32, ScriptletURL, Run/RunOnce) 간접 실행(T1218.010) 및 COM 하이재킹(T1546.015) 검증 | 간접 실행/하이재킹 여부, 추출 C2 URL/IP, 복합 이상 점수 | [RegistryInspectionTool.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Tools/RegistryInspectionTool.cs) |
 
 > **설계 원칙 및 구현 완료 상태 (Implementation Status)**:
 > * 본 문서는 에이전트와 도구 간의 상위 인터페이스 규격을 정의하며, **7대 OS 심층 포렌식 도구**는 Phase 3 및 Phase 5에서 전원 독립 구현 및 단위 검증(`InvestigationToolsTests`, `FileInspectionToolTests`, `RegistryInspectionToolTests`, `ProcessMemoryScanToolTests`, 총 85개 단위 테스트 전원 통과, Exit Code 0)이 완료되었습니다.
@@ -121,7 +121,7 @@ flowchart TD
 
 ## 5. 침해사고 서사(Incident Narrative) 생성 및 영속화 스키마
 
-수사 세션이 종결되면, LLM이 구조화된 판결/서사 DTO(`AiInvestigationDecision`)를 확정하고, C# 에이전트([AutonomousHunterAgent.cs](../../../Phalanx/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs))가 OS 텔레메트리 컨텍스트와 결합하여 최종 침해사고 레코드([IncidentRecord](../../../Phalanx/src/Phalanx.Cockpit/Storage/ForensicModels.cs))로 영속화합니다.
+수사 세션이 종결되면, LLM이 구조화된 판결/서사 DTO(`AiInvestigationDecision`)를 확정하고, C# 에이전트([AutonomousHunterAgent.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs))가 OS 텔레메트리 컨텍스트와 결합하여 최종 침해사고 레코드([IncidentRecord](../../../phalanx-edr/src/Phalanx.Cockpit/Storage/ForensicModels.cs))로 영속화합니다.
 
 ### A. LLM ReAct 최종 판결 DTO 규격 (`AiInvestigationDecision`)
 Gemini 3.7 Flash가 JSON Mode로 반환하는 최종 턴 구조화 결정 페이로드 규격입니다:

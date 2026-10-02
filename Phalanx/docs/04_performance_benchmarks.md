@@ -316,8 +316,8 @@ gantt
 
 ### A. 벤치마크 설계 목적 및 독립적 검증 원칙
 * **목적**: EDR 솔루션 내부의 하드코딩된 점수 편향을 배제하고, 실무 엔터프라이즈 환경에서 발생하는 정상 업무 5종(오탐 검증)과 고도화된 회피 공격 5종(미탐 검증)을 대상으로 무조작(No Artificial Tuning) 실측 평가를 진행하여 탐지 사각지대를 치유.
-* **기준 테스트 하네스**: [`NeutralEnterpriseStressBenchmarkTests.cs`](../../../Phalanx/tests/Phalanx.Agent.Tests/NeutralEnterpriseStressBenchmarkTests.cs)
-* **결과 데이터 원천 (SSOT)**: [`neutral_enterprise_benchmark.json`](../../../Phalanx/neutral_enterprise_benchmark.json)
+* **기준 테스트 하네스**: [`NeutralEnterpriseStressBenchmarkTests.cs`](../../../phalanx-edr/tests/Phalanx.Agent.Tests/NeutralEnterpriseStressBenchmarkTests.cs)
+* **결과 데이터 원천 (SSOT)**: [`neutral_enterprise_benchmark.json`](../../../phalanx-edr/neutral_enterprise_benchmark.json)
 
 ### B. 3단계 치유 및 성적표 도약 추이 (Baseline ➔ Phase 3)
 
