@@ -265,16 +265,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 4. 검증 결과 (Ground Truth)
 * **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 무결점 성공.
-* **오탐 파일 실사**:
-  - `sha1.c`: 80건 오탐 $\rightarrow$ **0건 전수 소멸 (100% 해결)**
-  - `md5.c`: 64건 오탐 $\rightarrow$ **0건 전수 소멸 (100% 해결)**
-  - `ripemd160.c`: 80건 오탐 $\rightarrow$ **0건 전수 소멸 (100% 해결)**
-  - `psa_crypto.c`: 82건 오탐 $\rightarrow$ **0건 전수 소멸 (100% 해결)**
-  - `oid.c`: 43건 오탐 $\rightarrow$ **0건 전수 소멸 (100% 해결)**
-  - `psa_crypto_aead.c`: 3건 오탐 $\rightarrow$ **0건 전수 소멸 (100% 해결)**
-* **정탐 보존 실사**:
-  - `aes.c`: 한 줄 다중 대입(`415`), `case break`(`599`) 등 **30건 진성 규격 정탐 100% 보존**.
-  - `ecp_curves.c`: 루프 내 다중 연산(`ADD; NEXT;` 등) **진성 규격 정탐 100% 보존**.
 
 ---
 
@@ -314,18 +304,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 4. 검증 결과 (Ground Truth)
 * **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 무결점 성공.
-* **실제 MbedTLS 오탐 파일 실사**:
-  - `error.c`: 245건 오탐 $\rightarrow$ **0건 전수 소멸 (100% 해결)**
-  - `x509_crt.c`: 2건 오탐 $\rightarrow$ **0건 전수 소멸 (100% 해결)**
-  - 총 247건 중 247건 **100.0% 오탐 박멸**.
-* **진성 규격 정탐(True Positive) 보존 실사 (`test_meaningless.c`)**:
-  - 일반 블록 단독 식 (`a + b;`) $\rightarrow$ 정상 검출 (TP 1)
-  - `if` 본문 단독 식 (`if (a) a - b;`) $\rightarrow$ 정상 검출 (TP 2)
-  - `while` 본문 단독 식 (`while (a) a * b;`) $\rightarrow$ 정상 검출 (TP 3)
-  - `case` 본문 단독 식 (`case 1: a / b; break;`) $\rightarrow$ 정상 검출 (TP 4)
-  - `default` 본문 단독 식 (`default: a % b; break;`) $\rightarrow$ 정상 검출 (TP 5)
-  - `label` 본문 단독 식 (`my_label: a & b;`) $\rightarrow$ 정상 검출 (TP 6)
-  - 대입(`=`), 증감(`++`), 함수호출, `(void)` 캐스팅 등 준수 코드는 오탐 0건 확인.
 
 ---
 
@@ -361,16 +339,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 4. 검증 결과 (Ground Truth)
 * **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 성공.
-* **15대 회귀 테스트 스위트 (`test_narrowing_conversion_suite_15.c`)**:
-  - FP 8건 전수 무경고 차단 (100.0%)
-  - TP 7건 100% 정상 경고 방출 (100.0%)
-* **MbedTLS 벤치마크 실사**:
-  - `aes.c`: 기존 9건 FP $\rightarrow$ 0건 (100% 제거)
-  - `asn1write.c`: 기존 18건 FP 전수 제거, 4건 TP 100% 보존
-  - `pkwrite.c`: 기존 10건 FP $\rightarrow$ 0건 (100% 제거)
-  - `constant_time.c`: 기존 6건 FP 전수 제거, 19건 TP 100% 보존
-  - `chacha20.c`: 기존 9건 FP $\rightarrow$ 0건 (100% 제거)
-  - `poly1305.c`: 기존 4건 FP 전수 제거, 23건 TP 100% 보존
 * **독립 감사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 2회 연속 **[PASS] 최종 승인**.
 
 ---
@@ -408,53 +376,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 4. 검증 결과 (Ground Truth)
 * **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 무결점 성공.
-* **16대 회귀 테스트 스위트 (`test_unreachable_code_suite_16.c`)**:
-  - TP 10건 (TC-01 ~ TC-10): 10/10 100.0% 1:1 라인 매핑 완벽 검출.
-  - FP 6건 (TC-11 ~ TC-16): 단 1건의 경고 없이 100.0% 완벽 차단 (0 경고).
-* **MbedTLS 벤치마크 실사**:
-  - `bignum.c`: 기존 2건 FP $\rightarrow$ **0건** (100% 제거)
-  - `cipher.c`: 기존 1건 FP $\rightarrow$ **0건** (100% 제거)
-  - `ssl_msg.c`: 기존 2건 FP $\rightarrow$ **0건** (100% 제거)
-  - MbedTLS 전체 96개 C 소스 파일 전수 스캔: **0건 경고 (원본 157건 100.0% 전수 박멸)**.
 * **독립 감사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 2회 연속 **[PASS] 최종 공인**.
-
----
-
-## 2026-09-17: [Resolved] ExplicitTypeDeclCheck (`ast-explicit-type-decl`) 소스 정규화 및 C/C++ 공용 명시적 타입 검사 확장 (Implicit Int 미탐 해결)
-
-### 1. 현상 (Symptom)
-* DAPA 국방 규격 `공통(스타일) c. 함수/변수의 선언 시 type을 명시해야 한다 (auto 사용 제한)` 검증 시:
-  * 공식 테스트 케이스 `C:\TestCase_Root_DAPA\Rule_03_Style_TypeDecl\NonCompliant.c`(`extern i;`, `extern foo(void);`) 분석 시 체커 경고가 0건 발생하여 전수 미탐(False Negative).
-  * 기존 체커명 `ast-no-auto-type`이 C++ `auto` 키워드만 연상시켜 C 언어의 `implicit int` 금지 규칙과 명칭 불일치.
-
-### 2. 원인 (Root Cause)
-1. **언어 버전 필터에 의한 C 언어 비활성화**:
-   * `NoAutoTypeCheck.h`의 `isLanguageVersionSupported`가 `LangOpts.CPlusPlus11`로만 제한되어 있어 C 소스코드(`.c`) 분석 시 체커가 아예 로드되지 않음.
-2. **매처(Matcher)의 C++ 편향**:
-   * `autoType()` 매처만을 사용하여 C 언어에서 타입을 명시하지 않고 생략한 암시적 `int`(`implicit int`) 선언 노드를 전혀 감지하지 못함.
-
-### 3. 해결책 (Resolution)
-1. **체커 소스파일 및 클래스명 정규화 (LLVM 1:1 불변식 준수)**:
-   * `NoAutoTypeCheck.h/cpp` $\rightarrow$ `ExplicitTypeDeclCheck.h/cpp` 완전 전환.
-   * 체커 등록명: **`ast-explicit-type-decl`**로 정규화 (`ARQAModule.cpp`, `Checkers.json`, `ComplianceRuleProvider.cs`, 매핑 기준서 일원화).
-2. **C/C++ 공용 검사 로직 구현**:
-   * `isLanguageVersionSupported`: `return true;`로 개방하여 C89~C17 및 C++ 전 언어 버전 지원.
-   * `isAutoType(QualType)`: 복합 포인터/참조 `auto` 타입을 재귀적으로 언래핑하여 C++ `auto` 사용 위반을 전수 감지.
-   * `isMissingTypeSpecifier(const VarDecl*)`: `getTypeSpecStartLoc().isInvalid()`를 판별하여 타입 선언이 생략된 C 암시적 `int` 변수 선언(`extern i;`, `static s;` 등) 정밀 탐지.
-   * `isMissingReturnTypeSpecifier(const FunctionDecl*)`: C++ 생성자/소멸자/변환연산자 및 람다 호출 연산자를 제외하고, `getReturnTypeSourceRange().isInvalid()`를 통해 반환형이 생략된 함수 선언/정의(`extern foo(void);`, `add(a, b) { ... }`) 정밀 탐지.
-   * 명확한 한글 진단 메시지 분기 방출:
-     - `auto` 사용 시: `"변수 선언 시 'auto' 사용을 금지합니다. 타입을 명시하세요"` / `"함수 선언 시 'auto' 반환 타입 사용을 금지합니다. 반환 타입을 명시하세요"`
-     - 타입 누락 시: `"변수 선언 시 타입을 명시해야 합니다"` / `"함수 선언 시 반환 타입을 명시해야 합니다"`
-
-### 4. 검증 결과 (Ground Truth)
-* **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 성공.
-* **DAPA 공식 테스트케이스 (`Rule_03_Style_TypeDecl`)**:
-  - `NonCompliant.c`: 1행 `extern i;`, 2행 `extern foo(void);` **2건 전수 정확 검출 (100% 정탐)**.
-  - `Compliant.c`: **0건 방출 (Clean, 0% 오탐)**.
-* **12종 C/C++ 종합 전수 검증 스위트 (`test_rule_03_suite.py`)**:
-  - TP-1 ~ TP-7 (7건): 8/8건 위반 100% 정탐.
-  - FP-1 ~ FP-5 (5건): 0건 방출 100% 무결점 준수.
-  - **12종 전수 100% 정탐 / 0% 오탐 달성**.
 
 ---
 
@@ -482,12 +404,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 4. 검증 결과 (Ground Truth)
 * **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 성공.
-* **15대 정밀 회귀 테스트 스위트 (`test_pointer_cv_drop_suite_15.c`)**:
-  - TP 7건 (TC-01 ~ TC-07): 100.0% 1:1 라인 매핑 완벽 검출 (7/7건).
-  - FP 8건 (TC-08 ~ TC-15): 단 1건의 허위 경고 없이 100.0% 완벽 차단 (0 경고).
-* **MbedTLS 19개 소스 파일 벤치마크 실사 (`scan_19.ps1`)**:
-  - 오탐 68건: 11개 파일 68건 $\rightarrow$ **0건 (100.0% 전수 박멸)**.
-  - 정탐 27건: 10개 파일 27건 $\rightarrow$ **27건 (100.0% 완벽 보존)**.
 * **이중 계쇄 심사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 2회 연속 **[PASS] 최종 공인**.
 
 ---
@@ -519,18 +435,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 4. 검증 결과 (Ground Truth)
 * **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 성공.
-* **18대 정밀 회귀 테스트 스위트 (`test_no_out_of_range_assignment_suite_18.c`)**:
-  - TP 9건 (TC-01 ~ TC-09): 100.0% 1:1 라인 매핑 완벽 검출 (9/9건).
-  - FP 9건 (TC-10 ~ TC-18): 단 1건의 허위 경고 없이 100.0% 완벽 차단 (0 경고).
-* **MbedTLS 7개 소스 파일 벤치마크 실사**:
-  - `sha256.c`: 기존 7건 FP $\rightarrow$ **0건** (100% 제거)
-  - `sha512.c`: 기존 7건 FP $\rightarrow$ **0건** (100% 제거)
-  - `sha1.c`: 기존 3건 FP $\rightarrow$ **0건** (100% 제거)
-  - `ripemd160.c`: 기존 3건 FP $\rightarrow$ **0건** (100% 제거)
-  - `xtea.c`: 기존 3건 FP $\rightarrow$ **0건** (100% 제거)
-  - `md5.c`: 기존 2건 FP $\rightarrow$ **0건** (100% 제거)
-  - `bignum.c`: 0건 정상 유지 (Clean)
-  - **총 25건 엔진 오탐 $\rightarrow$ 0건 (100.0% 전수 박멸 달성)**.
 * **이중 계쇄 심사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 2회 연속 **[PASS] 최종 공인**.
 
 ---
@@ -562,11 +466,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 ### 4. 검증 결과 (Ground Truth)
 * **LLVM Clang-Tidy 빌드**: `cmake --build .\build --config Release --target clang-tidy` ➡️ **Exit Code 0** 성공.
 * **ArqaStatic WPF 빌드**: `dotnet build .\ArqaStatic\ArqaStatic.csproj --no-restore` ➡️ **Exit Code 0** 성공.
-* **DAPA 표준 테스트베드 (`Rule_33_Ptr_NullCheckBeforeUse`)**:
-  - `NonCompliant.c`: `cfg-null-dereference-guard` 1건 정확히 탐지.
-  - `Compliant.c`: 0건 무경고 통과.
-* **심층 충돌 테스트베드 (`test_deep_collision.c`)**:
-  - 두 체커 동시 구동 시 모든 라인에서 중복 발생 0건 달성 (Line 5: CFG 단독, Line 18/31/37: CSA 단독).
 
 ---
 
@@ -593,23 +492,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 4. 검증 결과 (Ground Truth)
 * **LLVM Clang-Tidy 빌드**: `cmake --build .\build --config Release --target clang-tidy` ➡️ **Exit Code 0** 성공.
-* **DAPA 표준 Rule 34 테스트베드**:
-  - `NonCompliant.c`: 기존 Line 5 (`}`) 대신 **Line 4:8 (`pi = &a;`) 대입 연산자 위치 100% 정밀 지목** 확인.
-  - `Compliant.c`: 0건 무경고 클린 통과.
-* **12대 실전 전수 회귀 테스트베드 (`test_stack_address_escape_suite_12.c`)**:
-  - TC-01 (전역 포인터 대입, Line 15): Line 15:10 (`=`) 정확 검출.
-  - TC-02 (static 포인터 대입, Line 22): Line 22:11 (`=`) 정확 검출.
-  - TC-03 (구조체 포인터 멤버 대입, Line 28): Line 28:15 (`=`) 정확 검출.
-  - TC-04 (포인터 배열 요소 대입, Line 34): Line 34:14 (`=`) 정확 검출.
-  - TC-05 (if 조건 분기 대입, Line 41): Line 41:14 (`=`) 정확 검출.
-  - TC-06 (함수 종료 전 NULL 재할당): **0건 무경고** (정상 방어).
-  - TC-07 (값 전달 매개변수 재할당): **0건 무경고** (과거 AST 체커 오탐 패턴 방어).
-  - TC-08 (배열 바이트 XOR 값 복사): **0건 무경고** (과거 AST 체커 오탐 패턴 방어).
-  - TC-09 (힙 메모리 동적 할당): **0건 무경고** (정상 방어).
-  - TC-10 (중첩 블록 로컬 변수 탈출, Line 79): Line 79:14 (`=`) 정확 검출.
-  - TC-11 (조기 리턴 경로 탈출, Line 87): Line 87:14 (`=`) 정확 검출.
-  - TC-12 (매개변수 주소 탈출, Line 95): Line 95:10 (`=`) 정확 검출.
-  - **총 14개 테스트 케이스 전수 통과 (100.0% 위치 정확도 및 0.0% 오탐 달성)**.
 
 ---
 
@@ -649,23 +531,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 ### 4. 검증 결과 (Ground Truth)
 * **LLVM Clang-Tidy 빌드**: `cmake --build .\build --config Release --target clang-tidy` ➡️ **Exit Code 0** 성공.
 * **ArqaStatic C# 컴파일**: `dotnet build .\ArqaStatic\ArqaStatic.csproj -t:CoreCompile` ➡️ **Exit Code 0** 성공.
-* **DAPA 표준 Rule 39 테스트베드**:
-  - `NonCompliant.c`: `cfg-nonzero-divisor-guard` 1건 정확히 탐지 (Line 2:12).
-  - `Compliant.c`: 0건 무경고 클린 통과.
-* **12종 초고강도 복합 가드 및 중복 방지 테스트베드 (`test_divzero_comprehensive.c`)**:
-  - TC-01 (가드 미작성 매개변수 `x / n`): `cfg-nonzero-divisor-guard` 1건 단독 검출 (Line 3).
-  - TC-02 (`if (n != 0)`): 0건 (무경고 통과).
-  - TC-03 (`if (n == 0) return;` 조기 탈출): 0건 (무경고 통과).
-  - TC-04 (`if (n > 0)`): 0건 (무경고 통과).
-  - TC-05 (`if (n < 0)`): 0건 (무경고 통과).
-  - TC-06 (`if (n == 0)` 내부 나눗셈 `x / n`): CSA `path-sensitive-core.DivideZero` 1건 단독 검출 (Line 41, `cfg-` 침묵, 중복 0건).
-  - TC-07 (로컬 변수 상수 0 초기화 `d = 0; x / d`): CSA `path-sensitive-core.DivideZero` 1건 단독 검출 (Line 49, `cfg-` 침묵, 중복 0건).
-  - TC-08 (로컬 변수 상수 42 초기화 `d = 42; x / d`): 0건 (무경고 통과).
-  - TC-09 (로컬 변수 연산 결과 0 `d = a - b; x / d`): CSA `path-sensitive-core.DivideZero` 1건 단독 검출 (Line 63, `cfg-` 침묵, 중복 0건).
-  - TC-10 (`if (n != 0)` 복합 대입 `x /= n`): 0건 (무경고 통과).
-  - TC-11 (가드 미작성 복합 대입 `x /= n`): `cfg-nonzero-divisor-guard` 1건 단독 검출 (Line 77).
-  - TC-12 (가드 미작성 모듈로 연산 `x % n`): `cfg-nonzero-divisor-guard` 1건 단독 검출 (Line 83).
-  - **전체 검증 결과: 총 6건 정확 검출, 동일 라인 중복 경고 0건 (100.0% 상호 배타성 및 0.0% 오탐 달성)**.
 
 ---
 
@@ -694,43 +559,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 4. 검증 결과 (Ground Truth)
 * **LLVM Clang-Tidy 빌드**: `cmake --build .\build --config Release --target clang-tidy` ➡️ **Exit Code 0** 성공.
-* **DAPA 표준 Rule 48 테스트베드 (`C:\TestCase_Root_DAPA\Rule_48_C_IncludeCharSet\NonCompliant.c`)**:
-  - Line 1:14: `금지 문자: ' '(공백), '''(작은따옴표)` ➡️ **열 14 공백 위치 정확 지목, 단독 1건** (기존 3건 중복 제거).
-  - Line 2:21: `주석 패턴(/**/ 또는 //)을 포함할 수 없습니다` ➡️ **열 21 `/*` 위치 정확 지목, 단독 1건** (기존 2건 중복 제거).
-  - Line 3:15: `금지 문자: '$'` ➡️ **열 15 `$` 위치 정확 지목, 단독 1건**.
-  - Line 4:15: `금지 문자: '''(작은따옴표), '-'(하이픈)` ➡️ **열 15 `'` 위치 정확 지목, 단독 1건**.
-  - **총 4개 라인 정확 지목, 동일 라인 중복 0건 (기존 7건 ➡️ 정확히 4건 단독 경고 정밀화 달성)**.
-* **준수 코드 (`Compliant.c`)**: `lex-include-charset` 경고 **0건** 무경고 통과.
-* **복합 회귀 테스트 (`test_include_charset_suite.c`)**:
-  - 들여쓰기된 `#include`, 꺾쇠괄호(`<...>`), 백슬래시(`\`), 상위 경로(`..`), 연속 구분자(`//`), 표준 헤더 등 8개 시나리오 전수 통과.
-
----
-
-## 2026-09-17: [Resolved] ast-exception-specification DAPA Rule 57 공식 테스트베드 동기화 및 진단 메시지 표준화
-
-### 1. 현상 (Symptom)
-* DAPA C++ 전용 6) 규칙 (Rule 57: `exception specification에 기술되지 않은 모든 throw에 대하여 예외처리를 해야만 한다`):
-  * `C:\TestCase_Root_DAPA\Rule_57_Cpp_ExceptionSpecification`의 기존 파일이 공식 매뉴얼과 달리 임의로 단순화/변형되어 있었음 (`NonCompliant.cpp`는 `throw 1.0f;` 단일행, `Compliant.cpp`는 `noexcept(false)`로 임의 변형).
-  * 공식 문서 원문은 `throw(int)` 선언 하에 `if (a > 0) throw int(); else throw float();` 분기 검사와 `try { throw float(); } catch(...) {}` 포획 방어 코드로 구성됨.
-  * C++17 이상 컴파일러에서 동적 예외 명세(`throw(int)`) 분석 시 `error: ISO C++17 does not allow dynamic exception specifications` 에러로 인한 분석 중단 위험 존재.
-
-### 2. 해결책 (Resolution)
-1. **DAPA 공식 표준 테스트베드 100% 원문 동기화**:
-   - `NonCompliant.cpp`: `void foo(int a) throw(int)` 분기문 기반 `throw int();` 통과 및 `throw float();` 위반 구조로 원문 일치.
-   - `Compliant.cpp`: `void foo(int a) throw(int)` 내부 `try { throw float(); } catch(...) {}` 방어 코드로 원문 일치.
-2. **진단 메시지 DAPA 표준 설명 반영 (`ExceptionSpecificationCheck.cpp`)**:
-   - 메시지 갱신: `"함수의 예외 명세(throw(T...))에 기술되지 않은 타입 '%0'을(를) 던지고 있습니다. (처리되지 않은 예외는 unexpected() 또는 terminate()를 호출하여 비정상 종료를 유발할 수 있습니다.)"`
-3. **C++17+ 환경 분석 호환성 보장 (`ClangTidyRunnerService.cs`)**:
-   - 기본 컴파일러 인자에 `-Wno-error=dynamic-exception-spec` 추가하여 C++17/20 최신 프로젝트에서도 동적 예외 명세 코드가 에러 없이 원활하게 정적 분석되도록 조치.
-
-### 3. 검증 결과 (Ground Truth)
-* **LLVM Clang-Tidy 빌드**: `cmake --build .\build --config Release --target clang-tidy` ➡️ **Exit Code 0** 성공.
-* **DAPA 공식 테스트베드 실측 (`C:\TestCase_Root_DAPA\Rule_57_Cpp_ExceptionSpecification`)**:
-  - `NonCompliant.cpp`:
-    - Line 3 `throw int();` ➡️ 0건 (정상 통과)
-    - Line 5:9 `throw float();` ➡️ **정확히 단독 1건 검출** (`Exit Code 0`)
-  - `Compliant.cpp`:
-    - `try { throw float(); } catch(...) {}` ➡️ **0건 무경고 클린 통과** (`Exit Code 0`)
 
 ---
 
@@ -767,15 +595,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 4. 검증 결과 (Ground Truth)
 * **LLVM 컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` 및 `clang` ➡️ **Exit Code 0** 성공.
-* **16대 정밀 회귀 테스트 스위트 (`test_uninitialized_const_param_suite_16.c`)**:
-  - 진성 규격 정탐 6건 (TC-01 ~ TC-06): **100% 정상 경고 방출**.
-  - 엔진 오탐 방어 10건 (TC-07 ~ TC-16): **0건 무경고 클린 (100% 차단)**.
-* **MbedTLS 벤치마크 11개 파일 (12개 위치) 전수 실측**:
-  - `gcm.c`, `rsa.c`, `ssl_cookie.c`, `psa_crypto_mac.c`, `x509_crt.c`, `x509_create.c`, `ecdsa.c`, `pkcs12.c`, `pkcs5.c`, `pkwrite.c`, `psa_crypto.c`, `psa_crypto_cipher.c`:
-  - **기존 12건 ➡️ 수정 후 0건 (오탐 제거율 100.0%, 잔존 오탐 0건)**.
-* **DAPA 국방 공식 검증 스위트 (`Rule_15_Init_ConstReadOnly`)**:
-  - `NonCompliant.c`: 경고 1건 정상 방출 (진성 정탐 100% 보존).
-  - `Compliant.c`: 경고 0건 클린 통과.
 * **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
 
 ---
@@ -811,15 +630,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 4. 검증 결과 (Ground Truth)
 * **LLVM 컴파일 빌드**: `clang.exe`, `clang-tidy.exe` Release 타겟 `Exit Code 0` 성공.
-* **16대 정밀 회귀 테스트 스위트 (`test_stack_address_escape_suite_16.c`)**:
-  - TP 11건 (TC-01 ~ TC-11): **100% 정상 경고 방출** (`*out = &a`, `ctx->ptr = &a`, `heap->ptr = &a` 포함).
-  - FP 5건 (TC-12 ~ TC-16): **0건 무경고 클린 (100% 차단)**.
-* **C++ 테스트 스위트 (`test_stack_address_escape_cpp.cpp`)**:
-  - `this->ptr = &a` 및 참조자 반환 정상 경고, 클린 메서드 0건 통과.
-* **DAPA 국방 공식 검증 스위트 (`Rule_34_Ptr_LocalAddressEscape`, `Rule_35_Ptr_ReturnLocalAddress`)**:
-  - Rule 34 NonCompliant (Line 4:8 지목), Rule 35 NonCompliant (Line 3:5 지목) TP 100% 보존. Compliant 각 0건 통과.
-* **MbedTLS 6대 실전 벤치마크 파일 전수 실측**:
-  - `gcm.c`, `ssl_tls.c`, `bignum.c`, `ecp.c`, `hkdf.c`, `md.c`: **0건 경고 (기존 11건 전수 오탐 100% 박멸)**.
 * **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
 
 ---
@@ -845,49 +655,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 4. 검증 결과 (Ground Truth)
 * **LLVM 컴파일 빌드**: `clang.exe`, `clang-tidy.exe` Release 타겟 **Exit Code 0** 성공.
-* **10대 단위 회귀 테스트 스위트 (`test_array_bound_suite_10.c`)**:
-  - TP 5건 (TC-01 ~ TC-05): **100% 정상 경고 방출** (Line 10, 17, 28, 35, 43).
-  - FP 5건 (TC-06 ~ TC-10): **0건 무경고 클린 통과** (100% 차단).
-* **MbedTLS 실전 벤치마크 실측**:
-  - `oid.c`: 기존 3건 오탐 ➡️ **수정 후 0건 완전 소멸 (오탐 제거율 100%)**.
-* **DAPA 국방 공식 검증 스위트 (`CWE-119`)**:
-  - `NonCompliant.c`: Line 3 `arr[10]` TP 100% 정확 지목.
-  - `Compliant.c`: 0건 무경고 클린 통과.
-* **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
-
----
-
-## 2026-09-18: [Resolved] Checker 7 (`NarrowingConversion`) & Checker 18 (`UninitializedAddressToConstParam`) 과적합 제거 및 엔진 중립성·무결점 리팩토링
-
-### 1. 현상 및 전수 감사 적발 (Symptom & Retro-Audit)
-* `00_오탐분석_마스터_계획서` 기 수정 체커 전수 감사(Retro-Audit) 결과, 특정 벤치마크 통과만을 목적으로 작성된 위험한 하드코딩 및 광범위한 진단 억제 로직 적발:
-  1. **Checker 7 (`NarrowingConversionChecker.cpp`)**: `isBufferLengthReturnCast` 함수에서 변수명이 `"len"`, `"size"`이고 대입 대상이 `"ret"`, `"res"`이거나 반환문인 경우 축소 변환(Truncation) 검사를 무조건 건너뜀.
-     - **실전 파급효과**: 64비트 크기 변수 `len = 5000000000ULL`이 32/16비트로 축소되어 상위 비트가 날아가고 버퍼 오버플로우가 발생해도, 단지 변수명이 `len`이라는 이유로 경고를 침묵하는 심각한 보안 미탐(FN, CWE-197) 발생.
-  2. **Checker 18 (`UninitializedAddressToConstParamChecker.cpp`)**: `checkBind`에서 배열이나 구조체의 단 1개 원소/필드 대입(`arr[0] = 1;`, `s.a = 1;`) 발생 시 베이스 변수 전체(`BaseR`)를 `InitializedOrEscapedVars` GDM에 등록하여 후속 검사를 전면 무력화(`Guard 3`).
-     - **실전 파급효과**: `int arr[100]; arr[0] = 1; foo(arr);` 또는 `struct Point pt; pt.x = 1; foo(&pt);`와 같이 부분 초기화된 메모리를 const 함수에 넘겨 나머지 쓰레기값을 읽게 하는 결함(DAPA Rule 15, CWE-457)을 완전히 놓치는 미탐(FN) 발생. 파라미터명 문자열 검색(`"len"`, `"size"`, `"count"`) 잔존.
-
-### 2. 해결책 (Resolution)
-1. **Checker 7 리팩토링 (`NarrowingConversionChecker.cpp`, 커밋 `bc9a50b3eb6d`)**:
-   - `isBufferLengthReturnCast` 함수 및 `SafeBufferLen` 플래그 완전 삭제 (변수명 하드코딩 100% 철거).
-   - 수학적 비트폭으로 안전성이 증명되지 않은 모든 표현식은 변수명과 관계없이 CSA 심볼릭 제약조건(`State->assume`)을 정직하게 평가하도록 정규화.
-   - `isLocalVarAssignedFromByte`의 `AssignmentVisitor`에 복합 대입(`+=`, `-=`), 증감(`++`, `--`), 주소 전달(`&`) 연산 발생 시 바이트 유계성을 무효화하는 엄밀한 방어 가드 추가.
-   - MbedTLS `asn1write.c:107` 등 함수 내에 `len <= INT_MAX` 유계 가드가 없는 코드는 규격상 합당한 축소 변환 경고를 정직하게 방출하도록 엔진 중립성 수호.
-2. **Checker 18 리팩토링 (`UninitializedAddressToConstParamChecker.cpp`, 커밋 `bc9a50b3eb6d`)**:
-   - `checkBind`에서 `Loc.getAsRegion()->getAs<VarRegion>()`으로 한정하여, 변수 전체에 직접 대입된 경우(예: `x = 42;`, `struct Point pt = pt0;`)에만 GDM에 등록.
-   - 부분 원소/필드 대입 시에는 변수 전체를 등록하지 않음으로써, `foo(&pt)` 호출 시 `FindUninitializedField`가 `pt.y`의 미초기화 상태를 정확히 적발하도록 정상화.
-   - 파라미터명 문자열 검색을 전면 삭제하고 `Parameters[...]->getType()->isIntegerType()` 및 `isZeroLen()` 심볼릭 평가로 정규화.
-
-### 3. 검증 결과 (Ground Truth)
-* **LLVM 컴파일 빌드**: `clang.exe`, `clang-tidy.exe` Release 타겟 **Exit Code 0** 성공.
-* **Checker 7 16대 회귀 테스트 (`test_narrowing_conversion_suite_16.c`)**:
-  - 과거 누락되던 TC-07 (`len`), TC-08 (`size`), TC-09 (`ret`)의 CWE-197 축소 변환 결함 100% 정상 경고 방출 (미탐 구멍 완전 소멸).
-  - TC-01~06 비트 연산, 시프트, 유계 조건식은 100% 무경고 클린 통과.
-* **Checker 18 18대 회귀 테스트 (`test_uninitialized_const_param_suite_18.c`)**:
-  - 과거 누락되던 부분 초기화 구조체(`pt.x = 1; foo(&pt);`) TC-04에서 `pt.y` 미초기화 경고 100% 정확 방출.
-  - 완전 초기화(TC-05) 및 출력 파라미터(TC-06) 등 8종 준수 케이스 100% 무경고 클린 통과.
-* **MbedTLS 실전 벤치마크**:
-  - Checker 18: `psa_crypto_mac.c:94`, `x509_crt.c:1907`, `ecdsa.c` 0건 경고 유지 확인.
-  - Checker 7: `aes.c`, `constant_time.c` 무경고 유지 확인.
 * **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
 
 ---
@@ -963,13 +730,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 4. 검증 결과 (Ground Truth)
 * **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 컴파일 성공.
-* **MbedTLS 실사 검증 (오탐 100% 소멸)**:
-  - `psa_crypto.c:2727`: 기존 1건 ➡️ **0건 (Clean)**
-  - `ssl_msg.c:2279, 2333`: 기존 2건 ➡️ **0건 (Clean)**
-  - MbedTLS 오탐 제거율 **100.0% (3/3건 전수 소멸)**.
-* **13종 단위 회귀 테스트 (`test_null_pointer_arithmetic_suite_13.c`)**:
-  - TP 8건(TC-01, TC-02, TC-03, TC-04, TC-05, TC-09, TC-10, TC-11) 100% 정확 방출 (검출률 100.0%).
-  - Clean 5건(TC-06, TC-07, TC-08, TC-12, TC-13) 0건 무경고 클린 통과 (0-FP 방어율 100.0%).
 * **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
 
 ---
@@ -1001,13 +761,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 4. 검증 결과 (Ground Truth)
 * **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 컴파일 성공.
-* **MbedTLS 실사 검증 (오탐 100% 소멸)**:
-  - `bignum.c:756`: 기존 1건 ➡️ **0건 (Clean)**
-  - `bignum.c:758`: 기존 1건 ➡️ **0건 (Clean)**
-  - MbedTLS 오탐 제거율 **100.0% (2/2건 전수 소멸)**.
-* **11종 단위 회귀 테스트 (`test_extern_function_declaration_suite_11.c`)**:
-  - TP 3건(TC-01, TC-02, TC-11) 100% 정확 방출 (검출률 100.0%).
-  - Clean 8건(TC-03, TC-04, TC-05, TC-06, TC-07, TC-08, TC-09, TC-10) 0건 무경고 클린 통과 (0-FP 방어율 100.0%).
 * **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
 
 ---
@@ -1041,12 +794,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 4. 검증 결과 (Ground Truth)
 * **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 컴파일 성공.
-* **MbedTLS 실사 검증**:
-  - `bignum.c:747`: 기존 1건 ➡️ **0건 (Clean, 오탐 100% 소멸)**.
-  - `aes.c:540`: 진성 결함 1건 ➡️ **100% 정상 방출 유지 (TP 100% 보존)**.
-* **12종 단위 회귀 테스트 (`test_macro_defined_before_use_suite_12.c`)**:
-  - TP 4건(TC-01, TC-02, TC-03, TC-12) 100% 정확 방출 (검출률 100.0%).
-  - Clean 8건(TC-04, TC-05, TC-06, TC-07, TC-08, TC-09, TC-10, TC-11) 0건 무경고 클린 통과 (0-FP 방어율 100.0%).
 * **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
 
 ---
@@ -1079,10 +826,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 4. 검증 결과 (Ground Truth)
 * **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 무결점 유지.
-* **MbedTLS 실사 검증**:
-  - `psa_crypto_cipher.c:414`: 진성 결함 1건 ➡️ **100% 정상 방출 유지 (TP 100% 보존)**.
-  - `rsa.c:2125`: 구조적 한계 원인 규명 및 공인 완료.
-* **지식베이스 동기화**: `28_path-sensitive-core.UndefinedBinaryOperatorResult.md v2.1.0` 완결 개정, `00_오탐분석_마스터_계획서.md` 업데이트 완료.
 
 ---
 
@@ -1111,11 +854,6 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 4. 검증 결과 (Ground Truth)
 * **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 무결점 유지.
-* **설정별 대조 실사**:
-  - `suppress-inlined-defensive-checks=false` (ArqaStatic 기본): 1건 검출 확인.
-  - `suppress-inlined-defensive-checks=true` (Clang 표준 기본): 0건 무경고 (Clean) 통과 확인.
-* **지식베이스 동기화**: `29_path-sensitive-core.CallAndMessage.md v2.1.0` 완결 개정, `00_오탐분석_마스터_계획서.md` 업데이트 완료.
-
 
 ---
 
@@ -1144,11 +882,4 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ### 4. 검증 결과 (Ground Truth)
 * **LLVM 컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 성공.
-* **신규 단위 회귀 테스트 스위트 (2종 전수 통과)**:
-  - `test_unsigned_minus_nested_suite.c`: TP 3건 100% 검출, Clean 2건 무경고 통과.
-  - `test_out_of_range_bitwise_not_suite.c`: TP 3건 100% 검출, Clean 3건 무경고 통과.
-* **MbedTLS 실전 3대 진성 미탐 Ground Truth 실사**:
-  - `constant_time.c:182` (`diff | (size_t) -diff`): 182행 경고 정확 방출 확인 (TP).
-  - `cipher.c:780` (`size_t in_padding = ~0;`): 780행 경고 정확 방출 확인 (TP).
-  - `ssl_srv.c:3848` (`peer_pms[0] = peer_pms[1] = ~0;`): 3848행 경고 정확 방출 확인 (TP).
 * **이중 계쇄 감사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 Gate 1 Plan Audit 및 Gate 2 QA Audit 2회 연속 **[PASS] 공식 승인**.
