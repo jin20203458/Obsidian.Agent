@@ -341,10 +341,10 @@ gantt
 | ID | 카테고리 | 시나리오 명칭 | 탐지 대상 MITRE TTP | 판결 결과 | 판결 근거 및 주요 호출 도구 시퀀스 | 지연시간 |
 | :-: | :--- | :--- | :--- | :-: | :--- | :-: |
 | 1 | Benign | PyInstaller Temp 언팩 패키지 | Legitimate Bundle | **PASS (TN)** | Decode ➔ FileInspection ➔ MemoryScan (정상 관리 도구 판정) | 73 ms |
-| 2 | Benign | 사내 개발자 로컬 빌드 바이너리 | Developer Debug | **PASS (TN)** | Decode ➔ FileInspection ➔ MemoryScan (정상 관리 도구 판정) | 48 ms |
-| 3 | Benign | Intune/SCCM 소프트웨어 배포 | Base64 PowerShell | **PASS (TN)** | Decode ➔ 1ms 조기 탈출 (정상 인프라 배포 판정) | 1 ms |
+| 2 | Benign | 사내 개발자 로컬 빌드 바이너리 | Developer Debug | **PASS (TN)** | Decode ➔ FileInspection ➔ MemoryScan (정상 관리 도구 판정) | 1 ms |
+| 3 | Benign | Intune/SCCM 소프트웨어 배포 | Base64 PowerShell | **PASS (TN)** | Decode ➔ FileInspection ➔ MemoryScan (정상 인프라 배포 판정) | 11 ms |
 | 4 | Benign | 사내 일일 대용량 백업 업로드 | Backup Utility | **PASS (TN)** | Decode ➔ 1ms 조기 탈출 (사내 정상 백업 스크립트 판정) | 1 ms |
-| 5 | Benign | AnyDesk 포터블 무서명 헬퍼 | Remote Support | **PASS (TN)** | Decode ➔ FileInspection ➔ MemoryScan (정상 원격 도구 판정) | 46 ms |
+| 5 | Benign | AnyDesk 포터블 무서명 헬퍼 | Remote Support | **PASS (TN)** | Decode ➔ FileInspection ➔ MemoryScan (정상 원격 도구 판정) | 1 ms |
 | 6 | Malicious | DLL 사이드로딩 (OneDrive + version.dll) | **T1574.002** | **PASS (TP)** | FileInspection(Sideloading +60) ➔ MemoryScan ➔ **90점 사살** | 1 ms |
 | 7 | Malicious | 메모리 슬립 난독화 & MZ 와이핑 | **T1055.012** | **PASS (TP)** | ProcessMemoryScan(Unbacked RWX) ➔ **90점 사살** | 62 ms |
 | 8 | Malicious | 레지스트리 은닉 간접 실행 (Squiblydoo) | **T1218.010** | **PASS (TP)** | RegistryInspection(Scriptlet +50, C2 IP) ➔ Firewall ➔ **110점 사살** | 20 ms |

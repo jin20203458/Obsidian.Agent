@@ -177,7 +177,7 @@ Phalanx Root
 
 | 컴포넌트 | 현재 상태 | 비고 |
 |---|---|---|
-| `ThreatReputationTool.cs` | 로컬 정적 딕셔너리 기반 (IoC 8건) | 로컬 전용 1차 구현체 유지 |
+| `ThreatReputationTool.cs` | 로컬 정적 딕셔너리 기반 (악성 IoC 9건 / 화이트리스트 11건) | 로컬 전용 1차 구현체 유지 |
 | `SystemFirewallTool.cs` | 비관리자 환경 시뮬레이션 분기 | 권한 격리 안전 분기 유지 |
 
 ---
