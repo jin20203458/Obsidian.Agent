@@ -54,7 +54,7 @@ flowchart LR
 
 ---
 
-## 제2장: 핵심 프롬프트 엔지니어링 표준 원칙 (13 Standard Principles)
+## 제2장: 핵심 프롬프트 엔지니어링 표준 원칙 (14 Standard Principles)
 
 ### 2.1 원칙 1: 구조적 프롬프팅 (Structured Prompting & PICCO Framework)
 XML 태그를 사용하여 프롬프트의 각 구성 요소(지시문, 데이터, 예시, 출력 형식)를 물리적으로 분리하면 LLM의 지시 준수율이 30% 이상 향상됩니다.
@@ -85,32 +85,29 @@ XML 태그를 사용하여 프롬프트의 각 구성 요소(지시문, 데이�
   * 각 프롬프트는 자기 영역 밖의 데이터를 생성하지 않도록 차단 (예: 서사 요약 프롬프트에는 "수치 데이터를 포함하지 마십시오" 명시 - Zero-Numeric 원칙).
   * 파이프라인에서 이전 모델의 생성물을 다음 모델의 프롬프트에 주입할 때도 지시문과 섞이지 않도록 전용 태그로 격리할 것.
 
-### 2.3 원칙 3: 소비자 주도 계약 설계 (Consumer-Driven Contract)
+### 2.3 원칙 3: 소비자 주도 계약 설계 (Consumer-Driven Contract & Dual-Layer Schema)
 프롬프트의 출력 형식은 그 출력을 소비하는 런타임 코드(JSON 파서, 다음 에이전트)의 기대 규격에 완벽히 부합해야 합니다. 목표는 문학적 유려함이 아닌 **파싱 무결성(Parsing Integrity)**입니다.
 
 * **학술 및 산업 근거**:
   * *BoundaryML Benchmark (2026)*: 텍스트 프롬프트 내에 Raw JSON Schema를 명시할 경우 TypeScript 인터페이스 대비 토큰을 4배 낭비하며, 하위 모델에서 메타키(`properties` 등) 오염 에러율이 6%에 달함. 반면 TypeScript 인터페이스는 0% 오류율 달성.
   * *"Software Engineering for Prompt-Enabled Systems" (arXiv:2503.02400, 2025-2026)*: 프롬프트를 타입 기반 인터페이스(Typed Interface)로 취급하는 계약 기반 설계 제시.
-  * *"JSONSchemaBench: A Rigorous Benchmark of Structured Outputs for Language Models" (arXiv:2501.10868, ICML 2025 ES-FoMo Workshop)*: 문법 제약 디코딩(Guidance, XGrammar)이 단순 스키마에서는 100%에 근접하나 복잡한 재귀/중첩 스키마에서는 프레임워크 편차가 큼.
-  * *"Chain-of-Collaboration Prompting Framework" (arXiv, 2025.05)*: 멀티 에이전트 간 데이터 전달은 엄격히 검증된 계약 형식이어야 함.
-* **실전 규칙**:
-  * **JSON 구조화 출력 설정**: API 호출 시 `responseMimeType: "application/json"`을 필수로 지정.
-  * **TypeScript 인터페이스 스키마 주입**: 복잡한 구조는 Raw JSON Schema 대신 주석 작성이 용이하고 토큰이 절약되는 TypeScript 인터페이스로 정의.
+  * *"JSONSchemaBench: A Rigorous Benchmark of Structured Outputs for Language Models" (ICML 2025)*: API 레벨의 문법 제약 디코딩(XGrammar, Guidance, OpenAI Strict Mode)이 스키마 준수율 100%를 보장함.
+* **실전 이원화 규칙 (Dual-Layer Contract Best Practice)**:
+  * **1계층 (프롬프트 본문 - 시맨틱 가이드)**: 프롬프트 텍스트 내부에는 토큰을 절약하고 주석 작성이 용이한 **TypeScript 인터페이스**를 주입하여 모델의 의미론적 이해를 유도.
+  * **2계층 (API 페이로드 - 물리적 강제)**: 백엔드 API 호출 시에는 OpenAI의 `response_format: { type: "json_schema", strict: true }` 또는 Gemini의 `responseSchema`를 등록하여 디코딩 레벨에서 100% 문법 무결성 강제.
   * **엣지 케이스 Few-shot 결합**: 스키마 하단에 1~2개의 압축된 Raw JSON 예시를 제공하여 구조 명확화.
   * **방어적 파싱 로직 구비**: 백엔드 코드에 마크다운 코드블록 제거(`ExtractJson`), 안전한 역직렬화(`DeserializeSafe`) 및 태그 누락 시 전체 텍스트를 취하는 Fallback 로직 필수 구현.
 
-### 2.4 원칙 4: 수치 연산 안전 장치 (Numerical Safety Clamping)
-LLM은 텍스트 추론 기반 산술 연산에서 2~15%의 체계적 오류를 범합니다. 수치를 다루는 프롬프트에는 유효 범위 클램핑(Clamping)과 상태 유지 규칙을 명시해야 합니다.
+### 2.4 원칙 4: 수치 연산 안전 장치 (Numerical Safety Clamping & Physical Defense)
+LLM은 텍스트 추론 기반 산술 연산에서 2~15%의 체계적 오류를 범합니다. 수치를 다루는 프롬프트에는 유효 범위 클램핑(Clamping)과 상태 유지 규칙을 명시하되, 백엔드 코드의 물리적 제어가 반드시 1차 방어선으로 병행되어야 합니다.
 
 * **학술 및 산업 근거**:
   * *"Steering Large Language Models between Code Execution and Textual Reasoning" (ICLR 2025, CodeSteer)*: LLM이 코드 실행 대신 텍스트 추론을 시도할 때 산술 오류가 급증함. 과제 복잡도 증가 시 역스케일링 관찰.
-  * *"Demystifying Errors in LLM Reasoning Traces: An Empirical Study of Code Execution Simulation" (ACM TOSEM, 2026 / arXiv:2512.00215, 2025.11)*: 최첨단 추론 모델 4종(Claude 4, DeepSeek R1, Gemini, GPT-4o) 분석 결과 Computation Error가 가장 빈발. 도구 보강(Calculator/Tool) 시 계산 오류의 58% 교정 가능.
+  * *"Demystifying Errors in LLM Reasoning Traces" (ACM TOSEM, 2026)*: 최첨단 추론 모델 분석 결과 계산 오류가 가장 빈발하며, 도구 보강(Code Execution/Calculator) 시 오류의 58% 이상이 즉각 교정됨.
 * **실전 규칙**:
-  * 범위형 스탯(예: HP 100/100): `[0 ~ 최대치]` 범위 절대 이탈 불가(Clamping) 명시.
-  * 단일 수치(예: 골드): 무제한 연산 허용 여부 및 음수 방지 규칙 명시.
-  * 증감폭 가이드: "5~10 상승", "최대 20% 감소" 등 정량적 범위 제시.
-  * 불변 원칙: 변화가 없는 항목은 임의 계산하지 않고 이전 값을 그대로 유지한다고 명시.
-  * 복잡한 산술 연산은 LLM 텍스트 추론 대신 Tool Calling(코드 인터프리터/계산기)으로 위임.
+  * **물리적 백엔드 1차 방어선**: 프롬프트 지시에만 전적으로 의존하지 말고, C#/C++ 백엔드 코드에서 `Math.Clamp(value, min, max)`로 수치 범위를 강제하는 후처리(Post-processing)를 의무화.
+  * **도구 호출(Tool Calling) 위임**: 복잡한 사칙연산, 누적 합산, 확률 주사위 연산은 LLM 텍스트 추론 대신 Native Code Execution이나 계산기 도구로 위임.
+  * **프롬프트 내 상태 보존 명시**: 범위형 스탯(예: HP 100/100)의 `[0 ~ 최대치]` 범위 절대 이탈 불가, 무제한 증감 방지, 변화가 없는 항목은 이전 값을 그대로 유지한다는 불변 규칙 명시.
 
 ### 2.5 원칙 5: System Instruction vs User Prompt 배치 전략
 역할 정의, 행동 제약, 출력 스키마, Few-shot 예시는 System Instruction에 배치하고, 동적 컨텍스트와 실제 실행 명령만 User Prompt에 배치하는 것이 최적의 성능을 보장합니다.
@@ -136,12 +133,14 @@ Few-shot 예시는 2~4개가 최적이며, 형식 일관성과 엣지 케이스 
   * **다양성**: 일반 성공 케이스뿐 아니라 예외 처리 및 엣지 케이스를 최소 1개 포함.
   * **배치 위치**: User Prompt가 아닌 System Instruction 내부에 배치.
 
-### 2.7 원칙 7: Temperature 및 Generation Config 최적화
-Gemini 3.x 세대 모델에서는 Temperature, `top_p`, `top_k`를 임의로 낮추지 않고 **생략(Omit/Null)**하여 API 기본값(`1.0`)으로 구동해야 모델 고유의 추론 능력이 보존됩니다.
+### 2.7 원칙 7: Temperature 및 Generation Config 최적화 (일반 모델 vs 추론형 모델 이원화)
+최신 LLM 환경에서는 모델 아키텍처에 따라 Temperature 접근법을 엄격히 이원화해야 합니다.
 
-* **학술 및 산업 근거**:
-  * *Google 공식 문서 (Gemini 3.5 Flash & 3.1 Pro 개발자 가이드, 2026.06)*: "Gemini 3.x 모델군에서는 temperature, top_p, top_k를 기본값으로 유지할 것을 강력히 권장. 임의 수정 시 반복 루핑이나 성능 저하 발생 가능". 정밀 JSON 출력도 온도를 낮추는 대신 System Instruction 제약과 Response Schema로 통제하도록 설계됨.
-* **타사 모델 및 이전 세대(Gemini 2.x 이하) Temperature 가이드**:
+* **1. 추론형(Reasoning/Thinking) 모델 (OpenAI o1/o3, Claude 3.7 Thinking, Gemini 3 Thinking)**:
+  * **Temperature 수정 절대 금지**: 추론 모델은 내부 CoT 토큰 탐색이 자체 수렴하도록 설계되어 있어, 임의로 온도를 낮추거나 변경하면 루핑 에러 또는 성능 급락이 발생합니다.
+  * API 매개변수에서 `temperature`를 생략(`null` 전송)하거나 기본값(`1.0`)으로 고정하는 것이 필수입니다.
+* **2. 일반/비추론형(Standard) 모델 (클래식 생성용)**:
+  * 정밀도가 필요한 작업에 한해 온도를 조절합니다:
 
 | 과제 유형            | 권장 Temperature | 설명              |
 | :--------------- | :------------- | :-------------- |
@@ -151,41 +150,38 @@ Gemini 3.x 세대 모델에서는 Temperature, `top_p`, `top_k`를 임의로 낮
 | 요약 / 정보 압축       | 0.3 ~ 0.5      | 핵심 요약 및 일관성 유지  |
 | 일반 Q&A / 에이전트 추론 | 0.5 ~ 0.7      | 논리적 균형 유지       |
 | 창작 / 서사 생성       | 0.7 ~ 1.0      | 어휘 다양성 및 표현력 확보 |
-| 브레인스토밍           | 0.8 ~ 1.2      | 다양한 아이디어 발산     |
 
 * **실전 적용 규칙**:
-  * C# 및 백엔드 호출부에서 `GenerationConfig.Temperature`를 nullable(`float?`)로 설정하고 `null`을 전달하여 필드 전송 자체를 생략(Omit).
-  * `SessionArchitect`, `StatusAPI`, 서사 요약, 번역 등 전 API 호출부에 `null` 기본값 적용 완료.
+  * C# 및 백엔드 호출부에서 `GenerationConfig.Temperature`를 nullable(`float?`)로 설정하고 기본값으로 `null`을 전달하여 필드 전송 자체를 생략(Omit).
 
-### 2.8 원칙 8: Thinking(추론) 모델 프롬프트 전략
-Thinking(사고 과정) 메커니즘이 내장된 모델(Gemini 2.5/3, Claude Extended Thinking, OpenAI o-시리즈)에게는 **"어떻게(HOW)"를 지시하지 말고 "무엇을(WHAT)" 달성할 것인지** 간결히 지시해야 합니다.
-
-* **학술 및 산업 근거**:
-  * *Google 공식 문서 (Gemini Thinking, 2026.06)*: Gemini 2.5/3 시리즈는 자체 'Hidden Reasoning' 토큰을 생성하므로 수동 CoT("단계별로 생각하라") 지시문은 불필요하며 오히려 연산력을 낭비함. 복잡한 과제에는 "Think very hard before answering"과 같은 수준의 목표 지시가 유리.
-  * *OpenAI 공식 문서 (2026)*: 추론 모델(o-시리즈)은 Developer 메시지에 명확한 목표와 제약만 제시하고 추론 프로세스는 모델에 완전히 위임할 때 최고 성능 발휘.
-* **Gemini 3 Thinking Level 가이드**:
-
-| 과제 복잡도 | 권장 ThinkingLevel | 적용 시나리오 |
-| :--- | :--- | :--- |
-| 단순 (사실 검색, 데이터 포맷팅) | `minimal` 또는 `OFF` | StatusAPI 상태창 JSON 갱신 |
-| 보통 (비교 분석, 유추, 정보 압축) | `low` ~ `medium` | 장기 기억 병합 (MemoryMerge) |
-| 복잡 (수학, 코딩, 복합 서사 융합) | `high` | 중기 서사 요약 (StorySummarizer) |
-
-* **실전 규칙**:
-  * "단계별로 차근차근 생각하세요" 같은 텍스트 CoT 지시문은 절대 삽입하지 말 것.
-  * 모델이 충분히 사고하도록 유도할 때는 프롬프트 수정 대신 API 매개변수(`ThinkingLevel`)를 조절할 것.
-
-### 2.9 원칙 9: 프롬프트 길이와 토큰 효율성 (Lost in the Middle 방지)
-프롬프트가 길어질수록 어텐션 분산으로 인해 성능 수익은 급격히 체감합니다. 핵심 정보는 프롬프트의 시작과 끝에 배치해야 합니다.
+### 2.8 원칙 8: Thinking(추론) 모델 프롬프트 전략 및 Over-prompting 금지
+Thinking(사고 과정) 메커니즘이 내장된 모델에게는 **"어떻게(HOW)"를 지시하지 말고 "무엇을(WHAT)" 달성할 것인지** 간결히 지시해야 합니다.
 
 * **학술 및 산업 근거**:
-  * *"Lost in the Middle: How Language Models Use Long Contexts" (Liu et al., TACL 2024)*: LLM은 1M 이상의 거대 컨텍스트에서도 시작(Primacy)과 끝(Recency)에 위치한 정보에 압도적으로 집중하며, 중간 영역 정보는 인지율이 급감함.
-  * *"Incorporating Token Usage into Prompting Strategy Evaluation" (arXiv:2505.14880, 2025.05)*: Few-shot 예시를 3개에서 8개로 늘릴 때 토큰 비용은 10배 증가하나 성능 향상은 미미함 (Big-Otok 효율성 프레임워크).
+  * *Google 공식 문서 (Gemini Thinking, 2026)*: Gemini 2.5/3 시리즈는 자체 'Hidden Reasoning' 토큰을 생성하므로 수동 CoT("단계별로 생각하라") 지시문은 연산력을 낭비함.
+  * *OpenAI 공식 문서 (2026)*: 추론 모델(o-시리즈)은 장황한 Few-shot이나 추론 과정을 흉내 낸 예시를 제공할 경우 모델의 자율적 탐색(Autonomous Search Tree)을 방해하는 **Over-prompting 저하**가 발생함.
 * **실전 규칙**:
-  * **최상단**: 핵심 페르소나 및 행동 제약 규칙 배치.
-  * **중간**: 대량의 컨텍스트(RAG, 서사 데이터)를 배치하되 전용 XML 태그로 엄격히 감싸기.
-  * **최하단**: 프롬프트의 마지막에 `<final_instruction>` 태그를 열어 출력 규격과 최종 실행 명령을 재강조.
-  * **브릿지 구문 활용**: "위 <context>의 정보를 바탕으로 다음 작업을 수행하십시오"와 같이 컨텍스트와 최종 지시를 연결.
+  * **Zero-shot 우선 원칙**: 추론 모델에게는 복잡한 Few-shot 대신, 명확한 목표와 제약 조건(Constraints)만 전달하는 것이 가장 높은 벤치마크 점수를 기록.
+  * **수동 CoT 문구 전면 제거**: "단계별로 차근차근 생각하세요" 같은 텍스트 지시문 완전 배제.
+  * **API 단에서의 사고 예산 제어 (Thinking Budget)**:
+    - Gemini: `ThinkingLevel` (`minimal`, `low`, `medium`, `high`)
+    - OpenAI: `reasoning_effort` (`low`, `medium`, `high`)
+    - Claude: `budget_tokens` 파라미터로 작업 복잡도에 맞게 API 레벨에서 제어.
+
+### 2.9 원칙 9: 프롬프트 길이, Lost in the Middle 및 프롬프트 캐싱(Prompt Caching) 최적화
+프롬프트의 물리적 배치는 어텐션 집중뿐 아니라 **API 비용 및 지연시간을 50~90% 절감하는 프롬프트 캐싱(Prompt Caching)**의 성패를 결정합니다.
+
+* **학술 및 산업 근거**:
+  * *"Lost in the Middle" (Liu et al., TACL 2024)*: LLM은 거대 컨텍스트에서도 시작(Primacy)과 끝(Recency)에 위치한 정보에 압도적으로 집중하며, 중간 영역 정보는 인지율이 급감함.
+  * *Anthropic / OpenAI / Google Prompt Caching 가이드 (2025-2026)*: 프롬프트 접두사(Prefix)가 100% 일치할 때만 KV Cache 히트가 발생함.
+* **캐싱 친화적 정적 접두사(Static Prefix) 설계 규칙**:
+  * **1. 정적 접두사 (최상단 고정 - 캐시 대상)**:
+    - 시스템 페르소나, 핵심 행동 제약(`<rules>`), XML 입출력 규격(`<output_format>`), 도구 정의(Tools), 세계관 로어북 등 **세션 간 변하지 않는 모든 정보**는 프롬프트의 맨 앞에 불변 상태로 고정 배치.
+  * **2. 대량 참조 데이터 (중간 배치)**:
+    - RAG 검색 문서나 참조 텍스트는 전용 XML 태그(`<context>`)로 격리하여 중간에 배치.
+  * **3. 동적 접미사 (최하단 배치 - 캐시 비대상)**:
+    - 매 턴마다 바뀌는 사용자 질문/입력(`<user_input>`)과 최종 실행 명령(`<final_instruction>`)은 반드시 **프롬프트 맨 마지막**에 배치.
+    - *주의*: 동적 사용자 입력이 프롬프트 앞단에 삽입되면 그 뒤에 있는 수천 토큰의 정적 캐시가 전부 무효화(Cache Bust)되므로 배치 순서를 엄격히 준수할 것.
 
 ### 2.10 원칙 10: 부정 지시문 처리 원칙 (Negative Prompting)
 "~하지 마시오" 형태의 금지 명령은 모델의 어텐션을 금지 대상에 집중시켜 오히려 실수를 유발(흰 곰 효과)하므로, 실행 가능한 **긍정 지시문(~하시오)**으로 변환해야 합니다.
@@ -230,6 +226,17 @@ Thinking(사고 과정) 메커니즘이 내장된 모델(Gemini 2.5/3, Claude Ex
   * *Anthropic 공식 가이드 (2024-2025)*: "가장 일반적이고 강력한 에이전트 패턴은 Self-Correction: 생성된 출력을 검증 기준 프롬프트에 통과시켜 결함을 수정한 뒤 최종 반환하는 구조".
 * **실전 적용**:
   * 에이전트 파이프라인(예: PromptGen) 직후에 Validator 에이전트를 배치하여 생성된 텍스트가 런타임 스키마 및 게임 규칙과 충돌하지 않는지 검증하고 필요 시 자동 재작성.
+
+### 2.14 원칙 14: 도구 호출(Tool Calling) 최적화 프롬프팅
+에이전트 시스템에서 도구 오호출(Tool Misuse)과 파라미터 환각을 방지하기 위해, 도구 설명(Docstring/Description)을 프롬프트 엔지니어링 관점에서 엄격히 설계합니다.
+
+* **학술 및 산업 근거**:
+  * *Anthropic / OpenAI Tool Use 가이드 (2025-2026)*: 도구 설명은 단순 기능 서술이 아닌 "트리거 조건(When to call)"과 "금지 조건(When NOT to call)"을 명시할 때 도구 호출 정확도가 35% 이상 향상됨.
+* **실전 규칙**:
+  * **1. 트리거 조건 명시**: 도구가 수행하는 기능뿐 아니라 *"어떤 조건/상황에서 반드시 호출해야 하는지"*를 서술.
+  * **2. 부정 가드(Negative Guard) 명시**: *"이 도구를 단독으로 호출하지 마십시오"*, *"데이터가 이미 캐시에 있다면 호출하지 마십시오"* 등 금지 조건을 명시.
+  * **3. 유사 도구 간 차별화 (Disambiguation)**: 유사한 역할을 하는 도구(예: `view_file` vs `read_url_content`)가 있을 경우 명확한 용도 경계를 기술하여 환각 호출 차단.
+  * **4. 인자(Parameter) 바인딩 제약**: 인자의 타입, 필수 여부, 유효 포맷(절대 경로, 정규식)을 엄격히 명시.
 
 ---
 
