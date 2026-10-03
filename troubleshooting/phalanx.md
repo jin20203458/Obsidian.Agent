@@ -15,7 +15,7 @@ related:
 
 ### 1. ETW 커널 세션 생성 권한 (Administrator Elevation)
 * **현상**: 관리자 권한이 없는 일반 사용자 권한으로 센서 실행 시 `krabs-etw` 세션 생성 단계에서 `ACCESS_DENIED (0x5)` 예외 발생.
-* **대응책**: `Phalanx.Sensor.exe`의 매니페스트 파일(`app.manifest`)에 `requireAdministrator` 실행 수준을 필수 명시.
+* **대응책**: `src/Phalanx.Sensor/CMakeLists.txt`의 MSVC 링크 플래그(`/MANIFEST:EMBED /MANIFESTUAC:"level='requireAdministrator' uiAccess='false'"`)로 `Phalanx.Sensor.exe`에 `requireAdministrator` 실행 수준을 임베딩.
 
 ### 2. 프로세스 원자적 동결 데드락 방어 및 세이프티 워치독 (Safety Watchdog)
 * **현상**: 타깃 프로세스가 크리티컬 섹션이나 ntdll 로더 락(`LdrpLoaderLock`)을 쥐고 있는 상태에서 비동기 동결 호출 시 시스템 전역 리소스 경합 또는 데드락 발생 가능성.
@@ -435,3 +435,22 @@ related:
    * `ExportForensicPdfAsync` 진입 즉시 `var incident = SelectedIncident;` 로컬 스냅샷을 캡처하여 비동기 파일 저장 도중 발생할 수 있는 참조 경합 원천 차단.
    * `CanExportForensicPdf` 가드(`SelectedIncident != null && !SelectedIncident.IsInvestigating`) 장착 및 `OnSelectedIncidentChanged`, `OnInvestigationCompleted` 시점에 `NotifyCanExecuteChanged()` 연동.
    * `IForensicReportGenerator` 인터페이스 분리 및 DI 싱글톤 등록.
+
+---
+
+## 2026-10-03: [Resolved] 개발 경로 탐색 상대 경로 1단계 누락 및 vcpkg 툴체인 경로 하드코딩
+
+### 1. 현상 (Symptom)
+* 저장소 재배치(clone 후 별도 경로 빌드) 검증 중, `AppContext.BaseDirectory` 기준 `..\..\..\..\` 개발 경로가 저장소 루트가 아닌 `src\`로 해석됨을 확인.
+  * 센서 후보 1: `phalanx-edr\src\out\build\...\Phalanx.Sensor.exe` (부재, `Phalanx.sln` 상위 순회 후보 3으로 우연히 구제).
+  * 개발용 설정/인증: `phalanx-edr\src\src\Phalanx.Cockpit\AppSettings.json`, `...\Config\google-credentials.json` (부재, 소스 디렉터리 설정 읽기/쓰기 동기화 무력화).
+* `CMakePresets.json`이 `CMAKE_TOOLCHAIN_FILE`을 `$env{USERPROFILE}/vcpkg`로 고정하여, README에 명시된 `VCPKG_ROOT`가 실제로는 무시됨. vcpkg가 다른 위치에 설치된 머신에서 CMake 구성 실패.
+
+### 2. 원인 (Root Cause)
+* 출력 디렉터리 `src/Phalanx.Cockpit/bin/Debug/net9.0-windows/`는 저장소 루트로부터 5단계 하위이나, 경로 상수가 4단계(`..` x4)로 작성됨. 동일 상수가 복사-전파되어 7개 지점에 동일 결함 존재.
+* CMake 프리셋(v3)은 환경 변수 조건 분기를 표현할 수 없어 단일 경로만 하드코딩됨.
+
+### 3. 해결책 (Resolution)
+1. 다음 7개 지점을 `..\..\..\..\..\`(5단계)로 정정: `SensorProcessController.cs`(2), `AutonomousHunterAgent.cs`, `GeminiRestClient.cs`(2), `AttackLabScenarioRunner.cs`, `SettingsViewModel.cs`, 그리고 테스트 `SettingsViewModelTests.cs`.
+2. 루트 `CMakeLists.txt`의 `project()` 이전에 툴체인 탐색 로직 추가 (우선순위: `-DCMAKE_TOOLCHAIN_FILE` > `VCPKG_ROOT` > `%USERPROFILE%/vcpkg`, 모두 부재 시 `FATAL_ERROR`). `CMakePresets.json`에서 하드코딩 제거.
+3. 검증: `dotnet build Phalanx.sln` Exit 0 (경고 0), `dotnet test --filter "Category=Unit"` 85/85 통과, 신규 빌드 디렉터리 2종(VCPKG_ROOT 미설정 / 설정) CMake 구성 Exit 0, `build.ps1` Exit 0.

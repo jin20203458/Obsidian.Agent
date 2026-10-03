@@ -1,4 +1,4 @@
-﻿---
+---
 description: >-
   C++ 게임 서버 EnTT ECS 엔티티 4종 분류 및 메모리 메모. EnTT ECS 엔티티 설계 시 참조.
 related:
@@ -13,33 +13,35 @@ ECS 특성상 별도의 상속 클래스로 분리되어 있지는 않지만, �
 ---
 
 ### 1. NPC / Agent (에이전트)
-* **생성 시점**: 서버 부트스트랩 시점에 C# AI 서버의 에이전트 목록 수만큼 로드되어 고정 생성됩니다 ([main.cpp:L271](../../../MundusVivens.GameServer.Cpp/main.cpp#L271)).
+* **생성 시점**: 서버 부트스트랩 시점에 C# AI 서버의 에이전트 목록 수만큼 로드되어 고정 생성됩니다 ([main.cpp:L304](../../../MundusVivens.GameServer.Cpp/main.cpp#L304)).
 * **설명**: 의사결정을 내리고, 욕구를 느끼며, 이동하고, 대화(사교)를 나누는 게임 월드의 핵심 주체입니다.
 * **보유 컴포넌트**:
   * [IdentityComp](../../../MundusVivens.GameServer.Cpp/Components.h#L11-L14) (ID 및 이름)
-  * [NeedsComp](../../../MundusVivens.GameServer.Cpp/Components.h#L125-L131) (허기 및 fatigue 상태)
+  * [NeedsComp](../../../MundusVivens.GameServer.Cpp/Components.h#L131-L137) (허기 및 fatigue 상태)
   * [CooldownComp](../../../MundusVivens.GameServer.Cpp/Components.h#L65-L71) (행동 및 대화 쿨다운)
-  * [BehaviorTreeComp](../../../MundusVivens.GameServer.Cpp/Components.h#L211-L213) (로컬 인공지능 행동 트리)
-  * [JobComp](../../../MundusVivens.GameServer.Cpp/Components.h#L93-L104) / [ToilComp](../../../MundusVivens.GameServer.Cpp/Components.h#L114-L118) (고차원/저차원 작업 상태)
+  * [BehaviorTreeComp](../../../MundusVivens.GameServer.Cpp/Components.h#L217-L219) (로컬 인공지능 행동 트리)
+  * [JobComp](../../../MundusVivens.GameServer.Cpp/Components.h#L99-L110) / [ToilComp](../../../MundusVivens.GameServer.Cpp/Components.h#L120-L124) (고차원/저차원 작업 상태)
 
 ### 2. Player (플레이어)
-* **생성 시점**: 외부 유저가 TCP 소켓을 통해 로그인 요청(`CS_LOGIN`)을 보낼 때 동적으로 스폰됩니다 ([SystemPlayer.cpp:L90](../../../MundusVivens.GameServer.Cpp/SystemPlayer.cpp#L90)).
-* **설명**: 게임에 접속하여 돌아다니는 실제 유저입니다. NPC에게 말을 걸어 대화 세션([PlayerDialogueComp](../../../MundusVivens.GameServer.Cpp/Components.h#L175-L180))을 열 수 있습니다.
+* **생성 시점**: 외부 유저가 TCP 소켓을 통해 로그인 요청(`CS_LOGIN`)을 보낼 때 동적으로 스폰됩니다 ([SystemPlayer.cpp:L92](../../../MundusVivens.GameServer.Cpp/SystemPlayer.cpp#L92)).
+* **설명**: 게임에 접속하여 돌아다니는 실제 유저입니다. NPC에게 말을 걸어 대화 세션([PlayerDialogueComp](../../../MundusVivens.GameServer.Cpp/Components.h#L182-L185))을 열 수 있습니다.
 * **보유 컴포넌트**:
-  * [IdentityComp](../../../MundusVivens.GameServer.Cpp/Components.h#L11-L14) (ID `1`번 및 플레이어명)
-  * [LocationComp](../../../MundusVivens.GameServer.Cpp/Components.h#L38-L49) (현재 위치)
-  * [PlayerTag](../../../MundusVivens.GameServer.Cpp/Components.h#L171-L173) (네트워크 송수신 세션 인덱스)
+  * [IdentityComp](../../../MundusVivens.GameServer.Cpp/Components.h#L11-L14) (`AgentIdMapper`로 매핑된 ID 및 플레이어명)
+  * [LocationComp](../../../MundusVivens.GameServer.Cpp/Components.h#L38-L48) (현재 위치)
+  * [PlayerTag](../../../MundusVivens.GameServer.Cpp/Components.h#L177-L179) (네트워크 송수신 세션 인덱스)
 
 ### 3. Furniture / Object (가구 및 사물)
-* **생성 시점**: 서버 부트스트랩 시점에 월드의 정적 배치 데이터를 기반으로 로드됩니다 ([main.cpp:L250](../../../MundusVivens.GameServer.Cpp/main.cpp#L250)).
+* **생성 시점**: 서버 부트스트랩 시점에 월드의 정적 배치 데이터를 기반으로 로드됩니다 ([main.cpp:L287](../../../MundusVivens.GameServer.Cpp/main.cpp#L287)).
 * **설명**: 의자, 침대, 식탁, 제단 등 NPC들이 상호작용하는 대상입니다. NPC들은 이를 점유하여 허기나 피로를 회복합니다.
 * **보유 컴포넌트**:
-  * [LocationComp](../../../MundusVivens.GameServer.Cpp/Components.h#L38-L49) (위치 좌표)
-  * [AffordanceComp](../../../MundusVivens.GameServer.Cpp/Components.h#L144-L148) (상호작용 종류: Sit, Sleep, Eat 등 및 현재 점유 중인 엔티티 핸들 `occupied_by` 관리)
+  * [IdentityComp](../../../MundusVivens.GameServer.Cpp/Components.h#L11-L14) (ID `0` 및 가구명)
+  * [LocationComp](../../../MundusVivens.GameServer.Cpp/Components.h#L38-L48) (위치 좌표)
+  * [AffordanceComp](../../../MundusVivens.GameServer.Cpp/Components.h#L150-L154) (상호작용 종류: Sit, Sleep, Eat 등 및 현재 점유 중인 엔티티 핸들 `occupied_by` 관리)
 
 ### 4. Temporary Camp (임시 야영지 / 모닥불)
-* **생성 시점**: 황무지처럼 주변에 가구(Affordance)가 없는 곳에서 NPC의 허기나 피로 수치가 위기 수준(15% 미만)으로 떨어졌을 때, 행동 트리 노드에 의해 해당 NPC 발밑에 동적으로 스폰됩니다 ([BehaviorTrees.h:L212](../../../MundusVivens.GameServer.Cpp/BehaviorTrees.h#L212)).
+* **생성 시점**: 황무지처럼 주변에 가구(Affordance)가 없는 곳에서 NPC의 허기나 피로 수치가 위기 수준(15% 미만)으로 떨어졌을 때, 행동 트리 노드에 의해 해당 NPC 발밑에 동적으로 스폰됩니다 ([BehaviorTrees.h:L290](../../../MundusVivens.GameServer.Cpp/BehaviorTrees.h#L290)).
 * **설명**: 황무지 한가운데에서 생존을 위해 강제로 밥을 먹거나 잠을 잘 수 있게 해주는 임시 사물입니다. 사용이 끝나 회복되면 자동으로 월드에서 제거(`destroy`)됩니다.
 * **보유 컴포넌트**:
-  * [LocationComp](../../../MundusVivens.GameServer.Cpp/Components.h#L38-L49) (NPC 발밑 위치)
-  * [AffordanceComp](../../../MundusVivens.GameServer.Cpp/Components.h#L144-L148) (임시 식별 플래그 `is_temporary = true` 설정됨)
+  * [IdentityComp](../../../MundusVivens.GameServer.Cpp/Components.h#L11-L14) (ID `0` 및 "임시 모닥불"/"임시 야영지")
+  * [LocationComp](../../../MundusVivens.GameServer.Cpp/Components.h#L38-L48) (NPC 발밑 위치)
+  * [AffordanceComp](../../../MundusVivens.GameServer.Cpp/Components.h#L150-L154) (임시 식별 플래그 `is_temporary = true` 설정됨)

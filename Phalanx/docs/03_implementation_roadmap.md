@@ -34,7 +34,7 @@ related:
 본 문서에서는 시스템 런타임 통합 시 준수해야 하는 핵심 기술 불변식만을 유지합니다:
 
 1. **세이프티 워치독 SLA 계약 (10초 기본 / 50초 연장 티켓)**:
-   * C++ 센서는 기본 10초(10,000ms) 안전 타임아웃을 적용하며 ([`SafetyWatchdog.h:55`](../../../phalanx-edr/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h#L55)), AI 심층 수사 진입 시 `ACTION_EXTEND_TIMEOUT` 티켓을 통해 1회 한정 +50초 연장(총 60초 예산)을 집행합니다.
+   * C++ 센서는 기본 10초(10,000ms) 안전 타임아웃을 적용하며 ([`SafetyWatchdog.h:38`](../../../phalanx-edr/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h#L38)), AI 심층 수사 진입 시 `ACTION_EXTEND_TIMEOUT` 티켓을 통해 1회 한정 +50초 연장(총 60초 예산)을 집행합니다.
    * C# 최상위 타임아웃 CTS는 **50초(50,000ms)**로 설정하여 워치독 만료 10초 전 안전 마진을 보장합니다.
 2. **무결성 레벨 분리 및 수명주기 정리 (Orderly Teardown)**:
    * Cockpit과 Sensor 종료 시 역전송 및 동기화 순서를 엄격히 준수합니다:
@@ -80,8 +80,8 @@ Phalanx Root
 │           └── RegistryInspectionTool.cs    # 64비트 레지스트리/간접 실행/COM 하이재킹 검증
 ├── scripts/
 │   ├── run_attack_simulator.ps1             # 모의 공격 시뮬레이터 실행
-│   ├── run_fullchain_test.ps1               # 5대 풀체인 E2E 통합 검증
-│   └── build.ps1                            # C++ 센서 빌드
+│   └── run_fullchain_test.ps1               # 5대 풀체인 E2E 통합 검증
+├── build.ps1                                # C++ 센서 빌드 (vcvars64 + CMake 프리셋)
 └── tests/
     ├── Phalanx.Agent.Tests/                 # C# 85개 단위 테스트 및 Live 풀체인 테스트
     └── FullChainCrossE2ETest/               # C++ ↔ C# 크로스 랭귀지 E2E 테스트
