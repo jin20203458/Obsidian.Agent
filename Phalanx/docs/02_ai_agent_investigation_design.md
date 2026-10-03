@@ -172,9 +172,9 @@ C# 에이전트가 로컬 DAG 족보 분석기 및 센서 집행 결과와 합�
   * AI 에이전트 인스턴스는 활성화되지 않으며, C++ 네이티브 엔진의 `LocalRuleEngine` 및 `SafetyWatchdog`이 단독으로 로컬 방어를 완결합니다.
   * 차단 내역은 표준 포맷 텍스트로 대시보드와 리포트에 정상 출력됩니다.
 * **수사 엔진 출처 분류 및 UI 시각화 (Engine Attribution & Fallback Visualization)**:
-  * 모든 수사 결과와 `IncidentRecord`에는 `InvestigationEngine` 및 `FallbackReason` 필드가 영구 기록됩니다.
-  * `GEMINI_CLOUD`: Google Gemini 3.7 Cloud AI 실시간 자율 추론 완결.
-  * `OFFLINE_FALLBACK`: 원격 LLM 호출 타임아웃/네트워크 오류 발생 시 23ms 내장 결정론적 ReAct 엔진으로 자동 전환 완결. 메인 대시보드 및 심층 수사실에 주황색 경고 뱃지(`LOCAL FALLBACK`) 및 폴백 원인이 담긴 안내 배너가 즉각 노출되어 관제사의 혼란을 방지합니다.
+  * 모든 수사 결과와 `IncidentRecord`에는 `InvestigationEngine`, `EngineModel`, `FallbackReason` 필드가 영구 기록됩니다.
+  * `CLOUD_LLM`: 원격 클라우드 LLM 실시간 자율 추론 완결 (설정된 모델명이 동적으로 표출되며, 과거 레코드의 `GEMINI_CLOUD` 또한 호환 정규화됨).
+  * `OFFLINE_FALLBACK`: 원격 LLM 호출 타임아웃/네트워크 오류/인증 누락 발생 시 23ms 내장 결정론적 ReAct 엔진으로 자동 전환 완결. 메인 대시보드 및 심층 수사실에 주황색 경고 뱃지(`LOCAL FALLBACK`) 및 폴백 원인이 담긴 안내 배너가 즉각 노출되어 관제사의 혼란을 방지합니다.
   * `OFFLINE_LOCAL`: 초기 설정 부재 또는 오프라인 모드 하에서 로컬 엔진으로 수사 완결 (`LOCAL OFFLINE`).
   * `KERNEL_REFLEX`: 0.08ms(80μs) 커널 반사 신경망 즉각 현장 사살 (`KERNEL REFLEX` 적색 뱃지).
   * `USER_CANCELLED` / `FAIL_SECURE`: 관제사 수동 취소 및 Fail-Secure 긴급 보호 조치.
