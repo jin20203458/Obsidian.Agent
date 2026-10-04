@@ -102,14 +102,6 @@ Phalanx Root
 | **WPF UI** | `CommunityToolkit.Mvvm`, `EnterpriseTheme` | MVVM 다크 테마 4-View 관제 인터페이스 |
 | **AI LLM** | `Google.Apis.Auth` / Gemini 3.7 Flash / Ollama | 구조화 JSON 모드 및 Tool Calling |
 
-### 4.2 참조 로컬 코드 자산 및 차용 원칙 (Clean-Room Principles)
-
-> **참조 원칙**: 본 참조 자산은 **'아키텍처 패턴', '동시성 알고리즘 뼈대', 'UI 디자인 토큰'**만을 학습/차용합니다. 기존 프로젝트의 파일 통째 복사, 비즈니스 도메인 모델/고유 네임스페이스를 복제하는 행위는 엄격히 금지됩니다.
-
-1. **C++ 락-스왑 큐 & 비동기 gRPC**: `../MundusVivens.GameServer.Cpp` (패턴 구조만 참조)
-2. **C# Gemini API & gRPC 수신**: `../MundusVivens` (통신 패턴만 참조)
-3. **AI 사고 스트리밍 타이포그래피**: `../GRC` (텍스트 스타일 토큰만 참조)
-4. **엔터프라이즈 대시보드 & 캡슐 버튼**: `ArqaStatic/Themes/DarkTheme.xaml` (브러시 키값만 참조)
 
 ---
 
@@ -117,10 +109,13 @@ Phalanx Root
 
 빌드 및 테스트 명령어(`dotnet build`, `dotnet test --filter "Category=Unit"`, `run_fullchain_test.ps1`), 시크릿 파일 격리(`.gitignore`) 규약은 [`.agents/AGENTS.md`](../../../phalanx-edr/.agents/AGENTS.md)의 `<critical_rules>`를 단일 진실 공급원(SSOT)으로 준수합니다.
 
-### 5.1 LLM 인증 정보 로드 우선순위
+### 5.1 LLM 인증 정보 및 엔드포인트 연동 규약
 
-1. **환경 변수**: `GOOGLE_APPLICATION_CREDENTIALS` 환경 변수 지정 시 최우선 로드.
-2. **로컬 파일**: `src/Phalanx.Cockpit/Config/google-credentials.json` 및 `AppSettings.json`에서 자동 탐색.
+1. **설정 파일 단일 공급원(SSOT)**: 유료 API 오남용 방지를 위해 환경 변수나 임의 경로의 자동 탐색을 배제하며, 오직 `AppSettings.json` 및 UI 설정 창에 명시된 파일 경로와 파라미터만을 사용합니다.
+2. **Gemini 3.x 글로벌 엔드포인트 필수 원칙 (임의 다운그레이드 금지)**:
+   * **글로벌 엔드포인트 강제**: Vertex AI에서 **Gemini 3 이상(`gemini-3.7-flash` 등)** 버전을 연동하려면 리전 엔드포인트(`us-central1` 등)가 아닌 **반드시 `global` 엔드포인트(`aiplatform.googleapis.com` / `locations/global`)**를 사용해야 합니다.
+   * **추론 레벨(`ThinkingConfig`) 오류 방지**: 리전 엔드포인트 지정 시 3.x 모델 라우팅 실패 및 추론 레벨(`thinkingLevel`)이 정상 동작하지 않는 오류가 발생합니다.
+   * **임의 2.x 다운그레이드 금지**: 엔드포인트 오류 발생 시 모델을 `gemini-2.x`로 임의 변경(다운그레이드)하는 행위를 엄격히 금지하며, 엔드포인트 위치(`Location`)를 `global`로 정상화하여 Gemini 3.x 최신 모델 정합성을 유지해야 합니다.
 
 ### 5.2 10대 실무 시나리오 레지스트리 ([`AttackScenarioRegistry.cs`](../../../phalanx-edr/src/Phalanx.Cockpit/Scenarios/AttackScenarioRegistry.cs))
 
