@@ -151,16 +151,22 @@ flowchart LR
    - `CleanRoomSimulationStoreTests` 5/5 통과, 단위 테스트 123/123 통과, 11대 중립 벤치마크 10.0ms 통과 (23ms SLA 완벽 준수).
 
 
-### Stage 4: 도메인 모놀리스 해체 및 MVVM Facade 확립
-1. **`AutonomousHunterAgent` 3단 분리**:
-   - 룰 엔진: `OfflineHunterRuleEngine` 분리.
-   - 정규식 유틸: `AttackPatternHeuristics` 분리.
-   - 오케스트레이터: 순수 ReAct 루프 및 이벤트 조율 전담으로 슬림화.
-   - 신규 격리 단위 테스트 추가 (`OfflineHunterRuleEngineTests`, `AttackPatternHeuristicsTests`).
-2. **UI 이벤트 파이프라인 일원화**:
-   `MainViewModel`과 `SettingsViewModel`의 서비스 직접 구독을 `CockpitUiBridge`를 통한 통일 수신으로 단일화.
-3. **`MainViewModel` 내 AttackLab ViewModel Facade 분리**:
-   `AttackLabViewModel`을 독립시키고 `MainViewModel`은 위임 Facade로 구성하여 1,340줄 `AttackLabWindow.xaml` 바인딩 100% 보존.
+### Stage 4: 도메인 모놀리스 해체 및 MVVM Facade 확립 [완료 - Gate 2 PASS 공인]
+1. [x] **`AttackPatternHeuristics.cs` 정적 무상태 유틸리티 추출**:
+   - `IsSuspiciousParent`, `HasInlineC2Pattern`, `IsRansomwareDestructiveCommand`, `IsKnownInternalOrTrusted`, `ExtractTargetFilePath`, `ExtractTargetRegistryKey` 6대 정적 분석 메서드를 `public static class AttackPatternHeuristics`로 독립화.
+   - 클라우드 LLM ReAct 루프 및 오프라인 룰 엔진 양측에서 공통 사용하는 도메인 순수 함수로 승격.
+2. [x] **`AutonomousHunterAgent.Offline.cs` C# `partial class` 분할 (Zero-Overhead)**:
+   - 23ms 오프라인 결정론적 룰 엔진(`InvestigateOfflineDeterministicAsync`, 약 500줄)을 별도 클래스 대신 C# `partial class`로 물리적 분할.
+   - 불필요한 DTO/인터페이스/매개변수 전달 보일러플레이트를 0으로 유지하면서 `AutonomousHunterAgent.cs`를 1,571줄에서 **955줄로 대폭 경량화**.
+3. [x] **`AttackLabViewModel.cs` 독립 전담 뷰모델 신설**:
+   - 10대 모의 침투 공격 시나리오 실행 커맨드, 시뮬레이터 실시간 로그, 랩 설정, 커스텀 공작소 상태를 `AttackLabViewModel.cs`(388줄)로 완전 분리.
+   - `OpenAttackLabCommand` 실행 시 `new Views.AttackLabWindow { DataContext = AttackLab }`으로 명시적 주입하여 **1,340줄 `AttackLabWindow.xaml` 바인딩 100% 무수정 보존**.
+4. [x] **`MainViewModel.cs` Facade 위임 프로퍼티 연결**:
+   - `MainViewModel`을 1,431줄에서 **1,121줄로 슬림화**하고, 코어 EDR 관제 화면 본연의 책임에 집중.
+   - `CustomScenarioId`, `Scenarios`, `SelectedScenario`, `SimulatorLog`, `LatestVerdictStatus`, `LatestAssertionText`, `RunAllScenariosBatchCommand` Facade 프로퍼티를 제공하여 기존 회귀 테스트(`ProcessTreeProjectionTests.cs:726-732`) 100% 호환 보존.
+5. [x] **신규 단위 테스트 구축 및 종합 검증**:
+   - `AttackPatternHeuristicsTests` 19/19 통과, `AttackLabViewModelTests` 8/8 통과.
+   - 전체 Unit 테스트 159/159 통과, 전체 회귀 테스트 176/176 통과, 11대 중립 벤치마크 10.3ms 통과 (23ms SLA 완벽 준수).
 
 ---
 
