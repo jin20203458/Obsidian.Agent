@@ -135,14 +135,21 @@ flowchart LR
    - 전체 Unit 테스트 117/117 통과, 11대 중립 벤치마크 10.7ms 통과 (23ms SLA 대비 53% 고속).
 
 
-### Stage 3: CQRS 캡슐화 및 도구 시뮬레이션 분리
-1. **`ProcessTreeProjectionManager.AllNodes` 제거**:
-   - `AllNodes` 프로퍼티 삭제.
-   - 종료 프로세스 검색을 위한 내부 O(1) 인덱스(`_terminatedPidMap`) 구성 및 `FindNodeByPid` 고속화.
-   - `treeManager.ExpandAll()` 도메인 편의 메서드 추가.
-   - `ProcessTreeProjectionTests.cs:524` 호출부 최신화.
-2. **`CleanRoomSimulationStore` 분리**:
-   `FileInspectionTool`, `ProcessMemoryScanTool`, `RegistryInspectionTool` 내부의 static 딕셔너리를 전용 시뮬레이션 저장소로 분리하여 프로덕션 도구 순수화.
+### Stage 3: CQRS 캡슐화 및 도구 시뮬레이션 분리 [완료 - Gate 2 PASS 공인]
+1. [x] **`ProcessTreeProjectionManager.AllNodes` 제거 및 CQRS 캡슐화 완결**:
+   - `AllNodes` 프로퍼티 완전 삭제. 외부 노출을 원천 차단하여 CQRS 읽기 모델 캡슐화 달성.
+   - `treeManager.ExpandAll()` 도메인 API 신설 (`lock (_syncLock)` 하에서 모든 노드 전개 및 `RebuildVisibleNodes()` 가상화 뷰 동기화).
+   - `ProcessTreeProjectionTests.cs:524`의 `AllNodes` 순회 코드를 `treeManager.ExpandAll();`로 마이그레이션.
+2. [x] **종료 프로세스 O(1) 역색인 인덱스 구축**:
+   - `_terminatedPidToGuid` 인덱스를 신설하고 `HandleStartOrMitigated`, `HandleStop`, `ApplySnapshotBatch`, `Clear` 수명주기와 완전 동기화.
+   - `HandleStop` 시 선(先) 종료 맵 등록 후 활성 맵 제거로 동시성 갭(Race Condition) 원천 차단.
+   - `FindNodeByPid(uint pid)`가 종료 프로세스에 대해서도 O(1) 단일 딕셔너리 룩업으로 즉시 검색 완료 (O(N) LINQ 풀스캔 영구 제거).
+   - `FindNodeByPid_TerminatedProcess_ReturnsNodeFast` 신규 테스트로 O(1) 검색, PID 재사용 정합성, Clear 후 null 반환 불변식 검증 완료.
+3. [x] **`CleanRoomSimulationStore` 분리 및 프로덕션 도구 순수화**:
+   - `CleanRoomSimulationStore.cs` 신규 구축하여 3대 Record(`SimulatedFileEntry`, `SimulatedMemoryEntry`, `SimulatedRegistryEntry`) 및 정적 모의 저장소 중앙 격리.
+   - `FileInspectionTool`, `ProcessMemoryScanTool`, `RegistryInspectionTool`의 내부 static 딕셔너리 소유 제거 및 포워딩 Facade/`CreateSimulatedEntry` 팩토리 100% 보존.
+   - `CleanRoomSimulationStoreTests` 5/5 통과, 단위 테스트 123/123 통과, 11대 중립 벤치마크 10.0ms 통과 (23ms SLA 완벽 준수).
+
 
 ### Stage 4: 도메인 모놀리스 해체 및 MVVM Facade 확립
 1. **`AutonomousHunterAgent` 3단 분리**:
