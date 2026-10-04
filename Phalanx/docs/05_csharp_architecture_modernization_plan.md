@@ -122,11 +122,18 @@ flowchart LR
 6. [x] **테스트 최신화**: `InvestigationEngineFallbackTests` 퇴역 인라인 데이터 정리, `SettingsViewModelTests` devAppSettings 조작 정리, `ForensicArchiveManagerMigrationTests` 신규 구축 (122/122 Tests 통과, 11/11 Benchmark 10.3ms 통과).
 
 
-### Stage 2: 공통 인프라 일원화 및 보일러플레이트 제거
-1. **`ToolParameterExtensions` 구현**:
-   `parameters.GetString(...)`, `parameters.GetUInt32(...)`, `parameters.GetDouble(...)` 정적 확장 메서드 구축 및 7대 도구 중복 파싱 제거.
-2. **`PhalanxConfiguration` POCO 공급자 구축**:
-   `PhalanxConfigurationManager`를 구현하여 5개 클래스에 흩어진 `JsonDocument.Parse` 코드를 단일화.
+### Stage 2: 공통 인프라 일원화 및 보일러플레이트 제거 [완료 - Gate 2 PASS 공인]
+1. [x] **`ToolParameterExtensions` 구현**:
+   - `parameters.GetString(...)`, `parameters.GetStringFallback(...)`, `parameters.GetUInt32(...)`, `parameters.GetInt32(...)` 정적 확장 메서드 구축.
+   - 7대 OS 도구(`DecodePayloadTool`, `FileInspectionTool`, `MitreClassifierTool`, `ProcessMemoryScanTool`, `RegistryInspectionTool`, `SystemFirewallTool`, `ThreatReputationTool`) 내 중복 파싱 및 딕셔너리 할당 보일러플레이트 200줄 이상 완전 제거.
+2. [x] **`PhalanxConfiguration` POCO 공급자 구축**:
+   - `PhalanxConfiguration` 및 `PhalanxConfigurationManager` 단일 SSOT 공급자 구축 (스레드 안전 캐시, 원자적 저장, 런타임 이벤트 브로커).
+   - 5개 컴포넌트(`AutonomousHunterAgent`, `SensorProcessController`, `AttackLabScenarioRunner`, `ThemeManager`, `SettingsViewModel`)의 중복 `JsonDocument.Parse` 150줄 이상 단일화.
+   - `GeminiRestClient`의 `settingsPath` 격리 경로 및 유료 API 방어 7건 완벽 보존.
+3. [x] **신규 테스트 및 무결성 검증**:
+   - `ToolParameterExtensionsTests` 8/8 통과, `PhalanxConfigurationTests` 4/4 통과.
+   - 전체 Unit 테스트 117/117 통과, 11대 중립 벤치마크 10.7ms 통과 (23ms SLA 대비 53% 고속).
+
 
 ### Stage 3: CQRS 캡슐화 및 도구 시뮬레이션 분리
 1. **`ProcessTreeProjectionManager.AllNodes` 제거**:
