@@ -9,34 +9,31 @@ related:
 본 문서는 LLVM/Clang 커스텀 Tidy 체커 및 Static Analyzer 개발 중 발생하는 버그와 오류 해결 방법을 기록하는 문서입니다.
 
 ---
+
 **테스트 케이스 및 코드 품질 원칙**
 
-- **인위적 편향 배제**: 특정 입력이나 이상적인 시나리오에만 통과하도록 테스트를 끼워 맞추지 않는다. 경계값, 비정상 입력, 극단적 예외 상황을 포함해 검증한다.
-    
-- **지속적 리팩터링 및 확장성 보장**: 결함 발견 시 임시 패치에 그치지 않고, 구조적 리팩터링을 통해 언제든 코드를 고도화할 수 있는 유연한 아키텍처를 유지한다.
+* **인위적 편향 배제**: 특정 입력이나 이상적인 시나리오에만 통과하도록 테스트를 끼워 맞추지 않는다. 경계값, 비정상 입력, 극단적 예외 상황을 포함해 검증한다.
+* **지속적 리팩터링 및 확장성 보장**: 결함 발견 시 임시 패치에 그치지 않고, 구조적 리팩터링을 통해 언제든 코드를 고도화할 수 있는 유연한 아키텍처를 유지한다.
 
+---
 
 ## 2026-07-07: [Resolved] checkBranchCondition 콜백 내의 오탐지 (동일 조건식에 대한 참/거짓 경고 동시 발생)
 
 ### 1. 현상 (Symptom)
-* 일반적이고 정상적인 조건문 `if (x == 5)`에 대해 "항상 참(True)으로 평가됩니다" 경고와 "항상 거짓(False)으로 평가됩니다" 경고가 동일한 위치에서 동시에 검출되는 오탐지(False Positive) 현상 발생.
+* 정상 조건문 `if (x == 5)`에 대해 "항상 참(True)"과 "항상 거짓(False)" 경고가 동일 위치에서 동시 검출되는 오탐 발생.
 
 ### 2. 원인 (Root Cause)
-* Clang Static Analyzer 엔진은 조건문을 만나면 내부 분석 상태(State)를 참인 경로(True Branch)와 거짓인 경로(False Branch)로 선행 분할(Split)시킵니다.
-* 체커의 `checkBranchCondition` 콜백 시점에 전달받는 `C.getState()`는 이미 해당 경로에 맞춰 값이 분할/고정된 상태(참 경로에서는 `1 U1b`, 거짓 경로에서는 `0 U1b`)입니다.
-* 이를 그대로 `assume` 하여 참/거짓 가능성을 묻는 경우, 이미 참 혹은 거짓으로 고정된 값이므로 항상 단일 판정(참 또는 거짓)으로 나와 오탐지가 발생합니다.
+* Clang Static Analyzer는 조건문을 만나면 분석 상태(`State`)를 참/거짓 경로로 선행 분할함.
+* `checkBranchCondition` 콜백의 `C.getState()`는 이미 해당 경로에 맞춰 1비트 상수로 고정된 상태(`1 U1b` 또는 `0 U1b`)이므로, 이를 그대로 `assume`하면 항상 단일 판정으로 평가됨.
 
 ### 3. 해결책 (Resolution)
-* 분석 상태가 이미 갈라져 상수화된 상태인 `C.getState()`를 그대로 사용하는 대신, 조상 노드(`Predecessor`)를 역으로 타고 올라가 조건식이 평가되기 이전(즉, 참/거짓으로 쪼개지기 전)의 최초 상태와 Symbolic한 `SVal`을 찾아내야 합니다.
-* 아래와 같이 조상 노드를 탐색하는 코드를 적용하여 해결했습니다:
+* `C.getState()` 대신 조상 노드(`ExplodedNode *N = C.getPredecessor()`)를 역추적하여 1비트 상수가 아닌 최초의 Symbolic `SVal`(`CondVal`)과 해당 시점의 `AncestorState`를 추출한 후 `assume(CondVal)`을 수행.
 
 ```cpp
-ProgramStateRef EvalState = State;
 const ExplodedNode *N = C.getPredecessor();
 while (N) {
   ProgramStateRef AncestorState = N->getState();
   SVal V = AncestorState->getSVal(Condition, C.getLocationContext());
-  // 1비트 상수가 아닌 최초의 Symbolic SVal을 발견하면 그 시점의 State를 기준으로 삼음
   if (!V.isUnknownOrUndef() && !V.getAs<nonloc::ConcreteInt>()) {
     EvalState = AncestorState;
     CondVal = V;
@@ -44,8 +41,6 @@ while (N) {
   }
   N = N->getFirstPred();
 }
-
-// 추출해 낸 EvalState와 CondVal(SymExpr)을 사용하여 assume 수행
 std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 ```
 
@@ -54,830 +49,456 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 ## 2026-07-14: [Resolved] 커스텀 Tidy 체커 내 AST 상수 값 평가 중 크래시 (Expression evaluator can't be called on a dependent expression 및 Unknown builtin type)
 
 ### 1. 현상 (Symptom)
-* 템플릿 기반 C++ 코드 혹은 컴파일 에러가 발생한 소스코드(예: `OpenKAI-master` 프로젝트의 `_GeoFence.cpp`, `HttpClient.cpp`, `main.cpp`) 정적분석 진행 중, `clang-tidy` 프로세스가 아래와 같은 내부 Assertion 혹은 Unreachable 코드로 인해 비정상 종료(Crash)되는 문제 발생:
-  1. `ast-representable-cast` 및 `ast-main-unhandled-throw` 규칙 검사 중:
-     `Assertion failed: !isValueDependent() && "Expression evaluator can't be called on a dependent expression."`
-  2. `ast-switch-style` 규칙 검사 중:
-     `Unknown builtin type! UNREACHABLE executed at ASTContext.cpp:2005!`
+* 템플릿 C++ 코드 분석 중 내부 Assertion/Unreachable 크래시 발생:
+  1. `Assertion failed: !isValueDependent() && "Expression evaluator can't be called on a dependent expression."`
+  2. `Unknown builtin type! UNREACHABLE executed at ASTContext.cpp:2005!`
 
 ### 2. 원인 (Root Cause)
-* **`ast-representable-cast` & `ast-main-unhandled-throw`**: `RepresentableCastCheck.cpp` 및 `MainUnhandledThrowCheck.cpp`에서 변환 대상인 식 혹은 `if` 조건식을 평가하기 위해 `EvaluateAsInt`, `EvaluateAsFloat`, `EvaluateAsBooleanCondition` 등을 호출할 때, 템플릿 종속적 표현식(Value/Type-dependent) 혹은 컴파일 에러(예: 헤더 누락 등)로 인해 발생한 복구 표현식(`RecoveryExpr`) 노드가 전달되어 AST 상수 평가기 내부에서 오류를 냄.
-* **`ast-switch-style`**: `SwitchStyleCheck.cpp`에서 `switch` 조건문의 형식을 검증하기 위해 `type->getAs<BuiltinType>()`를 통해 내장 타입 판정 시, `Context->getTypeSize(type)`를 switch 조건식 가인식 영역 바로 앞에서 호출함. 이때 미확정 빌트인 타입(오버로드, 플레이스홀더, 종속형 템플릿 타입 등)이 유입되면 Clang AST 엔진 내부 크기 조회기에서 `UNREACHABLE`을 발생시켜 컴파일러가 크래시됨.
+* `EvaluateAsInt` 등을 호출할 때 템플릿 종속식(Value/Type-dependent) 또는 헤더 누락으로 인한 복구 노드(`RecoveryExpr`)가 유입되어 상수 평가기 내부에서 오류 발생.
+* `SwitchStyleCheck`에서 미확정 빌트인 타입(오버로드, 플레이스홀더 등)에 대해 `Context->getTypeSize(type)`를 호출하여 AST 크기 조회기 `UNREACHABLE` 유발.
 
 ### 3. 해결책 (Resolution)
-* **`ast-representable-cast` & `ast-main-unhandled-throw`**: 상수 평가기를 호출하기 전, 해당 식의 종속 관계 여부를 체크하는 방어 조건문(`!Expr->isValueDependent() && !Expr->isTypeDependent()`)을 추가하여 템플릿 종속 식 및 오류 복구 식은 평가를 우회하게 조치함.
-* **`ast-switch-style`**: `getTypeSize` 호출 위치를 `switch (BT->getKind())` 문 내부로 안전하게 이동시킴. 크기가 확실히 존재하는 실존 내장 정수 타입(`char`, `int`, `long` 등) 및 `bool` 케이스 분기 내에서만 크기를 구하게 하고, 크기가 없는 Dependent나 Placeholder 같은 미완성 타입은 크기 연산 없이 `default: break`로 건너뛰어 탈출하도록 구조 개선. 또한, 개별 `case` 문 평가 위치(`EvaluateAsInt`) 등에서도 동일한 방어 코드(`!caseExpr->isValueDependent() && !caseExpr->isTypeDependent()`)를 일괄 적용.
+* 상수 평가기 호출 전 종속 관계 방어 조건(`!Expr->isValueDependent() && !Expr->isTypeDependent()`) 추가.
+* `getTypeSize` 호출을 `switch (BT->getKind())` 내부로 이동하여 실존 정수 타입 및 `bool` 분기 내에서만 크기를 구하고, 미완성 타입은 `default: break`로 안전 탈출.
 
 ---
 
 ## 2026-07-14: [Resolved] SingleExitAndReturnTypeCheck 내 템플릿 종속 타입(Dependent Type) 오탐지
 
 ### 1. 현상 (Symptom)
-* 템플릿 기반 C++ 코드 혹은 컴파일 오류로 인해 헤더 파일 해석이 끊겨 일부 타입이 정의되지 않은 소스코드(예: `_APmavlink_base.cpp` 내 `check` 함수) 분석 시, 분명히 리턴문이 존재하고 리턴 타입이 매칭됨에도 불구하고 `"함수 선언 반환형(_Bool)과 반환값 타입(<dependent type>)이 일치하지 않습니다"`라는 타입 불일치 오탐지(False Positive) 발생.
+* 템플릿 C++ 코드 분석 시 리턴문이 존재함에도 `"함수 선언 반환형(_Bool)과 반환값 타입(<dependent type>)이 일치하지 않습니다"` 오탐 발생.
 
 ### 2. 원인 (Root Cause)
-* Clang AST 파서는 템플릿 기반 코드나 베이스 클래스의 멤버 타입(예: `this->_ModuleBase::check()`)을 분석할 때, 실제 타입 인스턴스화가 일어나기 전까지 반환식의 타입을 `<dependent type>` (종속 미확정 타입)으로 간주합니다.
-* `SingleExitAndReturnTypeCheck.cpp` 체커 내부의 `ReturnVisitor`는 이 `<dependent type>`을 일반적인 타입 매칭 검사기(`Ctx.hasSameType()`)에 그대로 집어넣어 비교했기 때문에 `_Bool`과 일치하지 않아 오탐지가 보고되었습니다.
+* Clang AST는 템플릿 인스턴스화 전까지 반환식 타입을 `<dependent type>`으로 간주함. 이를 `Ctx.hasSameType()`에 그대로 대조하여 불일치로 오판.
 
 ### 3. 해결책 (Resolution)
-* `ReturnVisitor::VisitReturnStmt`의 타입 검증 시작 지점에 템플릿 종속 타입 검출 조건(`isDependentType()`)을 추가하여, 함수 반환 타입 또는 리턴문 표현식의 타입 중 하나라도 종속 타입(미확정 상태)인 경우에는 오탐 판정을 내리지 않고 매칭 성공(`TypesMatch = true`)으로 우회 처리하여 문제를 해결했습니다.
+* `ReturnVisitor::VisitReturnStmt` 시작점에 템플릿 종속 타입 검출 조건(`isDependentType()`)을 추가하여, 반환형 또는 리턴식 타입 중 하나라도 종속 타입인 경우 매칭 성공(`TypesMatch = true`)으로 우회 처리.
 
 ---
 
 ## 2026-07-14: [Resolved] FunctionCallArgumentConsistencyCheck 내 참조형(&) 및 종속 타입(Dependent Type) 인자 오탐지
 
 ### 1. 현상 (Symptom)
-* C++에서 참조형 매개변수(`T &` 또는 `const T &`)를 취하는 함수에 인자로 동일한 타입의 Lvalue 변수를 전달하여 정상 호출하는 코드 분석 시, `"1번째 인자의 타입이 프로토타입과 일치하지 않습니다. 기대: 'T &', 실제: 'T'"`와 같은 인자 타입 불일치 오탐지(False Positive) 발생.
-* 템플릿 기반 코드 호출 분석 시 인자나 매개변수가 `<dependent type>`인 경우 타입 불일치 경고가 비정상적으로 출력됨.
+* C++ 참조형 매개변수(`T &`) 함수 호출 시 `"1번째 인자의 타입이 프로토타입과 일치하지 않습니다. 기대: 'T &', 실제: 'T'"` 오탐 및 종속 타입 인자 오탐 발생.
 
 ### 2. 원인 (Root Cause)
-* **참조형 오탐**: C++ 매개변수의 타입은 참조형(`&`)일 수 있으나, 호출 인자 표현식의 Clang AST 타입은 항상 넌-레퍼런스(`T`)로 평가됩니다. 기존 체커 코드는 이 차이를 처리하지 않고 `hasSameType()`으로 엄격 비교를 가하여 오탐을 발생시켰습니다.
-* **종속 타입 오탐**: 템플릿 코드를 해석할 때 타입이 미확정 상태인 `<dependent type>`이 유입되었을 때, 이를 우회(skip)하는 방어 코드가 없었습니다.
+* 호출 인자 표현식의 Clang AST 타입은 항상 넌-레퍼런스(`T`)로 평가되므로 `hasSameType()` 엄격 대조 시 불일치 발생.
+* 템플릿 미확정 타입(`<dependent type>`) 우회 가드 부재.
 
 ### 3. 해결책 (Resolution)
-* **참조형 오탐**: `isAcceptableImplicitChain`의 최종 비교 단계인 `EnforceExactParamType` 블록에서 두 타입의 레퍼런스(`getNonReferenceType()`) 및 CVR 한정자(`getUnqualifiedType()`)를 안전하게 벗긴 후 비교하도록 구현을 수정하여 참조 방식에 상관없이 핵심 값이 같은지만 대조하게 개선했습니다.
-* **종속 타입 오탐**: `check`의 루프 내에 `ParamTy->isDependentType() || Arg->getType()->isDependentType()` 검출 방어 로직을 추가하여 미확정 타입인 경우 타입 체크를 건너뛰어 통과시켰습니다.
+* `EnforceExactParamType`에서 레퍼런스(`getNonReferenceType()`) 및 CVR 한정자(`getUnqualifiedType()`)를 벗긴 후 핵심 타입만 대조.
+* 인자 루프 내 `ParamTy->isDependentType() || Arg->getType()->isDependentType()` 가드 추가.
 
 ---
 
 ## 2026-07-22: [Resolved] Clang RecoveryExpr 기반 AST 매칭 및 C/C++ 컴파일 플래그 다운그레이드
 
 ### 1. 현상 (Symptom)
-* C/C++ 미선언 함수 호출, 리턴값 누락, 인자 개수 불일치 등 컴파일러가 AST 생성을 차단하거나 노드를 복구 표현식으로 다루는 하드 에러 발생 시, `clang-tidy` AST 체커들이 수집하지 못하고 미탐(0%)이 발생하는 문제.
+* 미선언 함수 호출, 인자 개수 불일치 등 컴파일러 하드 에러 시 `clang-tidy` AST 체커들이 수집하지 못하고 미탐(0%) 발생.
 
 ### 2. 원인 (Root Cause)
-* Clang 파서가 하드 에러를 만나면 기본적 `callExpr` 노드를 생성하지 않고 `RecoveryExpr` 노드로 포장하거나 에러를 내뿜어 AST 분석 라운드를 차단함.
-* 기존 체커는 `callExpr` 노드만 등록되어 있어 `RecoveryExpr`로 포장된 노드를 지나침.
+* Clang 파서가 하드 에러 발생 시 정식 `callExpr` 대신 `RecoveryExpr` 노드로 포장하거나 AST 생성을 차단함.
 
 ### 3. 해결책 (Resolution)
-1. **컴파일 플래그 다운그레이드 적용**:
-   * Rule 05 (`-Wno-error=return-type`), Rule 06 (`-Wno-error=implicit-function-declaration`)처럼 컴파일 플래그 조정이 가능한 하드 에러는 플래그로 경고 다운그레이드를 수행하여 Clang이 AST를 정상 생성하게 유도하고 정식 AST 체커로 100% 탐지.
-2. **`RecoveryExpr` AST 매처 보강 (인자 개수 오류 등)**:
-   * Clang 15+ 복구 메커니즘으로 인해 AST에 `RecoveryExpr` 노드로 보존되는 시나리오(Rule 50 인자 개수 초과 등)의 경우, 텍스트 가로채기 없이 `isa<RecoveryExpr>` 및 첫 자식 노드가 `FunctionDecl` 참조인지 검증하는 커스텀 AST 매처를 체커(`FunctionCallArgumentConsistencyCheck.cpp`)에 추가하여 순수 AST 기반으로 100% 정식 탐지.
-   * 기존 체커 루프 내에 `Arg->containsErrors()` 가드를 보강하여 손상된 표현식 인자가 유입될 때 발생하던 타입 대조 오탐을 완벽 차단.
+1. **컴파일 플래그 다운그레이드**:
+   * `-Wno-error=return-type`, `-Wno-error=implicit-function-declaration` 플래그로 경고 다운그레이드하여 정상 AST 생성 유도.
+2. **`RecoveryExpr` AST 매처 보강**:
+   * `isa<RecoveryExpr>` 및 첫 자식 노드가 `FunctionDecl` 참조인지 검증하는 매처 추가. 루프 내 `Arg->containsErrors()` 가드로 손상된 표현식 오탐 차단.
 
 ---
 
 ## 2026-07-22: [Resolved] AST Drop 구문에 대한 로케일 독립적 Clang Diagnostic ID 가로채기 및 한글 메시지 재정의
 
 ### 1. 현상 (Symptom)
-* catch-all 위치 오류(Rule 56), virtual 키워드 누락 순수가상함수(Rule 63), virtual 순수가상함수 비정상 초기화(Rule 62), virtual base 캐스팅(Rule 64) 등 Clang 파서 레벨에서 AST 노드가 100% Drop되는 구문의 경우 AST 매치가 기술적으로 불가능함.
-* CLI 텍스트 정규식 파싱 기반으로 에러 문구를 가로채는 방식은 다국어(한국어, 영어, 일본어 등) 환경 및 컴파일러 메시지 변경 시 깨짐(i18n 불가능) 문제 발생.
+* catch-all 위치 오류, virtual 키워드 누락 순수가상함수 등 파서 레벨에서 AST 노드가 100% Drop되는 구문은 AST 매치가 불가능하며, CLI 정규식 파싱은 다국어 환경에서 파손됨.
 
 ### 2. 원인 (Root Cause)
-* Clang 파서(Sema)가 문법 규격 위반을 만나면 표현식 노드 전체를 AST 트리에 포함하지 않고 삭제함.
-* `#include "clang/Basic/DiagnosticSemaKinds.h"`를 include하려 시도할 경우, `DiagnosticSemaKinds.inc`가 TableGen 빌드 아티팩트(.inc)이므로 파일 누락 C1083 헤더 에러 발생.
+* Clang Sema가 문법 위반 시 노드를 트리에 포함하지 않고 삭제함. `DiagnosticSemaKinds.inc`는 TableGen 빌드 아티팩트이므로 직접 include 불가.
 
 ### 3. 해결책 (Resolution)
 1. **정수 Diagnostic ID 기반 가로채기 (`DiagnosticSema.h`)**:
-   * `#include "clang/Basic/DiagnosticSema.h"`를 include하여 Clang의 로케일 무관 정수 진단 ID 상수를 사용.
-   * `ClangTidyDiagnosticConsumer::HandleDiagnostic` 내에서 정수 Diagnostic ID(`Info.getID()`)를 수집 및 비교:
-     - `diag::err_early_catch_all` $\rightarrow$ `"ast-unused-exception-handler"`
-     - `diag::err_member_function_initialization` $\rightarrow$ `"ast-pure-virtual-init"`
-     - `diag::err_non_virtual_pure` $\rightarrow$ `"ast-virtual-pure"`
-     - `diag::err_static_downcast_via_virtual` $\rightarrow$ `"ast-virtual-base-cast"`
-2. **한글 메시지 엔진 단일 직방출**:
-   * `ArqaOverrideMessage` 변수를 `HandleDiagnostic` 메소드 최상위 스코프에 선언하여 스코프 이탈 C2065 에러를 방지.
-   * UTF-8 한글 문자열 리터럴(`u8"..."`)로 메시지를 재정의하여 `ClangTidyDiagnosticRenderer`로 전달:
-   ```cpp
-   if (DiagID == diag::err_early_catch_all) {
-     CheckName = "ast-unused-exception-handler";
-     DiagLevel = DiagnosticsEngine::Warning;
-     ArqaOverrideMessage = u8"catch-all(...) 핸들러 뒤에 위치한 예외 처리 구문은 실행되지 않습니다. catch-all은 마지막에 배치하십시오.";
-   }
-   ```
-3. **결과**:
-   * 컴파일러 텍스트 파싱 0%, 로케일 독립 100%의 한글 경고 방출 아키텍처 완성.
-   * DAPA 66개 전체 규칙 100% 정답률 검출 성공.
+   * `#include "clang/Basic/DiagnosticSema.h"`를 사용하여 `ClangTidyDiagnosticConsumer::HandleDiagnostic` 내에서 정수 ID(`Info.getID()`)를 수집:
+     * `diag::err_early_catch_all` $\rightarrow$ `"ast-unused-exception-handler"`
+     * `diag::err_member_function_initialization` $\rightarrow$ `"ast-pure-virtual-init"`
+     * `diag::err_non_virtual_pure` $\rightarrow$ `"ast-virtual-pure"`
+     * `diag::err_static_downcast_via_virtual` $\rightarrow$ `"ast-virtual-base-cast"`
+2. **한글 메시지 재정의**:
+   * 최상위 스코프에 UTF-8 한글 문자열 리터럴(`u8"..."`)로 메시지를 정의하여 `ClangTidyDiagnosticRenderer`로 전달.
 
 ---
 
 ## 2026-09-01: [Resolved] NoAutoTypeCheck (`ast-no-auto-type`) 컴파일러 암시적 변수 오탐 및 복합 auto 타입 미탐 해결
 
 ### 1. 현상 (Symptom)
-* DAPA 국방 규격 `공통(스타일) c. 함수/변수의 선언 시 type을 명시해야 한다 (auto 사용 제한)` 검증용 체커인 `ast-no-auto-type` 사용 시:
-  1. `for (int x : vec)` 등 개발자가 명시적 타입을 적은 정상적인 C++11 범위 기반 `for` 루프에서 한 줄당 3건의 허위 오탐(False Positive) 발생.
-  2. `auto *p = &x;`, `const auto &ref = x;`, `auto&& r = std::move(x);` 등 복합 포인터/참조 `auto` 변수 선언이 검출되지 않는 미탐(False Negative) 발생.
-  3. C++14 자동 반환형 함수 중 `auto& getRef()`, `auto* getPtr()` 등 참조/포인터 반환형 함수가 미탐.
+* C++11 범위 기반 `for` 루프에서 라인당 3건의 허위 오탐 발생 및 `auto*`, `const auto&` 등 복합 포인터/참조 `auto` 선언 미탐.
 
 ### 2. 원인 (Root Cause)
-* **범위 기반 for 루프 오탐**: Clang AST에서 `for-range` 루프 처리 시 내부적으로 `auto &&__range`, `auto __begin`, `auto __end`와 같은 컴파일러 암시적 `VarDecl`(`isImplicit() == true`)을 자동 생성함. 기존 매처 `varDecl(hasType(autoType()))`에 `unless(isImplicit())` 가드가 없어 컴파일러 내부 변수를 감지함.
-* **복합 auto 타입 미탐**: `const auto&`는 `LValueReferenceType(AutoType)`, `auto*`는 `PointerType(AutoType)`으로 `AutoType`이 래핑되어 있어 단순 `hasType(autoType())`으로 매칭되지 않음.
-* **언어 버전 필터 부재**: `isLanguageVersionSupported` 오버라이드가 없어 C99/C89 등 C 언어 프로젝트 분석 시에도 불필요하게 활성화됨.
+* Clang AST는 `for-range` 루프 시 `auto &&__range`, `auto __begin`, `auto __end` 컴파일러 암시적 `VarDecl`(`isImplicit() == true`)을 자동 생성함.
+* `const auto&`는 `LValueReferenceType(AutoType)`으로 래핑되어 단순 `hasType(autoType())`으로 매칭되지 않음.
 
 ### 3. 해결책 (Resolution)
-1. **`NoAutoTypeCheck.h`**: `isLanguageVersionSupported(const LangOptions &LangOpts)`를 추가하여 `LangOpts.CPlusPlus11` 가드 적용 (C++11 이상 한정).
-2. **`NoAutoTypeCheck.cpp`**: `AutoTypeMatcher`를 `qualType(anyOf(autoType(), pointsTo(qualType(autoType())), references(qualType(autoType()))))`로 재구성하여 복합 `auto` 타입을 전수 매칭하고, `unless(isImplicit())` 가드를 추가하여 컴파일러 생성 임시 변수 오탐을 100% 차단.
-3. **`ARQAModule.cpp`**: `#include "NoAutoTypeCheck.h"` 및 `Factories.registerCheck<NoAutoTypeCheck>("ast-no-auto-type")` 주석 해제 및 정규 재등록.
+1. `isLanguageVersionSupported`: `LangOpts.CPlusPlus11` 가드 적용 (C++11 이상 한정).
+2. `AutoTypeMatcher`: `qualType(anyOf(autoType(), pointsTo(qualType(autoType())), references(qualType(autoType()))))`로 재구성하고 `unless(isImplicit())` 가드 추가.
 
 ---
 
 ## 2026-09-04: [Resolved] PartialCopyAssignmentCheck (`ast-partial-copy-assignment`) C++ 클래스/구조체 멤버 대입 오탐지 해결
 
 ### 1. 현상 (Symptom)
-* DAPA C++ 전용 i (Rule 60: `copy operator를 통해서, 복사되지 않는 멤버 변수가 존재하지 말아야 한다`) 검증용 체커인 `ast-partial-copy-assignment` 분석 시:
-  * 클래스/구조체 멤버 변수(예: `Coordinate pos;`)를 `operator=`에서 정상적으로 전수 복사(`pos = rhs.pos;` 혹은 `pos.lat = rhs.pos.lat;`)하였음에도 불구하고, 준수 코드에서 `"멤버 변수 'pos'이(가) 복사 대입 연산자에서 대입되지 않았습니다"`라는 허위 오탐(False Positive) 발생.
+* `operator=`에서 구조체 멤버(`Coordinate pos;`)를 정상 복사(`pos = rhs.pos;`)했음에도 "복사 대입 연산자에서 대입되지 않았습니다" 오탐 발생.
 
 ### 2. 원인 (Root Cause)
-* Clang AST에서 기본형(int/float), 포인터, 열거형, 비트필드의 대입은 `BinaryOperator(BO_Assign)` 노드로 생성되지만, 사용자 정의 클래스나 구조체 타입 객체의 `=` 대입은 오버로딩된 멤버 함수 호출인 `CXXOperatorCallExpr` 노드로 생성됨.
-* `PartialCopyAssignmentCheck.cpp`의 `AssignmentVisitor`가 `VisitBinaryOperator`만을 순회하도록 작성되어 있어, 구조체/클래스 멤버 객체의 `CXXOperatorCallExpr` 대입을 전혀 인지하지 못하고 미대입으로 오판함.
+* 구조체/클래스 타입 객체의 `=` 대입은 `BinaryOperator(BO_Assign)`가 아닌 오버로딩된 멤버 함수 호출인 `CXXOperatorCallExpr` 노드로 생성됨.
 
 ### 3. 해결책 (Resolution)
-1. **`extractRootFieldDecl` 헬퍼 함수 구현**:
-   * `LHS` 표현식이 중첩 멤버 접근(`this->pos.lat`)이더라도 `MemberExpr::getBase()` 체인을 역추적하여 최상위 필드(`FieldDecl`)인 `pos`를 정확히 추출.
-2. **`VisitCXXOperatorCallExpr` 핸들러 추가**:
-   * `OCE->getOperator() == OO_Equal`인 경우, 첫 번째 인자(`OCE->getArg(0)`)에서 루트 `FieldDecl`을 추출하여 `AssignedFields`에 등록하도록 조치.
-3. **빌드 검증 완료**:
-   * `cmake --build .\build --config Release --target clang-tidy` 성공 (Exit Code 0). 구조체/클래스 멤버 정상 대입 시 오탐 0건(100% Clean) 달성.
+1. `extractRootFieldDecl`: `LHS` 중첩 멤버 접근(`this->pos.lat`)에서 `MemberExpr::getBase()` 체인을 역추적하여 최상위 `FieldDecl` 추출.
+2. `VisitCXXOperatorCallExpr`: `OCE->getOperator() == OO_Equal`인 경우 첫 번째 인자에서 루트 `FieldDecl`을 추출하여 `AssignedFields`에 등록.
 
 ---
 
 ## 2026-09-07: [Resolved] ThreadLockChecker (`path-sensitive-arqa.ThreadLock`) 함수 조기 반환 락 누수 미탐 및 NewDeleteLeaks 연동 해결
 
 ### 1. 현상 (Symptom)
-* CWE-404(부적절한 자원 해제) 정적 검증 시, `pthread_mutex_lock` 또는 `EnterCriticalSection` 획득 후 조건부 에러 분기나 조기 반환(`return -1;`) 시 `unlock`을 호출하지 않는 심각한 교착 상태(데드락) 결함에 대해 `ThreadLockChecker`가 0건 미탐(Silent Failure)을 발생시킴.
-* 또한 C++ `new`/`new[]`로 할당된 힙 메모리 누수 검출을 위한 `path-sensitive-cplusplus.NewDeleteLeaks` 체커가 UI/프로필에 등록되지 않아 C++ 힙 누수가 연동되지 못함.
+* `pthread_mutex_lock` 또는 `EnterCriticalSection` 획득 후 조기 에러 반환(`return -1;`) 시 `unlock` 미호출 교착 결함에 대해 0건 미탐(Silent Failure) 발생.
 
 ### 2. 원인 (Root Cause)
-1. **`checkDeadSymbols` 콜백의 구조적 한계**:
-   * 전역 변수나 포인터로 전달된 동기화 객체(`pthread_mutex_t`)는 함수가 종료되거나 반환된 이후에도 메모리 상에 살아있어 `SymReaper.isLiveRegion(LockR)`이 항상 `true`를 반환함.
-   * 따라서 심볼 소멸 기반 검사기(`checkDeadSymbols`)로는 함수 조기 탈출 시점의 락 누수를 결코 인지할 수 없음.
-2. **함수 종료 검열 콜백(`check::EndFunction`) 부재**:
-   * 함수 실행 흐름이 완료되는 시점(`ReturnStmt` 또는 함수 바디 끝)에서 잔여 잠금 상태를 평가하는 훅이 누락되어 있었음.
-3. **인라인 래퍼 함수 오탐 방지 가드 부재**:
-   * 락 획득 전용 래퍼 함수(예: `void acquire(pthread_mutex_t *m) { pthread_mutex_lock(m); }`)의 경우 상위 호출자에게 잠긴 상태로 반환하는 것이 정상이므로, 하위 인라인 프레임 종료 시점에 조기 진단하면 허위 오탐이 발생함.
-4. **에러 노드 체이닝 오류**:
-   * `reportBug()` 내부에서 `C.generateErrorNode()`를 무조건 재호출하여 선행 노드와의 연결이 끊기거나 싱크 노드 중복 생성으로 인해 분석이 중단되거나 리포트가 소실됨.
+* 전역/포인터 동기화 객체는 함수 종료 후에도 유효하여 `checkDeadSymbols`로는 함수 종료 시점 락 누수를 감지 불가.
+* `check::EndFunction` 훅 부재 및 락 획득 인라인 래퍼 함수에 대한 가드 부재.
 
 ### 3. 해결책 (Resolution)
-1. **`ThreadLockChecker.cpp` 아키텍처 개편**:
-   * `LockEntry` 구조체 정의 (`LockState State; const StackFrameContext *AcquiredFrame;`) 및 `REGISTER_MAP_WITH_PROGRAMSTATE(LockMap, const MemRegion *, LockEntry)` 도입.
-   * `check::EndFunction` 인터페이스 구현:
-     - `if (!C.inTopFrame()) return;` 가드레일을 적용하여 인라인 락 래퍼의 조기 오탐 원천 차단.
-     - 현재 최상위 스택 프레임(또는 그 인라인된 자식 프레임)에서 획득된 후 함수 종료 시점까지 `Locked` 상태인 락 객체를 전수 색출.
-     - `generateNonFatalErrorNode`를 적용하여 에러 노드 체이닝 보장.
-2. **체커 레지스트리 및 한글화 완비**:
-   * `Checkers.json`, `ComplianceRuleProvider.cs`, `CheckerProfiles.json`에 `path-sensitive-cplusplus.NewDeleteLeaks` 및 `path-sensitive-arqa.ThreadLock` 정규 등록 및 한글 프로필 연동.
-   * C# 솔루션 컴파일(`dotnet build`): 경고 0개, 오류 0개 (Exit Code 0).
-3. **36종 초고강도 리그레션 테스트 검증**:
-   * `test_cwe404_regression_36.cpp`: `NewDeleteLeaks`(12종), `ThreadLock`(12종), `Stream`(6종), `Malloc`(6종).
-   * 취약 18건 전수 정탐 (100.0%), 준수 18건 오탐 0건 (100% Clean / 0.0% FP).
-4. **공식 1:1 실측 완료**:
-   * Cppcheck 3/4 (75.0%) vs ARQA 4/4 (100.0%) [ARQA 우세].
+1. `REGISTER_MAP_WITH_PROGRAMSTATE(LockMap, const MemRegion *, LockEntry)` 도입.
+2. `check::EndFunction` 구현: `if (!C.inTopFrame()) return;` 가드로 인라인 래퍼 조기 오탐을 차단하고, 최상위 프레임 종료 시점 잔여 `Locked` 객체 색출.
+3. `generateNonFatalErrorNode`로 에러 노드 체이닝 보장.
 
 ---
 
 ## 2026-09-16: [Resolved] MultiStatementPerLineCheck (`ast-multi-statement-per-line`) 매크로 전개 누수, typedef struct 및 파일 간 라인 충돌 오탐 474건 전수 해결
 
 ### 1. 현상 (Symptom)
-* DAPA 스타일 규칙 Rule 11 (카. 한 줄에 하나의 명령문을 사용한다) 및 MISRA C:2012 Rule 5.9 정적 검증 시, `mbedtls` 프로젝트 96개 소스 파일 대상 전수 분석에서 총 1,016건 중 **474건(46.7%)의 대규모 엔진 오탐(False Positive)** 발생:
-  1. `sha1.c`, `md5.c`, `ripemd160.c`, `psa_crypto.c` 등 단일 라인 매크로 호출(`P(...)`, `LOCAL_INPUT_FREE(...)`)에 대해 414건의 오탐 발생.
-  2. `oid.c`, `asn1parse.c` 등 `typedef struct { ... } name_t;` 선언에 대해 59건의 다중 전역 선언 오탐 발생.
-  3. `psa_crypto_aead.c:25`의 `union { ... } ctx;` 인라인 공용체 필드 선언에 대해 1건의 다중 멤버 선언 오탐 발생.
-  4. 복수 헤더 파일과 메인 파일 간 동일 라인 번호 충돌로 인한 허위 다중 전역 선언 오탐 발생.
+* 단일 라인 매크로 호출(414건), `typedef struct { ... } name_t;` 선언(59건), 헤더-메인 소스 간 라인 번호 충돌로 대규모 오탐 발생.
 
 ### 2. 원인 (Root Cause)
-1. **매크로 인자 확장 위치(`SM.isMacroArgExpansion`)와 본문 위치 불일치**:
-   * 블록 없는 다중 문장 매크로(예: `LOCAL_INPUT_FREE(input, copy)`)에서 첫 문장이 인자 토큰으로 시작하면 `SM.getExpansionLoc`가 호출부 인자 위치(Col 37)를, 본문 시작 문장은 매크로 이름 위치(Col 5)를 반환함.
-   * `ExpLoc.getRawEncoding()`이 달라 `macroExpansionSeen` 중복 필터를 우회하여 동일 라인에 복수 문장으로 등록됨.
-2. **매크로 정의부 `CompoundStmt` 진입**:
-   * `compoundStmt(unless(hasParent(functionDecl())))` 매처가 `do { ... } while(0)` 매크로 내부의 중괄호 블록까지 매칭하여, 매크로 본문의 다중 문장을 호출부 단일 라인의 다중 문장으로 오인함.
-3. **`typedef struct` AST 듀얼 노드 생성**:
-   * Clang AST는 `typedef struct { ... } name_t;` 구문에 대해 `RecordDecl`과 `TypedefDecl` 2개 노드를 동일 시작 위치에 생성함. 쉼표가 없다는 이유로 2개 선언으로 오인함.
-4. **인라인 태그 멤버 중복 등록**:
-   * `union { ... } ctx;` 선언 시 공용체 타입 정의 `RecordDecl`과 멤버 `FieldDecl`이 동일 좌표에 생성되어 별개 멤버 2건으로 계산됨.
-5. **파일 간 라인 번호 충돌 (`FileID` 누락)**:
-   * `declLineMap`과 `memberLineMap`의 키가 `unsigned line` 단일 값으로 되어 있어, 헤더 파일(`rsa.h:240`)과 메인 소스(`oid.c:240`)의 서로 다른 파일 선언이 단일 엔트리로 병합되어 오탐을 유발함.
+* 매크로 인자 확장 위치(`SM.getExpansionLoc`)와 본문 시작 위치의 좌표 불일치로 중복 필터 우회.
+* Clang AST는 `typedef struct`에 대해 `RecordDecl`과 `TypedefDecl` 2개 노드를 생성.
+* 맵 키가 `unsigned line` 단일 값이라 파일 간 동일 라인 번호 충돌 발생.
 
 ### 3. 해결책 (Resolution)
-1. **최상위 매크로 호출 위치 정규화 헬퍼(`getTopMacroInvocationLoc`) 구현**:
-   * `SM.getTopMacroCallerLoc(Loc)` 및 `SM.getExpansionRange(TopLoc).getBegin()`을 적용하여, 매크로 인자든 본문이든 항상 호출부 시작점(Col 5)의 단일 좌표로 정규화.
-   * `macroExpansionSeen`에 의해 단일 매크로 호출에서 파생된 후속 문장은 100% 차단(`continue`).
-2. **매크로 내부 `CompoundStmt` 조기 탈출 가드**:
-   * `checkCompoundStmt` 시작부에 `if (CS->getBeginLoc().isMacroID()) return;` 가드를 추가하여 매크로 래퍼 루프 내부 블록의 진입을 원천 차단.
-3. **`typedef struct/enum/union` 연계 선언 필터링**:
-   * `TagDecl::getTypedefNameForAnonDecl()` 또는 `TypedefNameDecl::getUnderlyingType()->getAsTagDecl()`과 일치하는 `TagDecl`은 `TypedefDecl`에 종속된 부속 노드로 판정하여 선언 카운트에서 제외.
-4. **인라인 태그 멤버 필터링**:
-   * 동일 레코드 내 `FieldDecl->getType()->getAsTagDecl()`과 일치하는 `RecordDecl`은 독립 멤버 카운트에서 제외.
-5. **맵 키 `std::pair<FileID, unsigned>` 정밀화**:
-   * `declLineMap`, `lineStmtMap`, `memberLineMap`의 키를 `std::pair<FileID, unsigned>`로 전면 교체하여 서로 다른 파일 간 라인 번호 충돌을 원천 차단.
-
-### 4. 검증 결과 (Ground Truth)
-* **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 무결점 성공.
+1. `getTopMacroInvocationLoc`: `SM.getTopMacroCallerLoc(Loc)` 기반 호출부 단일 좌표로 정규화하여 후속 문장 필터링.
+2. `checkCompoundStmt` 시작부에 `if (CS->getBeginLoc().isMacroID()) return;` 가드 추가.
+3. `TagDecl::getTypedefNameForAnonDecl()` 매칭 노드는 독립 선언 카운트에서 제외.
+4. 맵 키를 `std::pair<FileID, unsigned>`로 교체하여 파일 간 라인 충돌 차단.
 
 ---
 
 ## 2026-09-16: [Resolved] NoMeaninglessExprCheck (`ast-no-meaningless-expr`) switch-case 라벨 상수 평가식 매칭 결함 오탐 247건 전수 해결
 
 ### 1. 현상 (Symptom)
-* DAPA 스타일 규칙 Rule 4 (라. 부작용 없는 의미 없는 구문 사용 금지) 및 MISRA C:2012 Rule 2.2 정적 검증 시, `mbedtls` 라이브러리 분석에서 **247건(100.0%)의 대규모 엔진 오탐(False Positive)** 발생:
-  1. `error.c`: `case -(MBEDTLS_ERR_CIPHER_FEATURE_UNAVAILABLE):` 등 단항 음수 연산자(`-`)가 포함된 case 라벨 식 245건 오탐.
-  2. `x509_crt.c`: `case (MBEDTLS_ASN1_CONTEXT_SPECIFIC | MBEDTLS_X509_SAN_OTHER_NAME):` 등 비트 OR 연산자(`|`)가 포함된 case 라벨 식 2건 오탐.
+* `case -(MBEDTLS_ERR_...):` 등 단항 음수 연산이나 비트 연산이 포함된 case 라벨 식 247건이 부작용 없는 의미 없는 구문으로 오탐.
 
 ### 2. 원인 (Root Cause)
-* **`CaseStmt` 직계 자식 노드 매칭(`hasParent(caseStmt())`) 설계 결함**:
-  - `NoMeaninglessExprCheck.cpp`의 Strategy C 매처는 라벨 구문 내부의 부작용 없는 실행식을 탐지하기 위해 `expr(TargetExpr, hasParent(stmt(anyOf(labelStmt(), caseStmt(), defaultStmt()))))` 매처를 사용함.
-  - Clang AST 상에서 `CaseStmt`는 하위 실행 명령문(`getSubStmt()`) 뿐만 아니라 분기 라벨 값인 `getLHS()`(라벨 상수식)와 `getRHS()`(GNU range 식)를 직계 자식 노드로 소유함.
-  - 이로 인해 `case -(ERR):`의 단항 음수 연산이나 `case (A | B):`의 비트 연산 표현식이 `hasParent(caseStmt())`에 일치하여 부작용 없는 독립 실행문으로 오인됨.
+* Clang AST 상에서 `CaseStmt`는 하위 실행 명령문(`getSubStmt()`)뿐만 아니라 라벨 상수식인 `getLHS()`와 `getRHS()`를 직계 자식 노드로 소유함. `hasParent(caseStmt())` 매처가 라벨 상수식을 실행문으로 오인.
 
 ### 3. 해결책 (Resolution)
-1. **`hasCaseSubStmt`, `hasLabelSubStmt` 커스텀 AST 매처 도입**:
-   - `SwitchCase`(`CaseStmt`, `DefaultStmt`) 및 `LabelStmt`의 오직 실행 본문(`getSubStmt()`)만을 대상으로 타겟 표현식을 검사하는 매처를 구현하여 `getLHS()`와 `getRHS()`는 매처 탐색 대상에서 원천 배제:
-   ```cpp
-   AST_MATCHER_P(SwitchCase, hasCaseSubStmt, ast_matchers::internal::Matcher<Stmt>,
-                 InnerMatcher) {
-     const Stmt *Sub = Node.getSubStmt();
-     return Sub != nullptr && InnerMatcher.matches(*Sub, Finder, Builder);
-   }
-
-   AST_MATCHER_P(LabelStmt, hasLabelSubStmt, ast_matchers::internal::Matcher<Stmt>,
-                 InnerMatcher) {
-     const Stmt *Sub = Node.getSubStmt();
-     return Sub != nullptr && InnerMatcher.matches(*Sub, Finder, Builder);
-   }
-   ```
-2. **Strategy C 매처 교체**:
-   - `switchCase(hasCaseSubStmt(expr(TargetExpr).bind("target")))` 및 `labelStmt(hasLabelSubStmt(expr(TargetExpr).bind("target")))`로 교체.
-3. **`check()` 내 심층 방어 가드 (Defense-in-Depth)**:
-   - AST 조상 탐색(`Result.Context->getParents()`) 루프를 추가하여, 타겟 표현식이 `CaseStmt`의 `getLHS()` 또는 `getRHS()` 트리에 속하는 경우 경고 방출을 즉시 차단.
-
-### 4. 검증 결과 (Ground Truth)
-* **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 무결점 성공.
+1. `hasCaseSubStmt`, `hasLabelSubStmt` 커스텀 매처 도입: `Node.getSubStmt()`만을 대상으로 타겟 표현식을 검사하여 `getLHS()`와 `getRHS()`를 원천 배제.
+2. AST 조상 탐색 루프(`Result.Context->getParents()`)를 추가하여 타겟 식이 `getLHS()` 또는 `getRHS()`에 속하면 경고 즉시 차단.
 
 ---
 
 ## 2026-09-17: [Resolved] NarrowingConversionChecker 심볼릭 오탐 116건 제거 (정수 승격 가짜 음수, 시프트 사전 절삭, 버퍼 길이 유계성 소실)
 
 ### 1. 현상 (Symptom)
-* CSA 체커인 `path-sensitive-arqa.NarrowingConversion`(`NarrowingConversionChecker.cpp`)에서 총 537건의 경고 중 116건(21.6%)의 엔진 오탐 발생:
-  1. **정수 승격 가짜 음수 (58건)**: `aes.c`, `chacha20.c`, `blowfish.c` 등 바이트 XOR/OR 연산 `(unsigned char)(c ^ iv[n])`에서 C 표준에 의해 `int`로 승격된 후, CSA가 음수 분기(`StNeg`)를 가상 생성하여 `"음수 값을 무부호 타입으로 변환 시 데이터 변형 가능성"` 경고 방출.
-  2. **우측 시프트 사전 절삭 (17건)**: `constant_time.c`, `poly1305.c` 등에서 `(uint32_t)(uint64 >> 32)` 연산으로 상위 32비트가 0으로 확정되었음에도, 64비트 정적 타입만 보고 `"대상 타입 표현 범위 초과 가능성"` 경고 방출.
-  3. **버퍼 길이 유계성 소실 (41건)**: `asn1write.c`, `pkwrite.c` 등 직렬화 함수에서 `return (int)len;` 또는 `ret = (int)len;` 반환 시 가짜 하한 초과(18건) 및 가짜 상한 초과(23건) 경고 방출.
+* 바이트 XOR/OR 연산 후 무부호 변환 시 가짜 음수 경고(58건), 우측 시프트 절삭 미인식(17건), 직렬화 반환식 버퍼 길이 범위 초과 오탐(41건) 발생.
 
 ### 2. 원인 (Root Cause)
-* **결함 1 (정수 승격 음수 왜곡)**: `RangeConstraintManager`가 기호 변수 간 비트 연산(`SymSymExpr`)의 값 범위를 추론하지 못해 $[0, 255]$ 유계 사실을 상실하고 음수 가능성을 가상 분기함.
-* **결함 2 (시프트 절삭 미인식)**: 시프트 연산자의 RHS 상수에 의해 유효 비트 폭이 이미 축소된 물리적 사실을 계산하지 않음.
-* **결함 3-1 (가짜 하한 초과)**: `SrcTy`가 `size_t`(무부호)임에도 음수 최솟값 `-2147483648`을 `APSInt`로 변환하여 `0xFFFFFFFF80000000`과의 대소 비교를 수행하여 `len < 0xFFFFFFFF80000000` 조건이 무조건 참이 됨.
-* **결함 3-2 (가짜 상한 초과)**: 파서 버퍼 크기($\le 64\text{KB}$) 불변식을 인지하지 못하고 기호 변수 `len`이 $2\text{GB}$를 초과하는 비현실적 경로(Infeasible Path)를 탐색함.
+* `RangeConstraintManager`가 기호 변수 간 비트 연산(`SymSymExpr`)의 $[0, 255]$ 범위를 추론하지 못해 음수 분기를 가상 생성.
+* 시프트 RHS 상수에 의한 유효 비트 폭 축소 미인식.
+* 무부호 `SrcTy`에 대해 음수 최솟값과의 대소 비교 수행 및 파서 버퍼 크기 불변식 미인식.
 
 ### 3. 해결책 (Resolution)
-1. **재귀 표현식 비-음수 판정 (`isEffectivelyNonNegative`)**:
-   - `BO_And`: 어느 한쪽이라도 비-음수이면 비-음수.
-   - `BO_Or`, `BO_Xor`: 양쪽 모두 비-음수이거나 바이트 연산일 때 비-음수.
-   - `BO_Shr`: LHS가 비-음수이면 비-음수.
-   - `isLocalVarAssignedFromByte`: 로컬 변수가 함수 내에서 오직 8비트 이하 무부호 타입(`unsigned char`)으로부터만 대입되는 경우 비-음수로 판정 (`aes.c:1342, 1503` 완벽 해결).
-   - 무부호 타입 승격 및 비-음수 상수 처리.
-2. **유효 비트 폭 계산 (`getEffectiveBitWidth`) 및 Signed MSB 가드**:
-   - `BO_Shr`: $W_{eff} = \max(0, W_{LHS} - S)$.
-   - `BO_And`: $W_{eff} = \min(W_{LHS}, W_{RHS})$.
-   - `BO_Or`, `BO_Xor`: $W_{eff} = \max(W_{LHS}, W_{RHS})$.
-   - **Signed MSB 가드**: `AllowedBits = DstSigned ? (DstBits - 1) : DstBits;` 공식을 적용하여 부호 있는 대상 타입으로의 축소 변환 시 최상위 부호 비트 침범 잠재 정탐은 100% 보존하고 안전한 절삭만 상한 검사 스킵.
-3. **버퍼 길이 유계성 가드 이원화**:
-   - **하한 초과 가드**: `if (DstSigned && SrcSigned)` 가드를 적용하여 소스가 무부호 정수인 경우의 가짜 하한 초과 18건 원천 차단.
-   - **상한 초과 가드 (`isBufferLengthReturnCast`)**: 직렬화 함수 내에서 `size_t len`이 `ReturnStmt` 또는 반환 변수(`ret`, `res`) 대입식에 사용된 경우 상한 검사 스킵.
-
-### 4. 검증 결과 (Ground Truth)
-* **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 성공.
-* **독립 감사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 2회 연속 **[PASS] 최종 승인**.
+1. `isEffectivelyNonNegative`: `BO_And`, `BO_Or`, `BO_Xor`, `BO_Shr` 및 8비트 이하 무부호 로컬 변수 대입식에 대한 비-음수성 판정.
+2. `getEffectiveBitWidth` 및 Signed MSB 가드: `AllowedBits = DstSigned ? (DstBits - 1) : DstBits;`를 적용하여 안전한 절삭은 상한 검사 스킵.
+3. 버퍼 길이 유계성 가드: `if (DstSigned && SrcSigned)` 하한 가드 및 직렬화 반환문 `size_t len` 상한 검사 스킵(`isBufferLengthReturnCast`).
 
 ---
 
 ## 2026-09-17: [Resolved] UnreachableCodeCheck (`cfg-unreachable-code`) 단축평가 조건식 서브 수식, 방어적 default 및 sizeof switch 오탐 157건 전수 해결
 
 ### 1. 현상 (Symptom)
-* DAPA 조건식 규칙 Rule 24 (마. 수행되지 않는 소스코드 작성 금지), MISRA C:2012 Rule 2.1 및 CWE-561 검증 시, `mbedtls` 프로젝트 96개 소스 파일 대상 전수 분석에서 **총 157건(100.0%)의 대규모 엔진 오탐(False Positive)** 발생:
-  1. `ecp_curves.c`: 타원곡선 환원 연산 내 루프 전개 매크로(`STORE32`)의 `if (i % 2)` 홀/짝 정적 최적화 분기 오탐 138건.
-  2. `pkwrite.c`: 버퍼 크기 매크로 삼항연산자(`PUB_DER_MAX_BYTES`) 분기 오탐 7건.
-  3. `timing.c`: `FAIL` 매크로 내부 `do { return 1; } while(0)` 구문 종료점 오탐 5건.
-  4. `bignum.c`: 멀티 아키텍처 지원 정적 `switch (sizeof(mbedtls_mpi_uint))` 비활성 분기(756행) 및 직후 아키텍처 폴백 리턴(766행) 오탐 2건.
-  5. `ssl_msg.c`: 이종 플랫폼 방어 가드 `(INT_MAX > SIZE_MAX && ret > (int) SIZE_MAX)` 내부 서브 수식 오탐 2건 (2007, 2059행).
-  6. `cipher.c`: 완전 열거형 switch 문의 DAPA 권장 방어적 `default:` 반환문 오탐 1건 (1049행).
+* 루프 전개 매크로의 정적 최적화 분기(138건), `switch (sizeof(T))` 비활성 아키텍처 분기(2건), 완전 열거형 switch의 방어적 `default:`(1건) 등 157건 오탐 발생.
 
 ### 2. 원인 (Root Cause)
-1. **단축평가 조건식 서브 표현식 오인**:
-   - `isReportableStmt()`의 `default: return true;`로 인해, Clang CFG가 `&&`, `||` 논리 연산자의 단축 평가(Short-circuit)를 위해 생성한 조건식 내부의 서브 수식(`ret > (int)SIZE_MAX`)이 독립된 미도달 실행 명령문으로 잘못 인식됨.
-2. **방어적 `default:` 라벨 미인식**:
-   - 모든 enum 값이 `case`에서 소비된 완전 열거형 switch의 경우 컴파일러가 `default:` 블록을 미도달로 가지치기하나, 방어 코딩 관용구인 `default:` 라벨 필터가 부재하여 경고 방출.
-3. **`sizeof` 멀티 아키텍처 분기 및 폴백 리턴 미인식**:
-   - `switch (sizeof(T))`는 32비트/64비트 정적 다형성을 위한 표준 관용구이나, 타깃 환경에서 선택되지 않은 `case` 및 직후의 폴백 `return`을 데드 코드로 오인함.
+* Clang CFG가 논리 연산자(`&&`, `||`) 단축평가를 위해 생성한 조건식 내부 서브 수식을 독립 미도달 실행문으로 오인.
+* 완전 열거형 switch에서 컴파일러가 가지치기한 `default:` 블록 및 `sizeof` 멀티 아키텍처 비활성 분기 미인식.
 
 ### 3. 해결책 (Resolution)
-1. **터미네이터 직후 구문 최우선 바이패스 (`isPrecededByTerminator`)**:
-   - 직전 형제 구문이 `return`, `break`, `continue`, `goto`, `throw`인 경우 모든 FP 가드를 우회하고 100% 즉시 TP로 보고하여 규격 진성 정탐의 불변 보존 달성.
-2. **조건식 내부 서브 표현식 진단 배제 (`isPartOfCondition`)**:
-   - `isa<Expr>(P)` 기반 AST 상향 추적을 통해 제어문(`IfStmt` 등)의 조건식(`getCond()`)에 속한 단축평가 비교식의 서브 피연산자가 독립 문장으로 오인되는 결함 원천 차단.
-3. **방어적 `default:` 라벨 및 하위 구문 보호 (`isUnderDefaultStmt`)**:
-   - `CFGBlock`의 라벨이 `DefaultStmt`이거나 상위 트리가 `DefaultStmt`인 경우 진단에서 제외.
-4. **`sizeof` 조건 switch 비활성 case 및 아키텍처 폴백 보호 (`isUnderInactiveCaseInSizeofSwitch`, `isFallbackAfterSizeofSwitch`)**:
-   - `UnaryExprOrTypeTraitExpr`(`sizeof`)를 포함하는 switch 조건식을 평가하여 타깃 아키텍처에서 비활성화된 `case` 분기 및 직후의 폴백 `return` 구문을 오탐에서 격리.
-5. **매크로 전개 필터링 (`ARQATidyCheck::IgnoreMacroExpansions`)**:
-   - `STORE32`, `PUB_DER_MAX_BYTES`, `FAIL` 등 매크로 내부에서 기인한 미도달 분기 150건 자동 필터링.
-
-### 4. 검증 결과 (Ground Truth)
-* **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 무결점 성공.
-* **독립 감사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 2회 연속 **[PASS] 최종 공인**.
+1. `isPrecededByTerminator`: 직전 형제 구문이 `return`, `break`, `continue`, `goto`, `throw`인 경우 즉시 진성 정탐(TP)으로 보고.
+2. `isPartOfCondition`: AST 상향 추적으로 제어문 조건식 내부 단축평가 서브 표현식의 진단 배제.
+3. `isUnderDefaultStmt`: `CFGBlock` 라벨이 `DefaultStmt`인 경우 진단 제외.
+4. `isUnderInactiveCaseInSizeofSwitch`, `isFallbackAfterSizeofSwitch`: `sizeof` 조건 switch의 비활성 case 및 직후 폴백 return 보호.
+5. 매크로 전개 필터링(`IgnoreMacroExpansions`) 적용.
 
 ---
 
 ## 2026-09-17: [Resolved] PointerCvQualifierDropCheck (`ast-pointer-cv-qualifier-drop`) 포인터 비교문 내 암묵적 형변환 오탐 68건 전수 해결
 
 ### 1. 현상 (Symptom)
-* DAPA 타입변환 규칙 Rule 31 (바. const 한정자 상실 방지) 및 MISRA C:2012 Rule 11.8 (Required) 정적 검증 시:
-  * MbedTLS 11개 소스 파일(`asn1parse.c`, `x509_crt.c`, `x509.c`, `bignum.c` 등)에서 단순 포인터 버퍼 경계 비교문(`if (*p != end)`, `if (*p < end)`, `if (X == Y)`)에 대해 `"포인터 캐스트로 인해 pointee의 'const'가 제거되었습니다. from 'const unsigned char *' to 'unsigned char *'."` 경고가 총 **68건 대량 오탐(False Positive)** 발생.
+* 포인터 버퍼 경계 비교문(`if (*p != end)`, `if (*p < end)`)에서 const 탈락 오탐 68건 발생.
 
 ### 2. 원인 (Root Cause)
-* C99 §6.5.9 / §6.5.8 규격에 따라 피연산자 중 한쪽만 `const`인 포인터 간 비교 연산(`==`, `!=`, `<`, `>`, `<=`, `>=`) 수행 시, Clang C 컴파일러는 주소 비교를 위한 타입 통일을 목적으로 내부적인 암묵적 비트캐스트(`ImplicitCastExpr <BitCast>`)를 AST에 자동 생성함.
-* `PointerCvQualifierDropCheck.cpp`가 `implicitCastExpr()` 매처를 등록하면서 비교 연산자 컨텍스트를 예외 처리하지 않아, 대상 메모리를 전혀 수정하지 않는 순수 읽기 전용 주소 비교문을 한정자 탈락 위반으로 오진단함.
+* C99 규격에 따라 피연산자 중 한쪽만 `const`인 포인터 비교 연산 시 Clang 컴파일러가 자동 생성하는 `ImplicitCastExpr <BitCast>`를 한정자 탈락 위반으로 오진단.
 
 ### 3. 해결책 (Resolution)
-1. **비교 연산자 컨텍스트 판별 함수 (`isInComparisonContext`) 구현**:
-   - `Ctx.getParents(*Current)` 상향 순회를 통해 `ParenExpr` 및 중첩 `ImplicitCastExpr`를 투과하고, 직계 상위 노드가 비교 연산자(`BO->isComparisonOp()`: `==`, `!=`, `<`, `>`, `<=`, `>=`, `<=>`)인지 판별.
-   - 다중 부모 순회 방어 패턴(`for (const auto &Parent : Parents)`) 및 비-비교 구문 조기 탈출 로직 완비.
-2. **`check()` 진단 진입부 암묵적 캐스트 전용 가드 배치**:
-   - `if (isa<ImplicitCastExpr>(CE) && isInComparisonContext(CE, *R.Context)) return;`
-   - 컴파일러가 자동 생성한 주소 비교용 비트캐스트만 정확히 선별 바이패스하여 68건 오탐 완전 제거.
-3. **27건 진성 규격 정탐(TP) 100% 보존**:
-   - 개발자가 명시적으로 작성한 `CStyleCastExpr`(파서 10건, 콜백 7건, 래퍼 5건, 구조체 5건)는 `isa<ImplicitCastExpr>`가 `false`이므로 100% 보존.
-   - 비교문 내부라 할지라도 명시적으로 `(char *)cp == p`를 작성한 경우 정상 정탐으로 검출.
-   - 대입, 초기화, 함수 인자 전달 등 비-비교 컨텍스트의 암묵적 캐스트 역시 정상 정탐으로 보존.
-
-### 4. 검증 결과 (Ground Truth)
-* **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 성공.
-* **이중 계쇄 심사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 2회 연속 **[PASS] 최종 공인**.
+1. `isInComparisonContext`: AST 상향 순회를 통해 상위 노드가 비교 연산자(`BO->isComparisonOp()`)인지 판별.
+2. 진단 진입부 가드: `if (isa<ImplicitCastExpr>(CE) && isInComparisonContext(CE, *R.Context)) return;` 적용.
+3. 명시적 `CStyleCastExpr` 및 비-비교 컨텍스트의 암묵적 캐스트는 100% 정상 정탐 보존.
 
 ---
 
 ## 2026-09-17: [Resolved] NoOutOfRangeAssignmentCheck (`ast-no-out-of-range-assignment`) 무부호 정수 리터럴 음수 오인 및 이항 연산 부호 오염 오탐 25건 전수 해결
 
 ### 1. 현상 (Symptom)
-* DAPA 데이터 변환 규칙 Rule 5, MISRA C:2012 Rule 10.1, CWE-190 정적 검증 시:
-  * MbedTLS 7개 핵심 암호화/해시 소스 파일(`sha256.c`, `sha512.c`, `sha1.c`, `ripemd160.c`, `xtea.c`, `md5.c` 등)에서 유효한 32/64비트 무부호 16진수 초기화 벡터(IV) 및 상수식(`0xBB67AE85`, `0xEFCDAB89`, `0x9E3779B9`, `UL64(0xBB67AE8584CAA73B)`, `delta * 32`)에 대해 `"타입 'unsigned int'의 표현 범위(0 ~ 4294967295)를 초과하는 상수값 -1150833019 을(를) 대입/초기화했습니다."`와 같은 허위 경고가 총 **25건 대량 오탐(False Positive)** 발생.
+* 32/64비트 무부호 16진수 리터럴(`0xBB67AE85`) 및 상수식(`delta * 32`)에 대해 음수 초과값 대입 허위 경고 25건 발생.
 
 ### 2. 원인 (Root Cause)
-1. **리터럴 상수 평가기 부호 하드코딩 (C99 §6.4.4.1 위반)**:
-   - `evalIntWithLocals` 및 `evalOriginalValue` 내 `IntegerLiteral` 평가 시 `Out = llvm::APSInt(IL->getValue(), false);`로 `isUnsigned = false`가 하드코딩되어, MSB=1인 32/64비트 16진수 리터럴이 부호 있는 음수(`-1150833019`, `-4942790177534073029`)로 왜곡됨.
-   - `check()` 진입 후 `CVal.isSigned() && CVal.isNegative()` 조건이 참이 되어 무부호 대상 변수에 범위 초과 오탐 방출.
-2. **이항 연산자 부호 전파 논리 결함 (C99 §6.3.1.8 위반)**:
-   - `evalIntWithLocals`에서 `bool Signed = L.isSigned() || R.isSigned();`로 인해, `uint32_t delta * 32` 연산 시 리터럴 `32`가 signed라는 이유로 결과식 전체가 signed로 강제 변환되어 음수(`-957401312`) 오탐 유발.
-3. **렉서 토큰 파싱 폴백 부호성 누락**:
-   - `0x` 접두어 파싱 시 64비트 무부호 정수(`> LLONG_MAX`)를 signed로 생성하여 음수 왜곡.
+* `IntegerLiteral` 평가 시 `llvm::APSInt(IL->getValue(), false)`로 `isUnsigned = false`가 하드코딩되어 MSB=1인 리터럴이 음수로 왜곡됨.
+* 이항 연산자 평가 시 `L.isSigned() || R.isSigned()`로 인해 피연산자 하나만 signed여도 전체 식을 signed로 강제 변환.
 
 ### 3. 해결책 (Resolution)
-1. **AST 무부호 정수 타입 반영 (`IL->getType()->isUnsignedIntegerType()`)**:
-   - `evalIntWithLocals` 및 `evalOriginalValue` 내 `IntegerLiteral` 평가 시 `Out = llvm::APSInt(IL->getValue(), IL->getType()->isUnsignedIntegerType());` 적용.
-2. **이항 연산자 AST 타입 부호성 준수 (`!BO->getType()->isUnsignedIntegerType()`)**:
-   - `evalIntWithLocals` 내 `bool Signed = !BO->getType()->isUnsignedIntegerType();`를 적용하여 C 언어 통상 산술 변환(Usual arithmetic conversions) 결과 타입 완벽 보존.
-3. **단항 마이너스 부정 시 64비트 상향 확장 (`std::max(64U, Sub.getBitWidth() + 1)`)**:
-   - 2의 보수 부호 반전 시 `INT_MIN` 오버플로우 방어 로직 완비.
-4. **렉서 폴백 64비트 정밀도 확장**:
-   - `Value > LLONG_MAX || E->getType()->isUnsignedIntegerType()` 충족 시 unsigned APSInt 생성.
-
-### 4. 검증 결과 (Ground Truth)
-* **컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 성공.
-* **이중 계쇄 심사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 2회 연속 **[PASS] 최종 공인**.
+1. AST 무부호 정수 타입 반영: `llvm::APSInt(IL->getValue(), IL->getType()->isUnsignedIntegerType())` 적용.
+2. 이항 연산자 부호성 준수: `bool Signed = !BO->getType()->isUnsignedIntegerType();` 적용.
+3. 단항 마이너스 부정 시 `std::max(64U, Sub.getBitWidth() + 1)` 상향 확장으로 2의 보수 오버플로우 방어.
+4. 렉서 폴백 64비트 정밀도 확장 적용.
 
 ---
 
 ## 2026-09-17: [Resolved] cfg-null-dereference-guard 순수 방어 가드 래티스 개량 및 CSA NullDereference 중복 경고 차단
 
 ### 1. 현상 (Symptom)
-* DAPA Rule 33 ("포인터 사용 전 NULL 검사 수행")을 위한 `cfg-null-dereference-guard` 체커와 CSA 심볼릭 실행 체커 `path-sensitive-core.NullDereference`를 동시 구동 시:
-  * `if (p == NULL) { *p; }` (명시적 NULL 분기 내부) 및 상위 함수에서 NULL을 넘긴 인라인 호출(`helper(NULL)`)에서 동일 파일, 동일 라인에 2개의 중복 경고가 발생하는 문제 발생.
+* `if (p == NULL) { *p; }` 및 상위 함수에서 NULL을 넘긴 인라인 호출(`helper(NULL)`)에서 `cfg-` 체커와 CSA 체커가 동일 라인에 중복 경고를 방출하는 문제.
 
 ### 2. 원인 (Root Cause)
-1. **CFG 데이터플로우 상태의 이분법적 한계 (2-State Boolean)**:
-   - 기존 구현은 `bool Safe` (Safe/Unsafe) 2개 상태로만 동작하여, `if (p == NULL)`을 만났을 때 `then` 블록 내부를 단순히 `Safe = false (안전하지 않음)`로 처리.
-   - 이로 인해 개발자가 이미 가드를 성실히 작성했음에도 "가드가 누락되었다"며 `cfg-` 경고를 방출하여, CSA의 런타임 널 역참조 경고와 충돌.
-2. **함수 단위(Intra-procedural) vs 함수 간(Inter-procedural) 분석 관점 차이**:
-   - 상위 호출자가 `NULL`을 넘길 때 CSA는 인라인 심볼릭 분석으로 확정 널 역참조를 잡고, CFG 체커는 함수 단독 관점에서 가드 부재를 잡아 동일 라인에 중복 발생.
+* 2-State Boolean 방식(`Safe`/`Unsafe`)으로 인해 명시적 NULL 분기 내부를 가드 누락으로 처리.
+* 단일 함수 관점(CFG)과 함수 간 심볼릭 분석(CSA)의 관점 차이.
 
 ### 3. 해결책 (Resolution)
-1. **3-상태 가드 래티스 (3-State Guard Lattice) 도입 (`NullDereferenceGuardCheck.cpp`)**:
-   - `enum class GuardState { Unchecked = 0, GuardedNonNull = 1, GuardedNull = 2 };`
-   - `edgeImpliesGuardState`:
-     - `p != NULL`, `p`: TrueEdge ➡️ `GuardedNonNull`, FalseEdge ➡️ `GuardedNull`
-     - `p == NULL`, `!p`: TrueEdge ➡️ `GuardedNull`, FalseEdge ➡️ `GuardedNonNull`
-   - Entry 초기 상태는 `Unchecked`로 시작하고, 오직 역참조 시점의 상태가 `Unchecked`인 경우에만 Rule 33 위반 경고 방출.
-   - `GuardedNull` 상태의 역참조는 가드가 이미 실행된 상태이므로 `cfg-` 체커는 침묵하고 CSA(`path-sensitive-core.NullDereference`)에 100% 위임.
-2. **ArqaStatic 파서 레벨 디듀플리케이션 안전망 구축 (`MainViewModel.cs`, `RangeObservableCollection.cs`)**:
-   - `FinalizeAnalysisAsync`에서 동일 파일/동일 라인에 `path-sensitive-core.NullDereference`와 `cfg-null-dereference-guard`가 동시 수집될 경우, 심볼릭 실행 추적 노트를 보유한 CSA 경고를 단일 유지하고 `cfg-` 경고를 일괄 제거(`RemoveRange`).
-
-### 4. 검증 결과 (Ground Truth)
-* **LLVM Clang-Tidy 빌드**: `cmake --build .\build --config Release --target clang-tidy` ➡️ **Exit Code 0** 성공.
-* **ArqaStatic WPF 빌드**: `dotnet build .\ArqaStatic\ArqaStatic.csproj --no-restore` ➡️ **Exit Code 0** 성공.
+1. **3-상태 가드 래티스 도입 (`NullDereferenceGuardCheck.cpp`)**:
+   * `enum class GuardState { Unchecked = 0, GuardedNonNull = 1, GuardedNull = 2 };`
+   * 진입 시점은 `Unchecked`로 시작하고, 오직 역참조 시점 상태가 `Unchecked`인 경우에만 가드 누락 경고 방출.
+   * `GuardedNull` 상태(명시적 NULL 분기 내부)는 CSA `NullDereference`에 100% 위임하여 침묵.
+2. **ArqaStatic 파서 레벨 디듀플리케이션**:
+   * `MainViewModel.FinalizeAnalysisAsync`에서 동일 라인 중복 수집 시 실행 경로 노트를 보유한 CSA 경고를 단일 유지하고 `cfg-` 경고 제거.
 
 ---
 
 ## 2026-09-17: [Resolved] path-sensitive-core.StackAddressEscape 대입 위치 ExplodedGraph 역추적 고도화 및 DAPA Rule 34 진단 위치 정밀화
 
 ### 1. 현상 (Symptom)
-* DAPA Rule 34 ("지역 변수 주소값을 더 넓은 scope를 가진 변수에 할당하지 않는다") 표준 테스트베드인 `C:\TestCase_Root_DAPA\Rule_34_Ptr_LocalAddressEscape\NonCompliant.c` 분석 시:
-  * 실제 주소 대입이 일어난 Line 4 (`pi = &a;`)가 아닌, 함수의 마지막 닫는 중괄호 스코프 종료점인 Line 5 (`}`)에 경고가 발생하는 문제 발생.
-  * 과거 단순 AST 체커인 `ast-return-stack-address`의 경우 대입 연산자 위치를 가리켰으나, 정수 바이트 복사(XOR) 및 값 전달 매개변수 재할당 등에서 11건 중 11건 전수 오탐(100.0% FP)이 발생하여 영구 퇴출된 이력이 있음.
+* 전역 변수에 로컬 주소를 대입한 코드(`pi = &a;`) 분석 시, 실제 대입 라인이 아닌 함수의 닫는 중괄호(`}`) 위치에 경고가 발생하는 문제.
 
 ### 2. 원인 (Root Cause)
-1. **CSA `checkEndFunction` 콜백의 `FunctionExitPoint` 리포팅 구조**:
-   - `StackAddrEscapeChecker.cpp`는 함수 종료 시점(`checkEndFunction`)에 스토어 바인딩을 전수 검사(`HandleBinding`)하여 전역/정적 변수에 여전히 현재 프레임의 스택 메모리가 참조되고 있는지 여부를 완벽하게 판정(0-FP 보장).
-   - 그러나 이때 생성되는 에러 노드 `N = Ctx.generateNonFatalErrorNode(State);`의 프로그램 포인트가 `FunctionExitPoint`이므로, `PathSensitiveBugReport` 생성 시 위치 계산기(`BugReporter.cpp`의 `createDeclEnd`)에 의해 함수의 맨 마지막 닫는 중괄호(`}`) 위치가 메인 진단 위치로 설정됨.
+* `StackAddrEscapeChecker.cpp`의 에러 노드가 `checkEndFunction` 시점의 `FunctionExitPoint` 프로그램 포인트이므로, 위치 계산기가 함수의 맨 마지막 닫는 중괄호 위치를 메인 진단 위치로 설정함.
 
 ### 3. 해결책 (Resolution)
-1. **ExplodedGraph 역추적을 통한 대입 노드(`ReportNode`) 탐색 구현 (`StackAddrEscapeChecker.cpp`)**:
-   - `checkEndFunction` 내에서 검출된 전역/정적 수신체 `Referrer`(`P.first->getBaseRegion()`)와 탈출된 스택 메모리 `Referred`(`P.second`) 정보를 활용.
-   - `ErrorNode(N)`로부터 역방향 조상 노드(`Curr = Curr->getFirstPred()`)를 탐색하며, 실제 대입이 수행된 `PostStmt<BinaryOperator>` 노드를 정밀 식별:
-     - **RHS 검증**: 심볼릭 `CurState->getSVal(BO->getRHS(), LCtx)`의 기저 리전이 `Referred`와 일치하거나, AST 단에서 `&local`의 `DeclRefExpr`이 `Referred`의 `VarDecl`과 일치하는지 확인.
-     - **LHS 검증**: 심볼릭 `CurState->getSVal(BO->getLHS(), LCtx)`의 기저 리전이 `Referrer`와 일치하거나, AST 단에서 구조체 멤버(`MemberExpr`)나 배열 인덱스(`ArraySubscriptExpr`)를 거슬러 올라간 기저 변수가 `Referrer`의 `VarDecl`과 일치하는지 확인.
-   - RHS와 LHS 조건이 모두 부합하는 최초의 조상 대입 노드를 `ReportNode`로 확정하고, `PathSensitiveBugReport`의 앵커 노드로 전달하여 대입 연산자(`=`)의 정확한 라인과 컬럼을 지목하도록 개선.
-   - 만일 역추적 과정에서 매칭 노드를 찾지 못할 경우 기존의 안전한 종료 노드 `N`으로 자동 폴백(Graceful Fallback)되도록 방어 로직 완비.
-
-### 4. 검증 결과 (Ground Truth)
-* **LLVM Clang-Tidy 빌드**: `cmake --build .\build --config Release --target clang-tidy` ➡️ **Exit Code 0** 성공.
+* `ErrorNode`로부터 조상 노드(`Curr->getFirstPred()`)를 역추적하여 실제 대입이 일어난 `PostStmt<BinaryOperator>` 노드를 탐색:
+  * RHS: 기저 리전 또는 AST `DeclRefExpr`이 탈출된 스택 변수와 일치하는지 확인.
+  * LHS: 기저 리전 또는 AST 멤버/배열 기저 변수가 전역/정적 수신체와 일치하는지 확인.
+* 매칭된 조상 대입 노드를 `ReportNode`로 설정하여 대입 연산자(`=`)의 정확한 라인/컬럼을 지목하도록 개선 (실패 시 종료 노드로 자동 폴백).
 
 ---
 
 ## 2026-09-17: [Resolved] cfg-nonzero-divisor-guard 3-상태 래티스 개량 및 CSA DivideZero 중복 경고 차단 (DAPA Rule 39)
 
 ### 1. 현상 (Symptom)
-* DAPA Rule 39 ("나누는 값이 변수일 경우 0인지를 반드시 확인하여야 한다") 표준 테스트베드인 `C:\TestCase_Root_DAPA\Rule_39_Op_DivbyZero\NonCompliant.c`(`return x / n;`) 분석 시:
-  * 가드가 누락되었음에도 정적분석 경고가 전혀 발생하지 않는 결함 발생.
-  * 기존 `ComplianceRuleProvider.cs`에서 해당 규칙에 CSA `path-sensitive-core.DivideZero`만 단독 매핑되어 있었으나, CSA는 unconstrained 매개변수 심볼에 대해 0으로 가정하지 않으므로 가드 누락을 탐지하지 못함.
+* 가드 없는 나눗셈(`return x / n;`)에 대해 정적분석 경고 미발생 및 명시적 0 분기 내부에서 `cfg-`와 CSA 간 중복 경고 충돌 위험.
 
 ### 2. 원인 (Root Cause)
-1. **정적 가드 검사 vs 런타임 0 나눗셈의 역할 분리 부재**:
-   - CSA `path-sensitive-core.DivideZero`는 구체적으로 0이 되는 실행 경로를 추적하는 버그 체커이며, 명시적 가드 존재 여부를 확인하는 체커가 아님.
-   - 전담 가드 체커인 `cfg-nonzero-divisor-guard`가 레거시 옵션 및 보류 상태로 방치되어 UI 및 규칙 매핑에서 누락됨.
-2. **단순 CFG 체커 투입 시 발생할 수 있는 중복 충돌 (Duplicate Collision)**:
-   - `if (n == 0) { return x / n; }`과 같이 0 분기 내부의 나눗셈에 대해 `cfg-` 체커와 CSA 체커가 동시에 경고를 내는 중복 충돌 위험 존재.
+* CSA `DivideZero`는 0이 되는 실행 경로를 추적할 뿐 unconstrained 매개변수에 대한 가드 누락을 탐지하지 못함.
+* `if (n == 0)` 분기 내부에서 두 체커가 동시 경고를 낼 위험 상존.
 
 ### 3. 해결책 (Resolution)
-1. **3-상태 가드 래티스 (3-State Guard Lattice) 도입 (`NonZeroDivisorGuardCheck.cpp`)**:
-   - `enum class GuardState { Unchecked = 0, GuardedNonZero = 1, GuardedZero = 2 };`
-   - `edgeImpliesGuardState`:
-     - `n != 0`, `n > 0`, `n < 0`, `n`: TrueEdge ➡️ `GuardedNonZero`, FalseEdge ➡️ `GuardedZero`
-     - `n == 0`, `!n`: TrueEdge ➡️ `GuardedZero`, FalseEdge ➡️ `GuardedNonZero`
-   - 진입 시점은 `Unchecked`로 시작하며, 오직 연산 시점 상태가 `Unchecked`인 경우에만 Rule 39 경고 방출.
-   - `GuardedZero` 상태(명시적 0 분기 내부)는 가드가 완료된 상태이므로 `cfg-` 체커는 침묵하고 CSA `DivideZero`에 전담 위임하여 중복 발생을 사전 차단.
-3. **특수 가드 전담화 (`ParmVarDecl` 한정) 및 1차 엔진 레벨 중복 원천 차단 (`NonZeroDivisorGuardCheck.cpp`)**:
-   - `NullDereferenceGuardCheck`와 동일하게, `if (!isa<ParmVarDecl>(VD)) return;` 가드를 적용.
-   - 외부에서 함수로 유입되는 **매개변수(Parameter)의 사전 0 가드 검사 부재만을 순수하게 전담하는 특수 목적 체커**로 역할을 엄격히 제한.
-   - 로컬/전역 변수 및 상수/연산식 나눗셈은 심볼릭 실행을 수행하는 CSA `path-sensitive-core.DivideZero`에 100% 위임하여 엔진 단에서 허위 오탐 및 동일 라인 중복 경고를 원천 차단.
-4. **체커 옵션 현대화 및 표준화**:
-   - 레거시 옵션 7종 전면 제거, 표준 ARQA 상속 옵션 체계로 단순화.
-   - 진단 메시지 표준화: `"나누는 수(분모) 변수 '%0'을(를) 연산하기 전에 0인지 확인(가드 검사)하지 않았습니다."`
-5. **ArqaStatic 파이프라인 및 디듀플리케이션 통합**:
-   - `Checkers.json` 및 `ComplianceRuleProvider.cs`에 `cfg-nonzero-divisor-guard` 정식 등록 ($1:2$ 협업).
-   - `MainViewModel.cs`에 `path-sensitive-core.DivideZero`와의 라인 단위 자동 디듀플리케이션(`RemoveRange`) 2차 안전망 구축.
-
-### 4. 검증 결과 (Ground Truth)
-* **LLVM Clang-Tidy 빌드**: `cmake --build .\build --config Release --target clang-tidy` ➡️ **Exit Code 0** 성공.
-* **ArqaStatic C# 컴파일**: `dotnet build .\ArqaStatic\ArqaStatic.csproj -t:CoreCompile` ➡️ **Exit Code 0** 성공.
-
----
-
-## 2026-09-17: [Resolved] lex-include-charset 진단 위치 정밀화 (열 10 고정 버그) 및 중복 경고 제거 (DAPA Rule 48)
-
-### 1. 현상 (Symptom)
-* DAPA C 전용 2) 규칙 (Rule 48: `#include 구문에서 표준에 맞지 않는 Character set을 사용하지 않아야 한다`) 정적 검증 시:
-  * 모든 경고의 컬럼 위치가 실제 결함 문자의 위치와 무관하게 **열 10(`FilenameRange.getBegin()`, 파일명 시작 따옴표 위치)**으로 무조건 고정되어 캐럿(`^`)이 엉뚱한 곳을 가리킴.
-  * Line 1(`#include "tae min's.h"`)에 대해 3건(공백 2회, 금지 문자 1회), Line 2(`#include "donghyun.h/*temporary*/"`)에 대해 2건(주석 패턴 1회, `*` 문자 1회) 등 동일 라인에 중복 경고가 도배(총 7건)되어 노이즈가 과도하게 발생함.
-
-### 2. 원인 (Root Cause)
-1. **진단 위치 고정**:
-   - `IncludeCharsetCheck.cpp`의 `report()` 호출 시 진단 소스 위치로 항상 파일명 토큰 시작 따옴표 위치인 `FilenameRange.getBegin()`(열 10)만을 넘김.
-2. **독립적인 if 블록 나열로 인한 중복 방출**:
-   - 주석 패턴 검사, 공백 검사, 허용 문자 집합 검사가 상호 배타성 없이 독립적인 `if`문으로 각각 `report()`를 호출하여 하나의 헤더 지시문에 복수의 동일/유사 경고가 중복 발생.
-
-### 3. 해결책 (Resolution)
-1. **정밀 컬럼 오프셋 계산 (`getInnerLoc` / `getSpelledLoc`)**:
-   - 여는 따옴표 이후 실제 위반 문자 인덱스 `idx`에 대한 소스 좌표(`FilenameRange.getBegin().getLocWithOffset(1 + idx)`)를 계산하여, 캐럿(`^`)이 실제 결함 문자(공백, `'`, `/*`, `$`, `-` 등)를 정확히 지목하도록 개선.
-2. **우선순위 기반 단일 진단 (Single Diagnostic per Directive) 파이프라인**:
-   - **Step 1 (주석 패턴)**: `/*` 또는 `//` 발견 시 주석 시작 위치에 단독 경고 방출 후 즉시 반환(주석 내부 `*`의 중복 경고 원천 차단).
-   - **Step 2 (비표준 문자 집합)**: `hasForbiddenChars`에서 최초 위반 문자 오프셋(`firstOffenderOffset`)을 추출하고, 공백과 특수문자를 하나의 명확한 경고로 통합 방출(`' '(공백), '''(작은따옴표)`).
-   - **Step 3 (경로 형식)**: 백슬래시(`\`), 상위 경로(`..`), 연속 구분자(`//`), 절대 경로 등 각각의 위반 위치에 단독 경고 방출.
-3. **DAPA 표준 설명 반영**:
-   - 진단 메시지에 DAPA 규격 설명인 `"(일부 컴파일러에서 호환되지 않을 수 있음)"`을 공식 반영.
-
-### 4. 검증 결과 (Ground Truth)
-* **LLVM Clang-Tidy 빌드**: `cmake --build .\build --config Release --target clang-tidy` ➡️ **Exit Code 0** 성공.
+1. **3-상태 가드 래티스 도입 (`NonZeroDivisorGuardCheck.cpp`)**:
+   * `enum class GuardState { Unchecked = 0, GuardedNonZero = 1, GuardedZero = 2 };`
+   * `Unchecked` 상태에서만 Rule 39 경고 방출. `GuardedZero` 분기는 CSA `DivideZero`에 전담 위임.
+2. **특수 가드 전담화 (`ParmVarDecl` 한정)**:
+   * `if (!isa<ParmVarDecl>(VD)) return;` 가드를 적용하여 매개변수의 사전 0 가드 부재 검사만 전담하고, 로컬/전역 변수는 CSA에 100% 위임.
+3. **ArqaStatic 파이프라인 디듀플리케이션 통합**:
+   * `MainViewModel.cs`에 라인 단위 자동 디듀플리케이션(`RemoveRange`) 안전망 구축.
 
 ---
 
 ## 2026-09-18: [Resolved] path-sensitive-arqa.UninitializedAddressToConstParam MbedTLS 12건 전수 오탐 제거 및 GDM 경로 민감 상태 추적 구축
 
 ### 1. 현상 (Symptom)
-* DAPA 선언 및 초기화 규칙 Rule 15, MISRA C:2012 Rule 9.1, CWE-457 검증용 체커인 `path-sensitive-arqa.UninitializedAddressToConstParam`을 MbedTLS 벤치마크 96개 파일에 적용 시, 총 12건의 검출이 발생하였으나 전수가 정상 초기화된 버퍼를 미초기화로 오인한 **진성 엔진 오탐 (False Positive 100%, 12/12건)**으로 확인됨.
-  1. **선행 출력 매개변수 바인딩 미추적 (8건)**: 스택 버퍼(`data`, `buf`, `key`, `iv` 등)를 선행 함수(`mbedtls_mpi_write_binary`, `mbedtls_gcm_crypt_and_tag` 등)의 비-const 포인터로 전달하여 정상 초기화하였으나, CSA의 메모리 무효화(Store Invalidation)로 인해 후속 `const` 파라미터 전달 시 `UndefinedVal`로 오인 (`ecdsa.c:448`, `gcm.c:810`, `pkcs12.c:241/266`, `pkcs5.c:236`, `pkwrite.c:155`, `psa_crypto_cipher.c:448`, `rsa.c:2585`).
-  2. **가변 길이/슬라이스 부분 초기화 및 루프 바인딩 소실 (2건)**: 최대 크기 버퍼의 유효 슬라이스만 `memset` 또는 루프 포인터(`*d++ = *c`)로 기록하고 유효 길이만큼만 읽기 함수로 전달했으나 후미 미사용 영역으로 인해 오탐 발생 (`psa_crypto_mac.c:94`, `x509_create.c:151`).
-  3. **비-역참조 포인터 비교 헬퍼 및 공용체 구조체 바인딩 소실 (2건)**:
-     - `ssl_cookie.c:119`: `mbedtls_ssl_chk_buf_ptr`는 포인터 대소 비교 및 감산만 수행하고 메모리를 전혀 역참조하지 않음에도 `const uint8_t *` 매개변수라는 이유로 오탐 발생.
-     - `x509_crt.c:1907`: `other_name` 구조체 복사 시 공용체(Union)의 비활성 필드를 순회하며 `UndefinedVal`을 반환하여 오탐 발생.
+* MbedTLS 96개 파일 분석 시, 선행 비-const 포인터로 정상 초기화된 버퍼를 미초기화로 오인하여 12건 전수 오탐(FP 100%) 발생.
 
 ### 2. 원인 (Root Cause)
-* CSA 체커가 `check::PreCall`만 등록하고 `check::Bind`, `check::PostCall`, `check::PointerEscape`를 구현하지 않아, 함수 호출 및 대입에 따른 변수의 쓰기/탈출 이력을 ProgramState 경로별로 추적하지 못함.
-* 피호출 함수 내에서 포인터를 역참조하지 않는 순수 주소 비교/연산 헬퍼 함수를 구분하지 못함.
-* 0바이트 복사/비교 API(`memcmp(buf, ..., 0)` 등) 및 인접 크기 인자가 0인 경우를 고려하지 않고 무조건 메모리 검사를 수행함.
-* `FindUninitializedField`가 공용체(Union)의 특성을 고려하지 않고 모든 필드를 필수 초기화 대상으로 취급함.
+* `check::Bind`, `check::PostCall`, `check::PointerEscape`가 구현되지 않아 메모리 쓰기 및 탈출 이력을 경로별로 추적하지 못함.
+* 비-역참조 포인터 비교 헬퍼 함수 및 공용체(Union) 특성 미고려.
 
 ### 3. 해결책 (Resolution)
-1. **`ProgramState` GDM 집합 등록**:
-   - `REGISTER_SET_WITH_PROGRAMSTATE(InitializedOrEscapedVars, const MemRegion *)` 도입.
-2. **콜백 구현 및 경로 민감 상태 전이**:
-   - `check::Bind`: 대입, 배열 인덱싱, 역참조 쓰기(`*p = 'A'`, `*d++ = *c`), 구조체 필드 대입 발생 시 기본 `VarRegion`을 GDM 집합에 등록.
-   - `check::PostCall` & `check::PointerEscape`: 비-const 포인터/참조 매개변수로 전달된 스택 지역 변수를 GDM 집합에 자동 등록.
-3. **5단계 정밀 진입 가드 (Precision Guards)**:
-   - Guard 1 (지역 자동 저장 변수): `VR->getDecl()->hasLocalStorage()`가 아니면 검사 스킵.
-   - Guard 2 (선언 시 명시적 초기화): `VR->getDecl()->getInit()` 존재 시 검사 스킵.
-   - Guard 3 (선행 변경/탈출 이력): `State->contains<InitializedOrEscapedVars>(BaseR)` 시 검사 스킵.
-   - Guard 4 (인접 0길이 인자): `memcmp`/`memcpy` 및 인접 크기 인자(`len`, `size`, `count`, `bytes`)가 0이거나 0으로 제약된 경우 검사 스킵.
-   - Guard 5 (비-역참조 포인터 비교 헬퍼): 피호출 함수 정의 내에서 매개변수가 역참조되지 않는 경우(`ParamDereferenceVisitor`) 검사 스킵.
-4. **`FindUninitializedField` 공용체 처리 완화**:
-   - `RecordDecl::isUnion()`인 경우, 적어도 1개 필드가 유효 바인딩을 가지면 미초기화 판정에서 제외.
-
-### 4. 검증 결과 (Ground Truth)
-* **LLVM 컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` 및 `clang` ➡️ **Exit Code 0** 성공.
-* **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
+1. `REGISTER_SET_WITH_PROGRAMSTATE(InitializedOrEscapedVars, const MemRegion *)` 도입.
+2. `check::Bind` / `check::PostCall` / `check::PointerEscape` 구현하여 쓰기 및 비-const 인자 전달 시 GDM에 등록.
+3. 5단계 정밀 진입 가드 구축:
+   * Guard 1: `hasLocalStorage()` 지역 자동 변수만 검사.
+   * Guard 2: 선언 시 명시적 초기화(`getInit()`) 존재 시 스킵.
+   * Guard 3: 선행 변경/탈출 이력(`InitializedOrEscapedVars`) 존재 시 스킵.
+   * Guard 4: 인접 0길이 인자(`len == 0`) 스킵.
+   * Guard 5: 피호출 함수 정의 내 역참조 부재(`ParamDereferenceVisitor`) 시 스킵.
+4. `RecordDecl::isUnion()`의 경우 최소 1개 필드가 유효하면 미초기화 판정 제외.
 
 ---
 
 ## 2026-09-18: [Resolved] StackAddressEscape 체커 내 호출자 출력 매개변수/힙/this 미탐 및 단언문 크래시 해결
 
 ### 1. 현상 (Symptom)
-* DAPA 포인터 및 배열 규칙 Rule 34/Rule 35, MISRA C:2012 Rule 18.6, CWE-562 검증용 체커인 `path-sensitive-core.StackAddressEscape`(`StackAddrEscapeChecker.cpp`)에서 스택 주소 유출 패턴 중 가장 빈번한 3대 시나리오에 대해 진단을 내리지 못하는 **진성 엔진 미탐 (False Negative 100%)** 현상 발생:
-  1. **호출자 이중 포인터 출력 매개변수 (`*out = &local`)**: 독립 최상위 함수 분석 시 미탐.
-  2. **호출자 구조체 포인터 멤버 (`ctx->ptr = &local`)**: 미탐.
-  3. **동적 할당 힙 메모리 (`heap_obj->ptr = &local`)**: 미탐.
-  4. **C++ `this` 객체 멤버 (`this->ptr = &local`)**: 미탐.
-  5. **단언문 크래시(Assert Crash)**: `assert(isa<StackSpaceRegion>(Space))` 및 `assert(ReferrerVar && "We should have a VarRegion here")`로 인해 `VarRegion`이 아닌 기저 영역 유입 시 디버그 빌드 크래시 또는 릴리스 빌드 무음 경고 누락.
+* 호출자 이중 포인터(`*out = &local`), 구조체 멤버(`ctx->ptr = &local`), 힙 객체, C++ `this` 멤버로의 스택 주소 유출 미탐(FN 100%) 및 단언문 크래시 발생.
 
 ### 2. 원인 (Root Cause)
-* 업스트림 LLVM의 `HandleBinding`이 `if (!isa<GlobalsSpaceRegion>(Region->getMemorySpace())) return true;` 단일 검사만 수행하여 `UnknownSpaceRegion`(`SymbolicRegion`) 및 `HeapSpaceRegion`을 무조건 누락함.
-* 최상위 함수 분석 시 호출자 파라미터(`out`, `ctx`)는 함수 종료 직전 `SymbolReaper`에 의해 데드 심볼로 간주되어 `removeDeadBindings` 단계에서 `RegionStore` 바인딩이 조기 소멸됨.
-* 결과적으로 `checkEndFunction` 시점에 `iterBindings`를 돌려도 심볼릭 바인딩이 남아있지 않아 탈출을 감지할 수 없음.
+* Upstream `HandleBinding`이 `GlobalsSpaceRegion`만 검사하고 `UnknownSpaceRegion`(`SymbolicRegion`) 및 `HeapSpaceRegion`을 누락.
+* 호출자 매개변수는 함수 종료 전 `SymbolReaper`에 의해 데드 바인딩으로 조기 소멸됨.
+* `assert(isa<StackSpaceRegion>(Space))`로 인한 크래시.
 
 ### 3. 해결책 (Resolution)
 1. **`check::Bind`와 `ProgramState` GDM 연동 (`EscapedStackMap`)**:
-   - `REGISTER_MAP_WITH_PROGRAMSTATE(EscapedStackMap, const MemRegion *, EscapedStackInfo)` 도입.
-   - `checkBind` 콜백에서 대입 발생 즉시 탈출 대상(`isEscapingStorage`) 여부를 판별하여 GDM에 실시간 기록. 데드 심볼 수거에 영향을 받지 않고 함수 종료 시점까지 상태 보존.
-   - 비-스택 값(예: `NULL`)으로 덮어써질 경우 `State->remove<EscapedStackMap>(LocReg)`로 탈출 상태를 즉시 해제하여 TC-15(종료 전 복구 관용구)의 0-FP 완벽 보존.
-2. **`isEscapingStorage` 수명주기 경계 판별**:
-   - `GlobalsSpaceRegion`, `HeapSpaceRegion`, 기저 영역이 `SymbolicRegion` 또는 `CXXThisRegion`인 경우 탈출로 판정.
-   - 현재 스택 프레임(`CurrentFrame`)에 종속된 로컬 포인터 및 값전달 매개변수(`ParamVarDecl`)는 배제하여 MbedTLS 패턴 1/2 오탐 0건 보존.
-3. **단언문 크래시 원천 차단 및 다형적 리퍼러 포맷팅**:
-   - `assert` 전면 제거 및 `FieldRegion`, `SymbolicRegion`, `VarRegion`, `CXXThisRegion` 다형적 안전 추출.
-   - 한국어 메시지 다변화: `"호출자 매개변수 '*out'"`, `"호출자 매개변수 'ctx->ptr'"`, `"동적 할당된 힙(heap) 메모리 'ptr'"`, `"현재 객체(this) 'this->ptr'"`.
-4. **이중 병합 및 중복 방지 (Deduplication)**:
-   - `checkEndFunction`에서 `EscapedStackMap`과 `StoreManager::iterBindings` 결과를 기저 영역 대조를 통해 완벽 병합.
-
-### 4. 검증 결과 (Ground Truth)
-* **LLVM 컴파일 빌드**: `clang.exe`, `clang-tidy.exe` Release 타겟 `Exit Code 0` 성공.
-* **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
+   * 대입 즉시 탈출 대상(`isEscapingStorage`) 여부를 판별하여 GDM에 실시간 기록. 데드 심볼 수거 영향 없이 보존. 비-스택 값 덮어쓰기 시 즉시 맵에서 제거.
+2. **수명주기 경계 판별**:
+   * `GlobalsSpaceRegion`, `HeapSpaceRegion`, 기저 영역이 `SymbolicRegion` 또는 `CXXThisRegion`인 경우 탈출 판정. 현재 프레임 로컬 포인터는 제외.
+3. **단언문 크래시 원천 차단**:
+   * `assert` 전면 제거 및 다형적 안전 추출 적용.
 
 ---
 
 ## 2026-09-18: [Resolved] path-sensitive-arqa.ArrayBound 구조체 배열 센티널 오탐 3건 제거 및 상위 버퍼 크기 불일치 트레이드오프 선보고
 
 ### 1. 현상 (Symptom)
-* DAPA 포인터 및 배열 규칙 6조, MISRA C:2012 Rule 18.1, CWE-119 검증용 체커인 `path-sensitive-arqa.ArrayBound`를 MbedTLS 벤치마크에 적용 시, 총 5건의 진단이 검출되었으나 실측 결과 두 가지 상이한 패턴으로 분리됨:
-  1. **전역 상수 구조체 배열의 종료 센티널 미인식 오탐 (3건)**: `oid.c:313, 599, 756`에서 OID 디스크립터 배열의 마지막 요소에 위치한 `{ NULL, 0, NULL, NULL }` 센티널을 엔진이 `0(NULL)`으로 평가하지 못하고 `UnknownVal`로 처리하여, 루프가 1회 더 순회하면서 배열 경계를 초과해 가상 경로(Infeasible Path)를 탐색함.
-  2. **상위 호출자 버퍼 크기 불일치에 따른 경고 방출 (2건)**: `sha512.c:407`에서 `ssl_tls.c:3315` 및 `1914`로부터 48바이트 버퍼(`padbuf[48]`, `session_hash[48]`)를 넘겨받은 `mbedtls_sha512_finish_ret`가 `if (!truncated)` 분기로 64바이트까지 쓰기를 수행함. MbedTLS 개발자도 GCC 11.1의 `-Wstringop-overflow` 버퍼 초과 경고를 피하지 못해 `#pragma GCC diagnostic ignored "-Wstringop-overflow"`로 억제한 코드임.
+* 전역 상수 구조체 배열 종료 센티널(`{ NULL, 0, NULL, NULL }`) 미인식으로 인한 루프 초과 오탐(3건) 및 상위 호출자 버퍼 크기 불일치에 따른 경고(2건) 검출.
 
 ### 2. 원인 (Root Cause)
-* **패턴 1**: Clang Static Analyzer의 `RegionStoreManager::getBindingForField`(`RegionStore.cpp`)가 `superR`이 단일 변수인 `VarRegion`(`s.field`)인 경우에만 `InitListExpr` 상수 폴딩을 지원하고, `superR`이 `ElementRegion`(`arr[i].field`)인 경우는 상수 조회를 수행하지 않고 `UnknownVal`을 반환함.
-* **패턴 2**: 함수 포인터 간접 호출로 인해 상위 호출자 컨텍스트(`is384 == 1`)가 하위 함수 진입점에 전달되지 않아 정적 분석의 튜링 결정 불완전성에 직면함. 이를 체커 레벨에서 무리하게 억제할 경우, 작은 버퍼를 넘겨 발생하는 모든 진성 CWE-119 버퍼 오버플로우가 전수 침묵(치명적 미탐, FN)되는 파급효과 발생.
+* `RegionStoreManager::getBindingForField`가 `superR`이 `ElementRegion`(`arr[i].field`)인 경우 상수 조회를 수행하지 않고 `UnknownVal`을 반환.
+* 간접 호출로 상위 호출자 컨텍스트(`is384 == 1`)가 전달되지 않는 튜링 결정 불완전성 직면.
 
 ### 3. 해결책 (Resolution)
-1. **`RegionStore.cpp` 구조체 배열 및 중첩 레코드 상수 폴딩 구현 (패턴 1)**:
-   - `superR` 체인을 역추적(`ReversePath`)하여 기저 `VarRegion`과 `ElementRegion`/`FieldRegion`의 인덱스 경로를 추출하는 `PathStep` 파이프라인 도입.
-   - `VarDecl`의 `InitListExpr`로부터 요소 및 필드 인덱스를 계층적으로 순회하여 상수를 평가하는 `getConstantValueFromInitializerPath` 구현.
-   - 센티널 필드가 `ConcreteInt(0)`으로 정확히 바인딩되어 루프가 즉시 정상 종료됨.
-2. **트레이드오프 선보고 및 구조적 한계 공인 (패턴 2)**:
-   - `번외_체커_오류_수정_워크플로우_템플릿.md` v1.2.0 제6장 2절에 의거 선보고를 수행하고, 인간 아키텍트의 승인을 받아 엔진의 버퍼 오버플로우 검출력을 100% 보존(0% FN)하기 위해 사양서에 '구조적 잔류 한계(Known Limitation)'로 공인 기록.
-
-### 4. 검증 결과 (Ground Truth)
-* **LLVM 컴파일 빌드**: `clang.exe`, `clang-tidy.exe` Release 타겟 **Exit Code 0** 성공.
+1. **구조체 배열 상수 폴딩 구현 (`RegionStore.cpp`)**:
+   * `superR` 체인을 역추적하여 기저 `VarRegion`과 인덱스 경로를 추출하는 `PathStep` 파이프라인 도입.
+   * `getConstantValueFromInitializerPath`를 통해 센티널 필드를 `ConcreteInt(0)`으로 정확히 바인딩.
+2. **트레이드오프 선보고 및 구조적 한계 공인**:
+   * 체커 레벨 억제 시 진성 버퍼 오버플로우가 침묵(FN)되므로, 버퍼 검출력 보존을 위해 사양서에 '구조적 잔류 한계(Known Limitation)'로 공식 공인.
 
 ---
 
 ## 2026-09-18: [Resolved] path-sensitive-core.NullDereference 심층 분석(Deep Mode) 억제 해제 정책과 단일 TU 외부 함수 심볼릭 한계에 따른 구조적 오탐 규명
 
 ### 1. 현상 (Symptom)
-* DAPA 포인터 및 배열 규칙 6조, MISRA C:2012 Rule 1.3 / 21.3, CWE-476(NULL Pointer Dereference) 검증용 체커인 `path-sensitive-core.NullDereference`(`DereferenceChecker.cpp`)를 MbedTLS 벤치마크에 적용 시 총 5건의 진단 검출:
-  1. **패턴 1 (3건)**: `x509_crt.c:196`, `ssl_srv.c:865`, `ssl_tls.c:2621`에서 `mbedtls_pk_ec(*pk)->grp.id` 접근 시 "널 포인터 역참조" 경고 발생.
-  2. **패턴 2 (2건)**: `bignum.c:2455`(`X->n`) 및 `debug.c:48`(`ssl->conf->f_dbg`)에서 필드 역참조 경고 발생.
+* MbedTLS 벤치마크에서 단일 TU 외부 함수 호출 결과 및 방어적 검사 분기 뒤의 역참조에 대해 5건의 "널 포인터 역참조" 경고 발생.
 
 ### 2. 원인 (Root Cause)
-* **과거 설계 의도 및 러너 옵션 규명**:
-  - `Obsidian.Personal/LLVM/Clang 환경설정/CSA 옵션 정리.md:39-54`에 기록된 바와 같이, 과거 CTU 및 심층 분석 파이프라인 구축 시 인라인 헬퍼 함수의 널 반환이나 방어적 널 검사 뒤에 숨은 버그(미탐, FN)를 하나도 놓치지 않기 위해 `suppress-inlined-defensive-checks=false` 및 `suppress-null-return-paths=false`를 의도적으로 비활성화하여 `ClangTidyRunnerService.cs:368-369`에 주입함.
-* **패턴 1 (구조체 값 복사 및 크로스 TU 외부 함수 심볼릭 불투명성)**:
-  - 호출자는 `pk_alg == MBEDTLS_PK_ECDSA` 등으로 사전에 EC 키임을 100% 검증함.
-  - 그러나 `mbedtls_pk_ec`가 구조체를 값 복사(`const mbedtls_pk_context pk`)로 전달받고 내부에서 `switch (mbedtls_pk_get_type(&pk))`를 호출함.
-  - `mbedtls_pk_get_type`은 타 번역 단위(`pk.c:603`)에 구현된 extern 함수이므로, 단일 TU 심볼릭 엔진이 복사본에 대한 호출 결과를 미제약 심볼(`conj_$M`)로 처리하여 `default: return NULL;` 경로를 탐색함.
-  - 러너에서 `suppress-null-return-paths=false`가 켜져 있어 Clang이 이 경로를 억제하지 않고 널 역참조로 방출함.
-* **패턴 2 (매크로 전개 소실 및 방어적 널 검사 분기)**:
-  - `bignum.c`에서 `MPI_VALIDATE_RET(X != NULL)`는 MbedTLS 컴파일 옵션상 `MBEDTLS_CHECK_PARAMS` 미정의로 인해 빈 매크로(`do {} while(0)`)로 전개되어 소실됨.
-  - 내부 함수 `mbedtls_mpi_free` 내의 방어적 검사(`if (X == NULL) return;`)가 실행될 때, `suppress-inlined-defensive-checks=false`로 인해 CSA가 `X == NULL` 가상 경로를 열고 후속 역참조를 경고함.
+* 심층 분석 파이프라인 구축 시 미탐(FN) 최소화를 위해 `suppress-inlined-defensive-checks=false` 및 `suppress-null-return-paths=false`를 의도적으로 주입함.
+* 단일 TU 엔진이 크로스 TU extern 함수(`mbedtls_pk_get_type`)의 반환 심볼에 대해 널 경로를 탐색하고, 억제 정책이 비활성화되어 경고 방출.
 
-### 3. 실측 검증 (Ground Truth)
-* **Clang upstream 공식 기본값 실측**:
-  - 러너의 강제 비활성화 옵션을 제외하고 Clang 기본값(`suppress-null-return-paths=true`, `suppress-inlined-defensive-checks=true`)으로 구동한 결과:
-  - `x509_crt.c`: **0건 경고 (Clean)**
-  - `ssl_srv.c`: **0건 경고 (Clean)**
-  - `ssl_tls.c:2621`: **0건 경고 (Clean)**
-  - `debug.c`: **0건 경고 (Clean)**
-  - 5건 중 4건이 Clang 공식 오탐 억제 체계 하에서는 본래 방출되지 않는 것임을 실측 확인.
-
-### 4. 조치 및 아키텍처 결정 (Architectural Decision)
-1. **C++ 엔진 코드 보존 (엔진 중립성 수호)**:
-   - `DereferenceChecker.cpp`에 특정 함수명(`"mbedtls_pk_ec"`)을 하드코딩하거나 널 반환 경로를 일반화하여 무차별 예외 처리할 경우, 실제 세그멘테이션 폴트를 일으키는 수많은 진성 널 역참조 결함(TP)을 침묵시키는 치명적인 미탐(FN) 구멍이 뚫림.
-   - `번외_체커_오류_수정_워크플로우_템플릿.md` v1.2.0 제1장 5절 및 제6장 2절에 의거 선보고를 수행하고, 엔진 코드를 오염시키지 않고 사양서에 '설계된 심층 모드 억제 해제 정책에 따른 공인 구조적 오탐(Known Limitation)'으로 완결 처리.
-2. **ArqaStatic 러너 고도화 로드맵 제안**:
-   - `ClangTidyRunnerService.cs`에 하드코딩된 옵션을 향후 `AnalysisProfile`(표준 모드: FP 0건 Clang 기본값 vs 심층 모드: 미탐 최소화 Deep Search)로 분리하여 UI 설정 탭에서 사용자가 분석 목적에 맞게 선택할 수 있도록 개선 권고.
+### 3. 아키텍처 결정 (Architectural Decision)
+1. **엔진 중립성 수호 (Zero Cheating)**:
+   * 특정 함수명을 하드코딩하거나 널 경로를 무차별 예외 처리하면 실제 세그멘테이션 결함(TP)을 놓치는 치명적 미탐 구멍이 발생하므로 엔진 코드 무수정 원칙 고수.
+   * 사양서에 '설계된 심층 모드 억제 해제 정책에 따른 공인 구조적 오탐(Known Limitation)'으로 완결.
+2. **러너 고도화**:
+   * `AnalysisProfile`(표준 모드 vs 심층 모드) 분리 권고.
 
 ---
 
 ## 2026-09-18: [Resolved] cfg-null-pointer-arithmetic 복합 논리곱(&&) Terminator 미인식 및 힙 구조체 역참조 오인 결함 해결
 
 ### 1. 현상 (Symptom)
-* DAPA 포인터 및 배열 규칙 6조, MISRA C:2012 Rule 18.1 / Rule 18.4, CWE-476 / CWE-823 준수 검증용 체커인 `cfg-null-pointer-arithmetic`(`NullPointerArithmeticCheck.cpp`) 구동 시 MbedTLS 벤치마크에서 3건의 오탐(FP 100%) 검출:
-  1. `psa_crypto.c:2727:17`: `memset(&mac[operation->mac_size], ...)` ➡️ `NULL(0/nullptr) 포인터를 배열 인덱싱의 베이스로 사용할 수 없습니다.`
-  2. `ssl_msg.c:2279:39`: `ssl->handshake->cur_msg_p += cur->len;` ➡️ `NULL(0/nullptr) 포인터에 대한 산술 대입 연산은 금지됩니다.`
-  3. `ssl_msg.c:2333:39`: `ssl->handshake->cur_msg_p += cur_hs_frag_len;` ➡️ `NULL(0/nullptr) 포인터에 대한 산술 대입 연산은 금지됩니다.`
+* `memset(&mac[operation->mac_size], ...)` 및 힙 포인터 연산(`ssl->handshake->cur_msg_p += ...`)에 대해 3건의 널 포인터 산술 연산 오탐 발생.
 
 ### 2. 원인 (Root Cause)
-1. **복합 논리곱(`&&`) Terminator 및 재귀적 가드 누락 (패턴 1)**:
-   - `psa_crypto.c:2726`에서 `if ((mac != NULL) && (mac_size > operation->mac_size))`로 `mac != NULL`이 검증됨.
-   - 그러나 Clang CFG에서 단락 평가 수식은 terminator가 `BinaryOperator (BO_LAnd)`인 독립 블록으로 분할됨.
-   - 기존 `checkEdgeCondition`은 `IfStmt`, `WhileStmt` 등만 분기하고 `BinaryOperator` terminator를 완전히 누락함.
-   - 또한 조건식이 `BO_LAnd`일 때 서브식을 재귀 평가하지 않고 `BO_EQ`/`BO_NE`만 단순 매칭하여 `ScanState::NotFound`로 처리, 상단 `mac = NULL`로 역추적이 관통되어 오탐 방출.
-2. **구조체 필드(`FieldDecl`) 전역 오염 및 힙 역참조 루프 백에지 오인 (패턴 2)**:
-   - `getReferencedDecl`이 `MemberExpr`에 대해 `ME->getMemberDecl()` (`FieldDecl*`)을 반환하고 있었음.
-   - `FieldDecl`은 구조체 선언 내 필드의 메타 정의일 뿐 메모리 저장 위치(lvalue identity)가 아니므로 동일 타입의 모든 인스턴스가 동일 상태로 오인됨.
-   - 더욱이 `ssl->handshake->cur_msg_p`는 화살표(`->`)를 거친 간접 힙 역참조 포인터로서, 별칭 분석이 없는 intra-procedural syntactic CFG로는 건전한 추적이 불가능함.
-   - 루프 종료 시 `cur_msg = NULL; cur_msg_p = NULL;`로 루프가 탈출함에도, 루프 불변식을 연동하지 못하고 루프 백에지의 `cur_msg_p = NULL` 대입을 유효 경로로 오인함.
+* CFG에서 단락 평가 수식은 terminator가 `BinaryOperator(BO_LAnd)`인 독립 블록으로 분할되는데, `checkEdgeCondition`이 논리 연산자 terminator를 누락함.
+* `getReferencedDecl`이 `MemberExpr`에 대해 `FieldDecl*`을 반환하여 동일 타입의 모든 인스턴스를 동일 상태로 오인하고, 힙 간접 참조의 별칭 분석 한계 발생.
 
 ### 3. 해결책 (Resolution)
-1. **재귀적 조건식 평가기 `evaluateEdgeGuard` 구현**:
-   - 단항 논리 부정(`!p`), 암시적 포인터-불리언 캐스트(`CK_PointerToBoolean`), 변수 자체(`if (p)`), 이항 비교(`==`, `!=`)를 불리언 대수에 맞게 정밀 평가.
-   - 복합 논리 연산자(`BO_LAnd`, `BO_LOr`)에 대해 참/거짓 분기별 건전한 상태 전파 알고리즘 구축.
-2. **CFG 논리 연산자 Terminator 지원**:
-   - `checkEdgeCondition`에서 `Term->isLogicalOp()` (`BO_LAnd`, `BO_LOr`) terminator를 처리하여 단락 평가 블록의 LHS 조건식을 추출 및 가드 연동.
-3. **`DeclRefExpr` (`VarDecl`) 전용 정규화 및 `areSameVars` 적용**:
-   - `getReferencedDecl` 및 `checkWrite`에서 `MemberExpr` 분기를 제거하고 `VarDecl` 전용으로 정규화하여 자매 체커(`NullDereferenceGuardCheck`, `NonZeroDivisorGuardCheck`)와 아키텍처 정렬.
-   - `areSameVars` 헬퍼(포인터 동일성 + 정규 선언 동일성 + 소스 위치 동일성)를 도입하여 변수 식별 무결성 확립.
-4. **미사용 레거시 함수 선언 제거**:
-   - `NullPointerArithmeticCheck.h`의 `definitelyNullFromInitUntilUse` 미구현 선언 삭제.
-
-### 4. 검증 결과 (Ground Truth)
-* **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 컴파일 성공.
-* **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
+1. `evaluateEdgeGuard`: 단항 논리 부정, 포인터-불리언 캐스트, 이항 비교 및 복합 논리 연산자(`BO_LAnd`, `BO_LOr`)를 불리언 대수에 맞게 재귀 평가.
+2. CFG 논리 연산자 Terminator 지원: `Term->isLogicalOp()`를 처리하여 단락 평가 블록 가드 연동.
+3. `DeclRefExpr`(`VarDecl`) 전용 정규화 및 `areSameVars` 헬퍼 도입으로 변수 식별 무결성 확립.
 
 ---
 
 ## 2026-09-21: [Resolved] ast-extern-function-declaration 호스트 MSVC 전처리기 가드 오용 및 컴파일러 내장 함수(__builtin_*) 오탐 해결
 
 ### 1. 현상 (Symptom)
-* DAPA 스타일 및 구조 규칙 1조, MISRA C:2012 Rule 8.4 / Rule 8.5, CWE-686 준수 검증용 체커인 `ast-extern-function-declaration`(`ExternFunctionDeclarationCheck.cpp`) 구동 시 MbedTLS 벤치마크에서 2건의 오탐(FP 100%) 검출:
-  1. `bignum.c:756:20`: `return __builtin_bswap32(x);` ➡️ `외부 함수 '__builtin_bswap32'가 선언 없이 사용되었습니다. 사용 전에 선언(예: 'extern unsigned int __builtin_bswap32(...);')하십시오.`
-  2. `bignum.c:758:20`: `return __builtin_bswap64(x);` ➡️ `외부 함수 '__builtin_bswap64'가 선언 없이 사용되었습니다. 사용 전에 선언(예: 'extern unsigned long long __builtin_bswap64(...);')하십시오.`
+* `return __builtin_bswap32(x);` 등 컴파일러 내장 함수 사용 시 "외부 함수가 선언 없이 사용되었습니다" 오탐 2건 검출.
 
 ### 2. 원인 (Root Cause)
-1. **호스트 컴파일러 전처리기 가드 오용 (`#if defined(__clang__)`)**:
-   - `ExternFunctionDeclarationCheck.cpp`의 23~25행에 `isFromSystemOrBuiltin` 헬퍼가 구현되어 있었으나, `FD->getBuiltinID() != 0` 검사문이 `#if defined(__clang__)`으로 감싸져 있었음.
-   - Windows 환경에서 Visual Studio MSVC(`cl.exe`)로 ARQA Clang-Tidy 엔진을 컴파일할 때, 매크로 `__clang__`은 정의되지 않음 (`_MSC_VER`만 정의됨).
-   - 호스트 빌더 매크로와 분석 타겟 AST 라이브러리를 혼동하여 작성된 가드로 인해, MSVC 빌드 시 `FD->getBuiltinID() != 0` 코드가 **컴파일 단계에서 완전히 증발(탈락)**함.
-2. **C 모드 암묵적 선언(implicit declaration) 오인 및 위치 순서 결함**:
-   - Clang 파서는 `__builtin_bswap32` 등을 파싱할 때 `isImplicit() == true` 및 `getBuiltinID() != 0`인 AST 노드로 생성함.
-   - MSVC 빌드에서 내장 심볼 필터링이 누락되어 `if (!LO.CPlusPlus && FD->isImplicit())` 분기로 직행하여 "선언 없는 외부 함수" 오탐을 방출함.
-   - 또한 컴파일러 내장 함수는 가상 위치를 가질 수 있어 `L.isInvalid()` 검사보다 앞서 Builtin 판별이 우선되어야 함에도 순서가 뒤바뀌어 있었음.
+* `isFromSystemOrBuiltin` 내의 `FD->getBuiltinID() != 0` 검사가 `#if defined(__clang__)`으로 감싸져 있어, Visual Studio MSVC(`cl.exe`)로 컴파일 시 해당 코드가 증발함.
+* 컴파일러 내장 함수는 가상 위치를 가질 수 있어 `L.isInvalid()` 검사보다 앞서 Builtin 판별이 우선되어야 함에도 순서가 뒤바뀜.
 
 ### 3. 해결책 (Resolution)
-1. **호스트 컴파일러 가드 `#if defined(__clang__)` 완전 제거**:
-   - 호스트 컴파일러(MSVC, GCC, Clang)와 무관하게 무조건 Clang AST API인 `FD->getBuiltinID() != 0`를 호출하도록 보장.
-2. **컴파일러 내장 함수 최우선 판별 및 식별자 접두사 보조 가드 확립**:
-   - 소스 위치 유효성 검사(`L.isInvalid()`)보다 앞서 `FD->getBuiltinID() != 0` 및 `FD->getDeclName().isIdentifier() && FD->getName().starts_with("__builtin_")`를 최우선 평가하도록 재배치.
-3. **엔진 중립성 수호 (Zero Hardcoding)**:
-   - `bswap32`, `bswap64` 등 특정 함수명을 하드코딩하거나 임의 화이트리스트를 사용하는 땜질 처방을 100% 배제하고, Clang AST의 순수 내장 식별 메커니즘만 적용.
-
-### 4. 검증 결과 (Ground Truth)
-* **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 컴파일 성공.
-* **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
+1. 호스트 가드 `#if defined(__clang__)` 완전 제거: 호스트 컴파일러와 무관하게 무조건 `FD->getBuiltinID() != 0` 호출.
+2. 위치 유효성 검사 앞서 `FD->getBuiltinID() != 0` 및 `starts_with("__builtin_")`를 최우선 평가하도록 재배치.
+3. 엔진 중립성 수호: 특정 함수명 하드코딩 0건 달성.
 
 ---
 
 ## 2026-09-21: [Resolved] lex-macro-defined-before-use 전처리기 내장 연산자(__has_builtin 등) 인자 오인 오탐 및 소스 위치 정규화 해결
 
 ### 1. 현상 (Symptom)
-* DAPA 스타일 및 구조 규칙 1조, MISRA C:2012 Rule 20.9 (Required), CWE-1068 준수 검증용 체커인 `lex-macro-defined-before-use`(`MacroDefinedBeforeUseCheck.cpp`) 구동 시 MbedTLS 벤치마크에서 1건의 오탐(FP) 검출:
-  - `bignum.c:747:19`: `#if __has_builtin(__builtin_bswap32) && __has_builtin(__builtin_bswap64)` ➡️ `전처리 조건식에서 매크로 '__builtin_bswap64' 가 정의되지 않았습니다.` (오탐)
-  - 반면 `aes.c:540:34`에서는 `(defined(MBEDTLS_AESNI_C) && MBEDTLS_AESNI_HAVE_CODE == 2)` ➡️ `전처리 조건식에서 매크로 'MBEDTLS_AESNI_HAVE_CODE' 가 정의되지 않았습니다.` (진성 규격 정탐)
+* `#if __has_builtin(__builtin_bswap32)` 등 전처리기 내장 연산자 사용 시 매크로 미정의 허위 경고 검출.
 
 ### 2. 원인 (Root Cause)
-1. **전처리기 내장 연산자(Preprocessor Operators) 스코프 미인식**:
-   - 기존 `MacroDefinedBeforeUseCheck.cpp`의 `DefinedTracker`는 오직 `defined` 식별자만 감지하도록 하드코딩되어 있었음.
-   - Clang, GCC 및 C23/C++20 표준에 정의된 함수형 전처리기 연산자(`__has_builtin`, `__has_include`, `__has_feature`, `__has_attribute` 등)의 괄호 안 인자는 매크로가 아닌 컴파일러 기능 질의용 심볼 식별자임.
-   - 그러나 엔진이 이들 연산자의 인자 스코프를 인식하지 못하고 일반 매크로 정의 검사(`checkMacroDefinition`)로 직행시켜 `PP.isMacroDefined()` 실패에 따른 허위 경보를 방출함.
-2. **`CondRange` 매크로 확장 위치와 파일 위치 불일치 결함**:
-   - 조건식의 시작 위치가 매크로 확장 위치(`isMacroID()`)를 포함하거나 줄바꿈에 걸쳐 있을 때 `Lexer::getSourceText`가 `StringRef()`를 반환하여 첫 번째 조건식이 조용히 누락되거나 왜곡되는 문제 존재.
+* `DefinedTracker`가 `defined`만 감지하도록 하드코딩되어 함수형 전처리기 연산자(`__has_builtin`, `__has_include` 등)의 인자 스코프를 인식하지 못함.
+* 조건식 시작 위치가 매크로 확장 위치를 포함할 때 `Lexer::getSourceText`가 빈 문자열을 반환하여 위치 왜곡 발생.
 
 ### 3. 해결책 (Resolution)
-1. **`isPreprocessorOperator` 판별기 도입**:
-   - `defined`, `__has_builtin`, `__has_include`, `__has_feature`, `__has_extension`, `__has_attribute`, `__has_c_attribute`, `__has_cpp_attribute`, `__has_warning`, `__is_identifier`, `__has_declspec_attribute` 총 11종의 전처리기 연산자를 정확히 식별.
-2. **`DefinedTracker` 괄호 깊이 및 연산자 인자 스코프 격리**:
-   - `OpParenDepth`로 괄호 깊이를 카운팅하여 최외곽 닫는 괄호(`)`) 매칭 시까지 연산자 인자 스코프를 안전하게 격리.
-   - 괄호 없는 형태(`defined X`)도 `ExpectingParenOrIdent` 플래그로 단일 식별자 스코프로 안전하게 제한 후 즉시 리셋.
-   - 단락 평가(`&&`) 보호 셋(`ShortCircuitProtected`)을 보존하여 `defined(X) && X > 0` 패턴 보호.
-3. **`FileCondRange` 소스 위치 정규화**:
-   - `SM.getFileLoc(CondRange.getBegin())` 및 `SM.getFileLoc(CondRange.getEnd())`로 FileLoc 범위를 정규화하여 매크로 확장 토큰 위치 왜곡을 원천 차단.
-4. **엔진 중립성 수호 (Zero Hardcoding)**:
-   - `bswap64`, `bswap32` 등 특정 라이브러리 심볼 하드코딩 0건, 컴파일러 표준 연산자 시맨틱 기반 일반화 설계 확립.
-
-### 4. 검증 결과 (Ground Truth)
-* **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 컴파일 성공.
-* **이중 계쇄 감사**: 독립 감사관 Gate 1 [PASS] 및 Gate 2 [PASS] 공식 만장일치 승인 완료.
+1. `isPreprocessorOperator`: `defined`, `__has_builtin`, `__has_include` 등 11종 전처리기 연산자 정확 식별.
+2. `DefinedTracker`: `OpParenDepth`로 괄호 깊이를 카운팅하여 닫는 괄호 매칭 시까지 연산자 인자 스코프 격리.
+3. `FileCondRange`: `SM.getFileLoc`로 소스 범위를 정규화하여 토큰 위치 왜곡 방지.
 
 ---
 
 ## 2026-09-21: [Certified] path-sensitive-core.UndefinedBinaryOperatorResult 인라인 복합 에러 반환 제약 소실에 따른 가상 경로 오탐 규명 및 구조적 한계 공인
 
 ### 1. 현상 (Symptom)
-* DAPA 초기화 규칙 2조, MISRA C:2012 Rule 9.1 (Mandatory), CWE-457 준수 검증용 CSA 체커인 `path-sensitive-core.UndefinedBinaryOperatorResult`(`UndefResultChecker.cpp`) 구동 시 MbedTLS 벤치마크에서 2건 검출:
-  1. `psa_crypto_cipher.c:414:13`: `*output_length > output_size` ➡️ `'>' 연산자의 왼쪽 피연산자가 초기화되지 않은 쓰레기 값입니다` (**진성 규격 정탐, TP 100%**)
-  2. `rsa.c:2125:16`: `buf[0] >> (8 - siglen * 8 + msb)` ➡️ `'>>' 연산자의 왼쪽 피연산자가 초기화되지 않은 쓰레기 값입니다` (**엔진 제약 소실 오탐, FP 100%**)
+* `buf[0] >> (8 - siglen * 8 + msb)` 구문에서 "연산자의 왼쪽 피연산자가 쓰레기 값입니다" 오탐 검출.
 
 ### 2. 원인 (Root Cause)
-1. **진성 정탐 (`psa_crypto_cipher.c:414`)**:
-   - `mbedtls_cipher_update` 호출 후 반환값 `status`를 검증하지 않고 `if (*output_length > output_size)`를 즉시 평가.
-   - `mbedtls_cipher_update`는 비정상 인자 유입 시 `*output_length = 0` 초기화 코드를 거치지 않고 조기 에러를 반환하는 실패 경로가 실존하므로, 런타임에 미초기화 스택 쓰레기값을 직접 대소 비교하는 진성 보안 결함.
-2. **엔진 오탐 (`rsa.c:2125`)**:
-   - `rsa.c:2088`에서 `ret = mbedtls_rsa_public(ctx, sig, buf);` 호출.
-   - `mbedtls_rsa_public` 내부(717행)에서 `mbedtls_mpi_read_binary` 실패 경로를 탐색하여 738행 `return MBEDTLS_ERROR_ADD(MBEDTLS_ERR_RSA_PUBLIC_FAILED, ret);`로 빠져나감 (이때 `buf`는 쓰이지 않음).
-   - 호출부인 `rsa.c:2091`로 복귀한 후, 명시적인 방어 코드 `if (ret != 0) return ret;`가 존재함에도 CSA 심볼릭 실행기(`ExprEngineCallAndReturn.cpp`)가 `MBEDTLS_ERROR_ADD` 복합 비트 연산 매크로의 반환값 심볼에 대해 비영(non-zero) 제약을 호출자 컨텍스트로 전달하지 못하고 상실(Constraint Loss)함.
-   - 그 결과 `Assuming the condition is false / 가정함: 'ret' 은(는) 다음과 같음: 0`으로 비실행 가상 경로(Infeasible Path)를 분기하여 2125행에서 `buf[0]`이 쓰레기값이라고 허위 경보를 방출함.
+* `ret = mbedtls_rsa_public(...)` 호출부 복귀 후 `if (ret != 0) return ret;` 방어 코드가 존재함에도, CSA 심볼릭 엔진이 복합 비트 연산 매크로(`MBEDTLS_ERROR_ADD`) 반환 심볼에 대해 non-zero 제약을 상실(Constraint Loss)하여 `ret == 0` 가상 경로를 분기함.
 
-### 3. 트레이드오프 및 아키텍처 결정 (Architectural Decision)
-1. **엔진 중립성 수호 및 Zero Cheating (No-Engine-Touch)**:
-   - `UndefResultChecker.cpp`는 LLVM Upstream의 120줄 순수 코어 체커로, `C.getSVal(B).isUndef()`를 정직하게 감시함.
-   - 특정 변수명(`buf`)이나 함수명(`rsa`)을 하드코딩하여 오탐을 억제하는 것은 Zero Cheating 원칙에 위배됨.
-   - 비트 시프트 연산자(`>>`)나 배열 참조의 `isUndef()` 경고를 완화할 경우, `psa_crypto_cipher.c:414`와 같은 치명적인 보안 취약점(CWE-457) 진성 결함을 놓치는 심각한 미탐(FN) 구멍이 발생함.
-   - 따라서 진성 결함 검출력을 100% 보존하기 위해 엔진 소스코드를 변형하지 않고 원형 그대로 보존함.
+### 3. 아키텍처 결정 (Architectural Decision)
+1. **엔진 중립성 수호 (Zero Cheating)**:
+   * 특정 변수명(`buf`)을 하드코딩하거나 비트 시프트의 `isUndef()`를 완화하면 진성 보안 취약점(CWE-457)을 놓치는 심각한 미탐 구멍이 발생하므로 엔진 코드 무수정 원칙 고수.
 2. **구조적 한계 공인 (Known Structural Limitation)**:
-   - 본 오탐은 체커의 버그가 아니라 Clang Static Analyzer 심볼릭 실행기의 고전적인 인라인 대수적 에러 반환 제약 소실에 의한 것이므로, 상위 아키텍트 승인 하에 **[설계 및 심볼릭 엔진 한계에 따른 공인 구조적 오탐 (Known Limitation, 100.0%)]**으로 공식 공인 완결함.
-
-### 4. 검증 결과 (Ground Truth)
-* **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 무결점 유지.
+   * CSA 심볼릭 실행기의 고전적 인라인 대수적 에러 반환 제약 소실에 기인하므로 사양서에 '설계 및 심볼릭 엔진 한계에 따른 공인 구조적 오탐'으로 공식 완결.
 
 ---
 
 ## 2026-09-21: [Certified] path-sensitive-core.CallAndMessage 심층 분석 모드(방어적 검사 억제 해제) 및 인라인 널 분기에 따른 가상 경로 오탐 규명 및 구조적 한계 공인
 
 ### 1. 현상 (Symptom)
-* DAPA 포인터 규칙, MISRA C:2012 Rule 1.3 (Required), CWE-476 준수 검증용 CSA 코어 체커인 `path-sensitive-core.CallAndMessage`(`CallAndMessageChecker.cpp`) 구동 시 MbedTLS 벤치마크에서 1건 검출:
-  - `debug.c:48:5`: `f_dbg(p_dbg, level, file, line, str)` ➡️ `호출된 함수 포인터가 널(Null)입니다` (**엔진 방어적 검사 분기 오탐, FP 100%**)
+* `f_dbg(p_dbg, level, file, line, str)` 호출 시 "호출된 함수 포인터가 널입니다" 오탐 검출.
 
 ### 2. 원인 (Root Cause)
-1. **인라인 방어적 검사(Defensive Check) 널 경로 분기**:
-   - `mbedtls_debug_print_ecp` 180행에 방어적 널 가드 `if (NULL == ssl->conf->f_dbg) return;` 존재.
-   - ArqaStatic의 최고 감도 심층 정적분석 정책(`ClangTidyRunnerService.cs`: `-analyzer-config suppress-inlined-defensive-checks=false`)에 의해, CSA 심볼릭 엔진이 인라인 호출된 `mbedtls_debug_print_ecp`의 방어적 널 검사에서 `ssl->conf->f_dbg == NULL` 상태를 가상 경로로 분기하여 `debug_send_line` 48행까지 전달함.
-2. **Clang 기본 억제 정책과의 대조 (Ground Truth)**:
-   - Clang 기본 설정(`suppress-inlined-defensive-checks=true`)에서는 인라인된 함수의 방어적 널 검사로부터 파생된 널 경로는 노이즈로 간주되어 자동 억제(0건 Clean)됨.
-   - 그러나 ArqaStatic은 철저한 보안 결함 전수 탐지를 위해 해당 억제를 비활성화하고 있어, 실제 런타임에는 도달할 수 없는 비실행 가상 경로(Infeasible Path)에서 함수 포인터 역참조 경고가 방출됨.
+* 인라인 호출된 `mbedtls_debug_print_ecp` 내부의 방어적 널 가드 `if (NULL == ssl->conf->f_dbg) return;`에 대해, 심층 분석 옵션(`suppress-inlined-defensive-checks=false`)으로 인해 CSA가 가상 경로를 열고 후속 함수 포인터 역참조 경고를 방출함.
 
-### 3. 트레이드오프 및 아키텍처 결정 (Architectural Decision)
-1. **엔진 중립성 수호 및 Zero Cheating (No-Engine-Touch)**:
-   - `CallAndMessageChecker.cpp`는 LLVM Upstream의 84줄 순수 코어 체커로, `State->isNull(Callee)`를 충실하게 판별함.
-   - 특정 함수명(`debug_send_line`)이나 변수명(`f_dbg`)을 화이트리스트로 하드코딩하는 것은 Zero Cheating 원칙에 정면 위배됨.
-   - 체커 코드 레벨에서 널 함수 포인터 판별을 완화할 경우, 실제 치명적인 널 포인터 역참조 및 미정의 동작(CWE-476) 진성 결함을 놓치는 치명적인 미탐(FN) 구멍이 뚫리게 됨.
-   - 따라서 진성 결함 검출력을 100% 보존하기 위해 엔진 코드를 수정하지 않고 원형 그대로 보존함.
+### 3. 아키텍처 결정 (Architectural Decision)
+1. **엔진 중립성 수호 (Zero Cheating)**:
+   * 특정 함수명을 화이트리스트로 하드코딩하거나 널 함수 포인터 판별을 완화하면 진성 CWE-476 결함을 놓치므로 엔진 소스코드 원형 보존.
 2. **구조적 한계 공인 (Known Structural Limitation)**:
-   - 본 오탐은 체커의 버그가 아니라 Clang Static Analyzer 심층 분석 모드 하에서 인라인 방어적 가드 분기가 야기하는 구조적 가상 경로 현상이므로, 상위 아키텍트 승인 하에 **[설계 및 심볼릭 엔진 한계에 따른 공인 구조적 오탐 (Known Limitation, 100.0%)]**으로 공식 공인 완결함.
-
-### 4. 검증 결과 (Ground Truth)
-* **LLVM 컴파일 빌드**: `clang-tidy.exe` Release 타겟 **Exit Code 0** 무결점 유지.
+   * 심층 분석 모드 하에서 인라인 방어적 가드가 야기하는 구조적 현상이므로 사양서에 '공인 구조적 오탐'으로 완결.
 
 ---
 
 ## 2026-09-22: [Resolved] LDRA 벤치마크 3대 진성 미탐(FN) 전수 해결 (Unsigned 단항 음수 중첩 수식 미탐 및 UO_Not 범위 초과 상수 평가 결함)
 
 ### 1. 현상 (Symptom)
-* 상용 정적분석 도구 LDRA 벤치마크 결과(`C:\LDRA_mbedtls_정오탐분석.xlsx`, 9,987건)와 교차 대조 및 전수 독립 실사 수행 결과, ArqaStatic 엔진에서 실제 결함인 3건의 **진성 미탐 (True False Negative)** 발생 확인:
-  1. **`constant_time.c:182`**: `const size_t diff_msb = (diff | (size_t) -diff);`에서 무부호 정수 `diff`(`size_t`)에 단항 음수 연산자(`-`)가 적용되었음에도 `ast-unsigned-minus-assignment` 경고가 미검출됨 (DRPA Rule 45 [나]항 위반 누락).
-  2. **`ssl_srv.c:3848`**: `peer_pms[0] = peer_pms[1] = ~0;`에서 8비트 `unsigned char`에 32비트 signed int `-1`(`~0`)을 대입하였음에도 `ast-no-out-of-range-assignment` 경고가 미검출됨 (DRPA Rule 25 [가], 29 [마]항 위반 누락).
-  3. **`cipher.c:780`**: `size_t in_padding = ~0;`에서 64비트 무부호 `size_t`에 32비트 signed int `-1`(`~0`)을 대입하였음에도 `ast-no-out-of-range-assignment` 경고가 미검출됨 (DRPA Rule 29 [마]항 위반 누락).
+* LDRA 벤치마크 교차 실사 결과 3건의 진성 미탐 확인:
+  1. `const size_t diff_msb = (diff | (size_t) -diff);`: unsigned 단항 음수 연산 미검출.
+  2. `peer_pms[0] = peer_pms[1] = ~0;`: 8비트 `unsigned char`에 32비트 signed `-1` 대입 미검출.
+  3. `size_t in_padding = ~0;`: 64비트 `size_t`에 32비트 signed `-1` 대입 미검출.
 
 ### 2. 원인 (Root Cause)
-1. **`UnsignedMinusAssignmentCheck.cpp` 최상위 식 단일 검사 한계**:
-   - `checkExpr`에서 `topLevelUnaryMinus(TargetExpr)`만 호출하여, 이항 연산자(`|`, `+` 등)나 캐스트 내부의 자식 노드로 중첩된 `UnaryOperator`(`-diff`)를 재귀 순회하지 못함.
-2. **`NoOutOfRangeAssignmentCheck.cpp` 비트 NOT 연산자 상수 평가 누락 및 비트폭 무차별 화이트리스트 결함**:
-   - `evalIntWithLocals`에 `UO_Minus`(`-`)와 `UO_Plus`(`+`)만 구현되어 있고 단항 비트 반전 연산자 `UO_Not`(`~`)이 누락되어, `~0`을 상수 값(`-1`)으로 평가하지 못하고 `false`를 반환함.
-   - `CVal.isAllOnes()` 화이트리스트가 타깃 타입의 비트폭과 무관하게 무조건 `OutOfRange = false`로 면제하여, 8비트/64비트 변수에 32비트 `~0`(-1)을 대입하는 범위 초과 및 음수 변환 결함을 방치함.
+* `UnsignedMinusAssignmentCheck.cpp`가 최상위 식만 검사하여 이항 연산자 내부 중첩 `UnaryOperator`(`-diff`)를 재귀 순회하지 못함.
+* `NoOutOfRangeAssignmentCheck.cpp`에 `UO_Not`(`~`) 평가가 누락되어 `~0`을 상수로 인식하지 못하고, `CVal.isAllOnes()` 화이트리스트가 비트폭과 무관하게 무조건 면제함.
 
 ### 3. 해결책 (Resolution)
-1. **`UnsignedMinusAssignmentCheck` 재귀 수식 탐색 및 연쇄 대입 탈출 가드 구축**:
-   - `findAndReportUnsignedMinus` 재귀 탐색 함수를 도입하여 AST 수식 트리의 모든 자식 노드를 순회하고, 피연산자가 `isUnsignedLike`인 `UnaryOperator(UO_Minus)`를 전수 포착.
-   - `if (BO->isAssignmentOp()) return;` 가드를 통해 `a = b = -u` 연쇄 대입문에서의 다중 매처 중복 진단 원천 방지.
+1. **`UnsignedMinusAssignmentCheck` 재귀 탐색 구축**:
+   * `findAndReportUnsignedMinus` 재귀 탐색 함수로 AST 수식 트리를 전수 순회하여 `UnaryOperator(UO_Minus)` 포착. `if (BO->isAssignmentOp()) return;` 가드로 연쇄 대입 중복 진단 방지.
 2. **`NoOutOfRangeAssignmentCheck` UO_Not 평가 및 엄격한 비트폭 일치 가드 구축**:
-   - `evalIntWithLocals`에 `if (UO->getOpcode() == UO_Not) { Out = ~Sub; return true; }` 추가 (LLVM `APSInt::operator~` 표준 적용).
-   - 비트마스크 관용구 검사를 `CVal.isAllOnes() && (CVal.getBitWidth() == M.Width)`로 엄격화하여, 동일 비트폭 마스크(예: `uint32_t = ~0U`) 및 명시적 캐스트(`(unsigned char)~0`)는 정상 허용(0 FP)하고, 폭이 다른 축소/음수 대입은 100% 정탐으로 방출.
-
-### 4. 검증 결과 (Ground Truth)
-* **LLVM 컴파일 빌드**: `cmake --build .\build --config Release --target clang-tidy` $\rightarrow$ **Exit Code 0** 성공.
-* **이중 계쇄 감사 (Gate 1 & Gate 2)**: 독립 Read-Only 감사관 Gate 1 Plan Audit 및 Gate 2 QA Audit 2회 연속 **[PASS] 공식 승인**.
+   * `evalIntWithLocals`에 `if (UO->getOpcode() == UO_Not) { Out = ~Sub; return true; }` 추가.
+   * 비트마스크 관용구 검사를 `CVal.isAllOnes() && (CVal.getBitWidth() == M.Width)`로 엄격화하여, 동일 비트폭 마스크는 허용하고 폭이 다른 축소/음수 대입은 정탐으로 방출.
