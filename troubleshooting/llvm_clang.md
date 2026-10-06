@@ -502,3 +502,11 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 2. **`NoOutOfRangeAssignmentCheck` UO_Not 평가 및 엄격한 비트폭 일치 가드 구축**:
    * `evalIntWithLocals`에 `if (UO->getOpcode() == UO_Not) { Out = ~Sub; return true; }` 추가.
    * 비트마스크 관용구 검사를 `CVal.isAllOnes() && (CVal.getBitWidth() == M.Width)`로 엄격화하여, 동일 비트폭 마스크는 허용하고 폭이 다른 축소/음수 대입은 정탐으로 방출.
+
+
+---
+
+> [!NOTE]
+> **[정제 완료 기준선]** 2026-10-06 이전 상위 항목은 정제 완료됨. 신규 인시던트는 이 아래에 추가됩니다.
+
+---

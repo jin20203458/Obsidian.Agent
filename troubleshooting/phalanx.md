@@ -286,3 +286,11 @@ related:
    QuestPDF.Settings.ThrowOnMissingFontFamilies = false;
    ```
 2. **로컬 스냅샷 캡처**: `ExportForensicPdfAsync` 진입 즉시 `var incident = SelectedIncident;` 스냅샷을 캡처하여 비동기 작업 중 UI 참조 경합 차단.
+
+
+---
+
+> [!NOTE]
+> **[정제 완료 기준선]** 2026-10-06 이전 상위 항목은 정제 완료됨. 신규 인시던트는 이 아래에 추가됩니다.
+
+---
