@@ -1,6 +1,5 @@
-﻿---
-description: >-
-  Mundus Vivens C++ 게임 서버 코드 리뷰 및 학습 로드맵 노트. C++ 코드베이스 분석 시 참조.
+---
+description: Mundus Vivens C++ 게임 서버 코드 리뷰 및 학습 로드맵 노트.
 related:
   - ../README.md
   - ../docs/01_game_server_architecture.md

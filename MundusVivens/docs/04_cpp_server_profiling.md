@@ -1,6 +1,5 @@
-﻿---
-description: >-
-  Mundus Vivens C++ 게임 서버 Tracy Profiler 성능 분석 및 동시성 최적화 검증 보고서. C++ 서버 성능 개선 시 참조.
+---
+description: Mundus Vivens C++ 게임 서버 Tracy Profiler 성능 분석 및 동시성 최적화 검증 보고서.
 related:
   - ../README.md
   - ./01_game_server_architecture.md

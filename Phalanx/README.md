@@ -1,6 +1,5 @@
 ---
-description: >-
-  Phalanx (AI-Augmented C++ ETW & C# WPF EDR Solution) 지식베이스 메인 인덱스. Phalanx 시스템 설계 및 개발 작업 시작 시 참조.
+description: Phalanx (AI-Augmented C++ ETW & C# WPF EDR Solution) 지식베이스 메인 인덱스.
 related:
   - ../README.md
 ---

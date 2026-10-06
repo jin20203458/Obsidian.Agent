@@ -1,6 +1,5 @@
 ---
-description: >-
-  Mundus Vivens C# AI 서버 & C++ 물리 서버 트러블슈팅 런북. Mundus Vivens 프로젝트 버그/에러 발생 시 참조.
+description: Mundus Vivens C# AI 서버 & C++ 물리 서버 트러블슈팅 런북.
 related:
   - ../README.md
   - ../MundusVivens/README.md

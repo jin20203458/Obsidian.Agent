@@ -1,6 +1,5 @@
 ---
-description: >-
-  Phalanx C++ 센서 및 C# 코어 트러블슈팅 런북. Phalanx 프로젝트 버그, ETW 수집 오류 및 gRPC 장애 발생 시 참조.
+description: Phalanx C++ 센서 및 C# 코어 트러블슈팅 런북.
 related:
   - ../README.md
   - ../Phalanx/README.md

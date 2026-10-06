@@ -1,6 +1,5 @@
 ---
-description: >-
-  C++ 게임 서버 EnTT ECS 엔티티 4종 분류 및 메모리 메모. EnTT ECS 엔티티 설계 시 참조.
+description: C++ 게임 서버 EnTT ECS 엔티티 4종 분류 및 메모리 메모.
 related:
   - ../README.md
 ---

@@ -1,5 +1,5 @@
 ---
-description: Obsidian.Agent 지식베이스의 메인 인덱스 및 아키텍처/가이드라인 전체 지점. 시스템 전반의 아키텍처 탐색 시 참조.
+description: Obsidian.Agent 지식베이스의 메인 인덱스 및 아키텍처/가이드라인 전체 지점.
 related:
   - ./ai_agent_refs/Knowledge_Base_Authoring_Guidelines.md
 ---

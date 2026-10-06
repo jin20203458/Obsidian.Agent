@@ -1,6 +1,5 @@
 ---
-description: >-
-  Phalanx AI 자율 위협 헌터 에이전트의 ReAct 추론 루프, Tool Calling 생태계, Threat Graph 메모리 및 Fallback 메커니즘 설계 명세. AI 에이전트 및 조사 로직 수정 시 참조.
+description: Phalanx AI 자율 위협 헌터 에이전트의 ReAct 추론 루프, Tool Calling 생태계, Threat Graph 메모리 및 Fallback 메커니즘 설계 명세.
 related:
   - ../README.md
   - ./00_project_overview.md

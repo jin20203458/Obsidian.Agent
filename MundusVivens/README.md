@@ -1,6 +1,5 @@
 ---
-description: >-
-  Mundus Vivens (C++ Game Server & C# AI Server) 지식베이스 메인 인덱스. Mundus Vivens 개발 작업 시작 시 참조.
+description: Mundus Vivens (C++ Game Server & C# AI Server) 지식베이스 메인 인덱스.
 related:
   - ../README.md
 ---

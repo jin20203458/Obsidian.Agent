@@ -1,6 +1,5 @@
 ---
-description: >-
-  Phalanx EDR 전체 컴포넌트 실측 벤치마크 및 성능 프로파일링 통합 레지스트리. 큐 동시성, 프로세스 동결, DAG 족보 역추적, 100μs 룰 엔진 및 E2E 실측 데이터 종합 기록. EDR 컴포넌트 성능 분석, 레이턴시 벤치마크 검증 및 신규 실측 결과 기록 시 참조.
+description: Phalanx EDR 전체 컴포넌트 실측 벤치마크 및 성능 프로파일링 통합 레지스트리. 큐 동시성, 프로세스 동결, DAG 족보 역추적, 100μs 룰 엔진 및 E2E 실측 데이터 종합 기록.
 related:
   - ../README.md
   - ./01_system_architecture.md

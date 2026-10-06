@@ -1,6 +1,5 @@
-﻿---
-description: >-
-  Mundus Vivens 핵심 시스템 미래 로드맵 및 기획 노트. 서버 및 AI 기능 확장 계획 수립 시 참조.
+---
+description: Mundus Vivens 핵심 시스템 미래 로드맵 및 기획 노트.
 related:
   - ../README.md
 ---

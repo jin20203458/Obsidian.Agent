@@ -1,6 +1,5 @@
-﻿---
-description: >-
-  스몰빌(Generative Agents) 인지 아키텍처, 기억 그래프 및 자아 변형 심층 백서. AI 에이전트 기억/소문 모델 설계 시 참조.
+---
+description: 스몰빌(Generative Agents) 인지 아키텍처, 기억 그래프 및 자아 변형 심층 백서.
 related:
   - ../README.md
 ---

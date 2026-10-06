@@ -1,6 +1,5 @@
-﻿---
-description: >-
-  Mundus Vivens 프로젝트 개요 및 중세 판타지 마을 시뮬레이션 전체 콘셉트. 멀티 에이전트 월드 시스템 이해 시 참조.
+---
+description: Mundus Vivens 프로젝트 개요 및 중세 판타지 마을 시뮬레이션 전체 콘셉트.
 related:
   - ../README.md
 ---

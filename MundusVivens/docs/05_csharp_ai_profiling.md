@@ -1,6 +1,5 @@
-﻿---
-description: >-
-  Mundus Vivens C# AI 서버 프로파일링 및 Smallville 논문 정량 비교 보고서. AI 서버 비용/속도 최적화 시 참조.
+---
+description: Mundus Vivens C# AI 서버 프로파일링 및 Smallville 논문 정량 비교 보고서.
 related:
   - ../README.md
   - ./02_agent_design.md

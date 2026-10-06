@@ -1,6 +1,5 @@
-﻿---
-description: >-
-  GRC C#/.NET WPF 클라이언트 상세 아키텍처 명세 및 UI/비동기 패턴 구성도. GRC 클라이언트 개발/수정 시 참조.
+---
+description: GRC C#/.NET WPF 클라이언트 상세 아키텍처 명세 및 UI/비동기 패턴 구성도.
 related:
   - ../README.md
 ---

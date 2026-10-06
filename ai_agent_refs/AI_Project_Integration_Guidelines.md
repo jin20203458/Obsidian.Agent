@@ -1,6 +1,5 @@
 ---
-description: >-
-  신규 개발 저장소와 Obsidian.Agent 지식베이스 간의 연동 및 AGENTS.md 행동 강령 구축 지침. 프로젝트 연동 시 참조.
+description: 신규 개발 저장소와 Obsidian.Agent 지식베이스 간의 연동 및 AGENTS.md 행동 강령 구축 지침.
 related:
   - ../README.md
   - ./Knowledge_Base_Authoring_Guidelines.md

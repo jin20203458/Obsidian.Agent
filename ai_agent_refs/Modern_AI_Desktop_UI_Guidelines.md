@@ -1,6 +1,5 @@
 ---
-description: >-
-  WPF 기반 차세대 데스크톱 AI 및 보안 관제(SOC) UI/UX 설계 지침서. 다크 테마 디자인 토큰, 캡슐형 컨트롤, 윈도우 타이틀바 일체화 방법론, 노드 그래프 및 실시간 AI 사고 스트리밍 XAML 구현 시 참조.
+description: WPF 기반 차세대 데스크톱 AI 및 보안 관제(SOC) UI/UX 설계 지침서. 다크 테마 디자인 토큰, 캡슐형 컨트롤, 윈도우 타이틀바 일체화 방법론.
 related:
   - ../README.md
   - ./WPF_Architecture_Guidelines.md

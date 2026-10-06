@@ -1,6 +1,5 @@
 ---
-description: >-
-  AI 에이전트 트러블슈팅 런북 압축, 의미론적 증류 및 가지치기 표준 가이드라인. 트러블슈팅 런북 최적화 및 노이즈 정제 시 참조.
+description: AI 에이전트 트러블슈팅 런북 압축, 의미론적 증류 및 가지치기 표준 가이드라인.
 related:
   - ../README.md
   - ./Knowledge_Base_Authoring_Guidelines.md

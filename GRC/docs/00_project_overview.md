@@ -1,5 +1,5 @@
-﻿---
-description: GRC 프로젝트 개요 및 C#/.NET 네이티브 데스크톱 클라이언트 시스템 전반 설계서. GRC 전체 구조 파악 시 참조.
+---
+description: GRC 프로젝트 개요 및 C#/.NET 네이티브 데스크톱 클라이언트 시스템 전반 설계서.
 related:
   - ../README.md
 ---

@@ -1,4 +1,4 @@
-﻿---
+---
 description: 비개발자 및 초보자를 위한 GRC 다운로드, 포터블 실행, API 키 설정 및 SmartScreen 안내 가이드.
 related:
   - 00_project_overview.md
