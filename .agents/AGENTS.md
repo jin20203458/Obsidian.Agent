@@ -3,7 +3,7 @@ Focus: Single Source of Truth knowledge architecture, minimal context overhead, 
 </project_philosophy>
 
 <engineering_rules>
-- **Single Source of Truth**: Every operational policy, workflow, and engineering standard lives in exactly one canonical document. Reference, never duplicate. Trade-off (Single Source of Truth > Local Duplication): Cross-link to canonical docs instead of copying content.
+- **Single Source of Truth**: Every operational policy, workflow, and engineering standard lives in exactly one canonical document. Reference, never duplicate. Cross-link to canonical docs instead of copying content.
 - **Style**: Clean, technical markdown. Zero decorative emojis or conversational filler in documents.
 - **Formatting**: Maintain strict consistency with existing document style.
 - **Frontmatter**: Always maintain and update YAML frontmatter per `ai_agent_refs/Knowledge_Base_Authoring_Guidelines.md`.
