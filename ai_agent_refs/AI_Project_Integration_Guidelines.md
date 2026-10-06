@@ -18,37 +18,40 @@ related:
 ### 1단계. 개발 저장소 내 에이전트 행동 강령 (`.agents/AGENTS.md`) 구성
 연동할 개발 프로젝트 저장소 루트에 `.agents/` 디렉토리를 생성하고 `AGENTS.md` 파일을 작성합니다.
 * **작성 규칙**: 시스템 프롬프트의 지시 준수율을 극대화하고 오염을 방지하기 위해 **[AI_Prompt_Engineering_Guidelines.md](./AI_Prompt_Engineering_Guidelines.md)의 핵심 원칙(XML 태그 경계 격리, Junk 토큰 배제, 긍정 프레이밍)**을 준수하며, 조건부 트리거(JIT)를 활용하여 문맥을 고밀도로 압축 작성합니다.
-* **표준 구조 및 필수 태그**:
-  1. **`<assigned_role>`**: 해당 저장소 내에서 에이전트가 위임받을 일시적 전문 역할 (예: Senior C++ Engine Developer 등)
-  2. **`<project_philosophy>`**: 에이전트가 코딩 중 엄수해야 할 설계 방향 및 핵심 지향점 (예: Lock-free 지향 등)
-  3. **`<engineering_rules>`**: 신규 파일 생성이나 레거시 모방 방지를 위한 기술적 제약조건 및 안티패턴 방지 규칙
-  4. **`<critical_rules>`**: 빌드/실행 명령어 및 자격증명 노출 방지 등의 환경적/절대적 제약조건
-  5. **`<context_triggers>`**: 토큰 절약을 위해 특정 조건(아키텍처 수정, 버그 발생 등) 만족 시에만 지식베이스를 로드하도록 하는 조건부 트리거
-  6. **`<post_action>`**: 작업 완료 후 수행할 옵시디언 트러블슈팅 기록 및 아키텍처 문서 동기화(Sync) 규칙
+* **표준 구조 및 5대 필수 태그**:
+  1. **`<project_philosophy>`**: 프로젝트 핵심 지향점 및 아키텍처 설계 원칙 (설계 가치 충돌 시 적용할 우선순위 포함)
+  2. **`<engineering_rules>`**: 언어별 코딩 규약, 메모리/동시성 모델, 기술적 제약조건 및 안티패턴 방지 규칙
+  3. **`<critical_rules>`**: 빌드/실행 명령어, Fast QA 테스트 필터, 실행 권한 및 자격증명 격리 제약
+  4. **`<context_triggers>`**: 특정 조건 만족 시에만 지식베이스를 로드하도록 하는 조건부 점진적 탐색(JIT) 트리거
+  5. **`<post_action>`**: 작업 완료 후 수행할 트러블슈팅 로깅 및 사양서(SSOT) 동기화 규칙
 
-* **AGENTS.md 작성 예시**:
+* **AGENTS.md 표준 템플릿 예시**:
   ```markdown
-  <assigned_role>Senior C++ Physics & ECS Engine Developer</assigned_role>
-  <project_philosophy>Focus: 20Hz lock-free simulation main loop, EnTT ECS.</project_philosophy>
+  <project_philosophy>
+  Focus: [Core architectural mission and primary system design goals]
+  Priorities: [Trade-off ordering: e.g., Correctness & Security > Code Simplicity]
+  </project_philosophy>
 
   <engineering_rules>
-  - Memory: Prefer smart pointers. Use raw pointers only when technically required (non-owning observers).
-  - Formatting: Strictly follow the target file's style.
+  - Architecture: [Core design patterns, modular boundaries, and dependency rules]
+  - Concurrency/Resource: [Concurrency model, resource lifecycle (RAII/Dispose), anti-pattern prevention]
+  - Formatting: Strictly follow the target file's style and indentation.
   </engineering_rules>
 
   <critical_rules>
-  - Build: `powershell -ExecutionPolicy Bypass -File .\build_local.ps1` (NO raw CMake)
+  - Build: `<standard_build_command>`
+  - Test: `<unit_test_command>` (Enforce fast QA filter)
   - Paths: Use relative paths (`../Obsidian.Agent/`, etc.)
   </critical_rules>
 
   <context_triggers>
-  - **Knowledge Base**: If modifying architecture, read [01_architecture.md](../MundusVivens/docs/01_architecture.md).
-  - **Troubleshooting**: If debugging, read [mundus_vivens.md](../Obsidian.Agent/troubleshooting/mundus_vivens.md) before coding.
+  - **Architecture**: If modifying core architecture or IPC, read `../Obsidian.Agent/<Project>/docs/01_architecture.md`.
+  - **Troubleshooting**: If debugging or fixing errors, read `../Obsidian.Agent/troubleshooting/<project>.md` before coding.
   </context_triggers>
 
   <post_action>
-  - **Log**: Document resolved bugs in [mundus_vivens.md](../Obsidian.Agent/troubleshooting/mundus_vivens.md).
-  - **Sync**: Update specs in `../MundusVivens/docs/` if architecture changes.
+  - **Log**: Document resolved bugs in `../Obsidian.Agent/troubleshooting/<project>.md`.
+  - **Sync**: Update specifications in `../Obsidian.Agent/<Project>/docs/` if architecture changes.
   </post_action>
   ```
 
