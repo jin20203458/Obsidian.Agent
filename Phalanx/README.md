@@ -15,5 +15,3 @@ related:
 - [02_ai_agent_investigation_design.md](./docs/02_ai_agent_investigation_design.md): ReAct 자율 위협 헌터 에이전트, 7대 OS 심층 포렌식 도구 및 포렌식 아카이브 설계
 - [03_implementation_roadmap.md](./docs/03_implementation_roadmap.md): 단계별(Phase) 기능 구현 마일스톤, 완료 정의(DoD), 통합 기술 인수인계 및 활성 백로그 사양서 (통합 SSOT)
 - [04_performance_benchmarks.md](./docs/04_performance_benchmarks.md): EDR 시스템 전체 실측 벤치마크 및 성능 프로파일링 통합 레지스트리 (큐 동시성, 프로세스 동결, 족보 역추적, 100μs 룰 엔진, 향후 E2E 공격 누수 실측)
-- [05_csharp_architecture_modernization_plan.md](./docs/05_csharp_architecture_modernization_plan.md): C# 관제 솔루션의 구조적 혁신(모놀리스 분리, CQRS 캡슐화, 레거시 호환 부채 청산) 및 테스트 스위트 최신화 마스터 플랜
-
