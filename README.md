@@ -20,6 +20,7 @@ related:
   - [AI_Agent_Architecture_Paradigms_Guidelines.md](ai_agent_refs/AI_Agent_Architecture_Paradigms_Guidelines.md): 글로벌 빅테크 및 최신 연구에 기반한 AI 에이전트 아키텍처 및 멀티 에이전트 협동(Teaming) 패러다임 종합 가이드
   - [Agent_Collaboration_Workflow_Guidelines.md](ai_agent_refs/Agent_Collaboration_Workflow_Guidelines.md): 2025~2026 최신 Agentic SE 연구 기반 일상 개발용 에이전트 협동 및 이중 계쇄(Dual-Gated) 오케스트레이션 표준 지침
   - [Modern_AI_Desktop_UI_Guidelines.md](ai_agent_refs/Modern_AI_Desktop_UI_Guidelines.md): 2025~2026 프로 도구(Pro-Tool) 및 관제(SOC) 대시보드와 AI 추론 스트리밍 UI 디자인 시스템 표준 지침
+  - [Troubleshooting_Pruning_Guidelines.md](ai_agent_refs/Troubleshooting_Pruning_Guidelines.md): AI 에이전트 트러블슈팅 런북 압축, 의미론적 증류 및 온디맨드 가지치기 표준 지침
 
 
 - **LLVM/**: LLVM/Clang 커스텀 Tidy 체커 및 Static Analyzer 개발 아키텍처와 참고 문서를 다루는 기술 노트 폴더 (세부 문서 목록은 해당 디렉토리 참조)
@@ -37,6 +38,7 @@ related:
 - **troubleshooting/**: 중앙 집중형 트러블슈팅 및 런북 보관 폴더
   - [phalanx.md](troubleshooting/phalanx.md): Phalanx C++ 센서 & C# 코어 장애 조치 로그
   - [llvm_clang.md](troubleshooting/llvm_clang.md): LLVM/Clang 커스텀 체커 및 Static Analyzer 장애 조치 로그
+  - [arqa_static.md](troubleshooting/arqa_static.md): ARQA 정적 분석 엔진 & Clang-Tidy 커스텀 체커 장애 조치 로그
   - [mundus_vivens.md](troubleshooting/mundus_vivens.md): C# AI Server & C++ Game Server 장애 조치 로그
   - [unity_client.md](troubleshooting/unity_client.md): 유니티 엔진 및 클라이언트 장애 조치 로그
 

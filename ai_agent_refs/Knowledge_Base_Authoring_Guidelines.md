@@ -17,14 +17,13 @@ related:
   * [Bad] `잘못된 예시: 기타 메모/엔터티 종류.md`
   * [Good] `올바른 예시: memo/entity_types.md`
 
-## 2. 필수 YAML Frontmatter (AI Agent Routing Standard)
-모든 마크다운 파일의 최상단에는 반드시 **에이전트 라우팅 및 지식 탐색(Progressive Disclosure)에 필요한 최소 메타데이터**인 `description`과 `related` 두 가지 속성만을 유지합니다. 이는 불필요한 토큰 소모를 방지하고 H1 제목 중복 버그(DRY 위반)를 근본 차단합니다.
+## 2. 필수 YAML Frontmatter (AI Metadata Standard)
+모든 마크다운 파일의 최상단에는 반드시 **에이전트 지식 식별 및 탐색(Progressive Disclosure)에 필요한 최소 메타데이터**인 `description`과 `related` 두 가지 속성만을 유지합니다. 이는 불필요한 토큰 소모를 방지하고 H1 제목 중복 버그(DRY 위반)를 근본 차단합니다.
 
 ```yaml
 ---
 description: >-
-  [문서 핵심 요약 1줄].
-  [에이전트 트리거 조건: 예 - C++ 물리 엔진 수정이나 EnTT ECS 관련 작업 시 활성화]
+  [문서가 다루는 핵심 주제 및 주요 기술 키워드를 1~2줄로 명확히 요약].
 related:
   - ../README.md
   - ./01_game_server_architecture.md
@@ -32,7 +31,7 @@ related:
 ```
 
 ### 주요 속성 정의
-* **`description` (필수)**: 문서의 핵심 요약과 함께 **"에이전트가 어떤 상황/요청에서 이 문서를 읽어야 하는지(Trigger Condition)"**를 명시합니다. 에이전트가 엉뚱한 문서를 여는 환각(Hallucination)을 차단하는 핵심 라우팅 속성입니다.
+* **`description` (필수)**: 문서가 다루는 핵심 주제와 주요 기술 키워드를 1~2줄로 명확히 기술합니다. 에이전트의 문서 식별 및 RAG 시맨틱 검색 정확도를 보장하는 핵심 메타데이터입니다. 
 * **`related` (필수)**: 에이전트가 무분별한 전체 검색 대신 상대 경로 링킹을 통해 필요한 문서만 단계적으로 탐색(Progressive Disclosure)할 수 있도록 연관 문서의 상대 경로를 적어줍니다.
 
 ## 3. 링크 및 경로 작성 규칙 (Cross-Referencing)
