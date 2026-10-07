@@ -10,6 +10,3 @@ related:
 ## `docs/` (공식 아키텍처 명세)
 프로젝트의 뼈대를 이루는 공식 엔지니어링 설계 및 시스템 명세 문서입니다.
 - [01_static_analyzer_architecture.md](./docs/01_static_analyzer_architecture.md): LLVM Static Analyzer & Tidy 아키텍처 및 커스텀 체커 설계 명세
-
-## `troubleshooting/` (관련 런북)
-- [troubleshooting/llvm_clang.md](../troubleshooting/llvm_clang.md): LLVM/Clang 커스텀 체커 및 Static Analyzer 장애 조치 로그
