@@ -64,7 +64,7 @@ related:
 1. **프로젝트 폴더 및 인덱스 생성**:
    * `Obsidian.Agent/<Project_Name>/` 디렉토리를 생성합니다. (예: `LLVM/`, `MundusVivens/`)
    * 폴더 최상단에 `README.md`를 작성하여 하위 문서 지도를 제공합니다.
-   * 폴더 내에 시스템의 핵심 설계 사상, 동작 원리, 모듈 간 구조(SSOT)를 정의하는 기술 명세 문서를 최소 1개 이상 생성합니다. (예: `StaticAnalyzer_Architecture.md`)
+   * 폴더 내 `docs/` 하위에 시스템의 핵심 설계 사상, 동작 원리, 모듈 간 구조(SSOT)를 정의하는 기술 명세 문서를 최소 1개 이상 생성합니다. (예: `docs/01_static_analyzer_architecture.md`, `docs/01_system_architecture.md`)
 2. **트러블슈팅 로그 생성**:
    * `troubleshooting/<project_name>.md` 경로에 전용 로그 문서를 생성합니다.
    * 작성 서식 및 구조는 [Agent_Runtime_Operations_Protocol.md](./Agent_Runtime_Operations_Protocol.md) 제6.1조의 표준 템플릿(`[Resolved]` / `[Unresolved]`)을 엄격히 준수합니다.

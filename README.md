@@ -23,7 +23,8 @@ related:
   - [Troubleshooting_Pruning_Guidelines.md](ai_agent_refs/Troubleshooting_Pruning_Guidelines.md): AI 에이전트 트러블슈팅 런북 압축, 의미론적 증류 및 온디맨드 가지치기 표준 지침
 
 
-- **LLVM/**: LLVM/Clang 커스텀 Tidy 체커 및 Static Analyzer 개발 아키텍처와 참고 문서를 다루는 기술 노트 폴더 (세부 문서 목록은 해당 디렉토리 참조)
+- **LLVM/**: LLVM/Clang 커스텀 Tidy 체커 및 Static Analyzer 개발 아키텍처와 참고 문서를 다루는 기술 노트 폴더
+  - [LLVM Index](./LLVM/README.md): LLVM/Clang 커스텀 체커 및 정적 분석기 프로젝트 전용 문서 인덱스
 
 - **MundusVivens/**: Mundus Vivens 프로젝트의 아키텍처, 기획 의도, 고도화 과제를 다루는 기술 노트 폴더
   - [Mundus Vivens Index](./MundusVivens/README.md): Mundus Vivens 프로젝트 전용 문서 인덱스

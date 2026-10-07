@@ -9,12 +9,12 @@ Focus: Human-agent shared SSOT knowledge architecture, minimal context overhead,
 </engineering_rules>
 
 <critical_rules>
-- **Paths & Integrity**: Use relative paths from repo root (`ai_agent_refs/`, `troubleshooting/`) and sibling workspaces (`../../<Repo>`). Verify all links resolve to physical files.
+- **Paths & Integrity**: From repo root, use relative paths (`ai_agent_refs/`, `troubleshooting/`, `../<Repo>`). Inside `<Project>/docs/`, sibling repos are `../../../<Repo>`. Verify all links resolve to physical files.
 </critical_rules>
 
 <context_triggers>
-- **Document Authoring & Structure**: `ai_agent_refs/Knowledge_Base_Authoring_Guidelines.md`
-- **New Project Onboarding**: `ai_agent_refs/AI_Project_Integration_Guidelines.md`
+- **Document Authoring**: When creating or structuring knowledge base documents, read `ai_agent_refs/Knowledge_Base_Authoring_Guidelines.md` before writing.
+- **Project Onboarding**: When integrating a new repository or external project, read `ai_agent_refs/AI_Project_Integration_Guidelines.md` before configuration.
 </context_triggers>
 
 <post_action>

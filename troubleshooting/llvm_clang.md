@@ -2,7 +2,8 @@
 description: LLVM/Clang 커스텀 Tidy 체커 및 Static Analyzer 개발 트러블슈팅 런북.
 related:
   - ../README.md
-  - ../LLVM/StaticAnalyzer_Architecture.md
+  - ../LLVM/README.md
+  - ../LLVM/docs/01_static_analyzer_architecture.md
 ---
 # LLVM/Clang Troubleshooting
 
