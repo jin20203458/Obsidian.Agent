@@ -4,8 +4,8 @@ Focus: Human-agent shared SSOT knowledge architecture, minimal context overhead,
 
 <engineering_rules>
 - **SSOT**: Every policy, workflow, and standard lives in exactly one canonical document. Reference via cross-links; never duplicate.
-- **Style & Frontmatter**: Technical markdown; zero decorative emojis. Always maintain YAML frontmatter (`description`, `related`).
-- **Links & Navigation**: Use explicit relative Markdown links (`.md`) exclusively; avoid wikilinks (`[[...]]`). Traverse projects via `README.md` and frontmatter links.
+- **Paths & Formatting**: ASCII snake_case paths only (no spaces/non-ASCII). Technical markdown; zero decorative emojis.
+- **Links & Navigation**: Use explicit relative Markdown links (`.md`) exclusively; avoid wikilinks (`[[...]]`). Traverse projects sequentially via `README.md` and frontmatter `related` links.
 </engineering_rules>
 
 <critical_rules>
@@ -13,10 +13,8 @@ Focus: Human-agent shared SSOT knowledge architecture, minimal context overhead,
 </critical_rules>
 
 <context_triggers>
-- **Runtime Operations & QA**: `ai_agent_refs/Agent_Runtime_Operations_Protocol.md`
-- **Collaboration & Agent Roles**: `ai_agent_refs/Agent_Collaboration_Workflow_Guidelines.md`
-- **Repo Architecture & Integration**: `ai_agent_refs/AI_Project_Integration_Guidelines.md`
-- **Specs & Architecture**: Reference target workspace central spec directory without duplication.
+- **Document Authoring & Structure**: `ai_agent_refs/Knowledge_Base_Authoring_Guidelines.md`
+- **New Project Onboarding**: `ai_agent_refs/AI_Project_Integration_Guidelines.md`
 </context_triggers>
 
 <post_action>
