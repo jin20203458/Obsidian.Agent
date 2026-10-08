@@ -19,8 +19,8 @@ Priorities: Ground Truth & Factual Integrity > SSOT Canonical Structure > Progre
 </critical_rules>
 
 <context_triggers>
-- **Document Authoring**: When creating or structuring knowledge base documents, read `ai_agent_refs/Knowledge_Base_Authoring_Guidelines.md` before writing.
-- **Project Onboarding**: When integrating a new repository or external project, read `ai_agent_refs/AI_Project_Integration_Guidelines.md` before configuration.
+- **Document Authoring**: Structure, YAML frontmatter, naming, formatting -> `ai_agent_refs/Knowledge_Base_Authoring_Guidelines.md`
+- **Project Onboarding**: External repo integration, architecture specs -> `ai_agent_refs/AI_Project_Integration_Guidelines.md`
 </context_triggers>
 
 <post_action>
