@@ -3,6 +3,7 @@ description: Obsidian 지식베이스 작성 규격 및 에이전트 라우팅 F
 related:
   - ../README.md
   - ../.agents/AGENTS.md
+  - ./Mermaid_Diagram_Guidelines.md
 ---
 # Knowledge Base Authoring Guidelines
 
@@ -37,6 +38,7 @@ related:
 * **표준 마크다운 상대 경로 사용:** 옵시디언 위키링크(`[[문서명]]`) 대신, 에이전트와 GitHub 시스템이 모두 정확히 인식할 수 있는 표준 상대 마크다운 링크(`.md`) 구문만을 사용합니다.
   * [Bad] `[[entity_types]]` (옵시디언 위키링크 사용 금지)
   * [Good] `[Entity Types](./memo/entity_types.md)` (표준 상대 경로 마크다운 링크)
+* **다이어그램 작성 시 참조:** 지식베이스 내 아키텍처 및 상태 머신 등 다이어그램(Mermaid) 작성 시 [Mermaid Diagram Guidelines](./Mermaid_Diagram_Guidelines.md)를 단일 진실 공급원(SSOT)으로 직접 참조합니다.
 
 ## 4. 디렉토리 인덱싱 (Indexing)
 * 새로운 주요 프로젝트나 대형 폴더를 생성할 경우, 해당 폴더 최상단에 반드시 `README.md`를 작성하여 하위 문서들의 지도를 제공해야 합니다. 에이전트는 특정 프로젝트 진입 시 이 인덱스를 가장 먼저 읽도록 설계되었습니다.

@@ -2,6 +2,7 @@
 description: 지식베이스 내 Mermaid 다이어그램 작성 표준 및 문법 가이드라인.
 related:
   - ../README.md
+  - ./Knowledge_Base_Authoring_Guidelines.md
 ---
 # Mermaid Diagram Guidelines
 
