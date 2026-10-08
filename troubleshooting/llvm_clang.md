@@ -453,7 +453,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-21: [Certified] path-sensitive-core.UndefinedBinaryOperatorResult 인라인 복합 에러 반환 제약 소실에 따른 가상 경로 오탐 규명 및 구조적 한계 공인
+## 2026-09-21: [Accepted] path-sensitive-core.UndefinedBinaryOperatorResult 인라인 복합 에러 반환 제약 소실에 따른 가상 경로 오탐 규명 및 구조적 한계 공인
 
 ### 1. 현상 (Symptom)
 * `buf[0] >> (8 - siglen * 8 + msb)` 구문에서 "연산자의 왼쪽 피연산자가 쓰레기 값입니다" 오탐 검출.
@@ -469,7 +469,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 
 ---
 
-## 2026-09-21: [Certified] path-sensitive-core.CallAndMessage 심층 분석 모드(방어적 검사 억제 해제) 및 인라인 널 분기에 따른 가상 경로 오탐 규명 및 구조적 한계 공인
+## 2026-09-21: [Accepted] path-sensitive-core.CallAndMessage 심층 분석 모드(방어적 검사 억제 해제) 및 인라인 널 분기에 따른 가상 경로 오탐 규명 및 구조적 한계 공인
 
 ### 1. 현상 (Symptom)
 * `f_dbg(p_dbg, level, file, line, str)` 호출 시 "호출된 함수 포인터가 널입니다" 오탐 검출.

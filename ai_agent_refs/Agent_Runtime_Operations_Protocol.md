@@ -67,7 +67,7 @@ flowchart TD
 ### 4.1 트러블슈팅 로그 작성 표준
 [Knowledge_Base_Authoring_Guidelines.md](./Knowledge_Base_Authoring_Guidelines.md) 및 [AI_Project_Integration_Guidelines.md](./AI_Project_Integration_Guidelines.md)에 따라, 해당 프로젝트의 트러블슈팅 문서(`troubleshooting/<project_name>.md`)에 에러 상황 또는 해결 내역을 기록합니다.
 
-모든 트러블슈팅 문서는 탐색 일관성과 목차(TOC) 앵커 링크 보전을 위해 **H2(이슈 단위) + H3(속성 단위)**의 단일 계층 구조를 엄격히 준수합니다. 단일 일자에 복수의 이슈가 발생하더라도 H3로 중첩하지 않고 개별 H2 엔트리로 분리합니다. 단, 하나의 근본 원인(Root Cause)에서 파생된 복수 증상이 동일 세션에서 함께 해결된 경우(인과 체인)에 한해 단일 H2로 기록할 수 있습니다(판별 기준: `Root Cause` 섹션을 하나의 일관된 서술로 작성할 수 있는가).
+모든 트러블슈팅 문서는 탐색 일관성과 목차(TOC) 앵커 링크 보전을 위해 **H2(이슈 단위) + H3(속성 단위)**의 단일 계층 구조를 엄격히 준수합니다. 각 H2 엔트리는 상황에 따라 3대 상태 태그(`[Resolved]`, `[Accepted]`, `[Unresolved]`) 중 하나를 반드시 H2 제목에 포함(`## YYYY-MM-DD: [태그] 이슈명`)해야 합니다. 단일 일자에 복수의 이슈가 발생하더라도 H3로 중첩하지 않고 개별 H2 엔트리로 분리합니다. 단, 하나의 근본 원인(Root Cause)에서 파생된 복수 증상이 동일 세션에서 함께 해결된 경우(인과 체인)에 한해 단일 H2로 기록할 수 있습니다(판별 기준: `Root Cause` 섹션을 하나의 일관된 서술로 작성할 수 있는가).
 
 #### [Resolved] 표준 트러블슈팅 마크다운 템플릿 (해결 완료 런북)
 ```markdown
@@ -81,6 +81,23 @@ flowchart TD
 
 ### 3. 해결책 (Resolution)
 - 적용된 코드 변경점, 설정 수정 및 검증 결과 (Exit Code 0 Ground Truth 확인)
+```
+
+#### [Accepted] 표준 트러블슈팅 마크다운 템플릿 (구조적 한계 및 공식 정책 수용 런북)
+외부 서드파티 엔진(LLVM Clang, OS 커널, 런타임 등)의 구조적 한계로 판명되어, 무리한 편법 수정(Cheating)을 배제하고 공식 한계로 공인하여 회피/수용 방침을 확정한 경우 사용합니다.
+
+```markdown
+## YYYY-MM-DD: [Accepted] <한계 규명 및 공식 수용 이슈 요약>
+
+### 1. 현상 (Symptom)
+- 외부 도구/엔진에서 발생한 오탐(False Positive), 크래시 또는 비정상 동작 요약
+
+### 2. 원인 (Root Cause)
+- 외부 서드파티 엔진의 심볼릭 제약 소실, 커널 설계 결함 등 아키텍처/메커니즘 차원의 근본 한계 분석
+
+### 3. 아키텍처 결정 (Architectural Decision)
+- (1) **엔진 중립성 수호 (Zero Cheating)**: 특정 케이스 통과만을 위한 하드코딩/편법 패치를 금지하는 근거
+- (2) **공인 한계 및 처리 방침 (Accepted Policy)**: 오탐 억제 필터, 사양서 등재, 회피 가이드 등 확정된 공식 방침
 ```
 
 #### [Unresolved] 표준 트러블슈팅 마크다운 템플릿 (서킷 브레이커 중단 및 인수인계)
