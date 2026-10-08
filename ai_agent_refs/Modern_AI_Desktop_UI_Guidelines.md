@@ -3,13 +3,12 @@ description: WPF 기반 차세대 데스크톱 AI 및 엔터프라이즈 도구 
 related:
   - ../README.md
   - ./WPF_Architecture_Guidelines.md
-  - ../Phalanx/docs/01_system_architecture.md
 ---
 # Modern AI Desktop UI Guidelines
 
 본 문서는 고성능 데스크톱 환경(WPF/.NET 8.0 이상)에서 **엔터프라이즈 프로 도구(Enterprise Pro-Tool)**와 **추론형 AI 에이전트의 실시간 서사(Agentic Narrative)**를 결합할 때 준수해야 하는 공식 UI/UX 디자인 시스템 및 XAML 구현 지침서입니다.
 
-보안 관제 엔진(Phalanx EDR), 대규모 분석 워크벤치(ARQA), 멀티모달 대화형 AI 도구(GRC)에서 검증된 인터페이스 설계 패턴과 최신 Windows 11 Fluent 및 다크 테마 트렌드를 종합하여 완전한 프로덕션 표준을 정의합니다. 본 문서는 초기 프로젝트 구축 및 인터페이스 설계 시 한 번에 완결된 품질을 뽑아낼 수 있도록 모든 핵심 스니펫과 아키텍처를 생략 없이 기술합니다.
+실시간 보안 관제, 대규모 분석 워크벤치, 대화형 AI 도구 등 고성능 엔터프라이즈 환경에서 실증 검증된 인터페이스 설계 패턴과 최신 Windows 11 Fluent 및 다크 테마 트렌드를 종합하여 완전한 프로덕션 표준을 정의합니다. 본 문서는 초기 프로젝트 구축 및 인터페이스 설계 시 한 번에 완결된 품질을 뽑아낼 수 있도록 모든 핵심 스니펫과 아키텍처를 생략 없이 기술합니다.
 
 ---
 
@@ -22,7 +21,7 @@ related:
 
 ### 2대 핵심 상호작용 패러다임
 
-| 구분 | 패러다임 A: 대화형 코파일럿 워크벤치 (GRC/ARQA 패턴) | 패러다임 B: 자율형 에이전트 관제 루프 (Phalanx 패턴) |
+| 구분 | 패러다임 A: 대화형 코파일럿 워크벤치 | 패러다임 B: 자율형 에이전트 관제 루프 |
 | :--- | :--- | :--- |
 | **주요 목적** | 다회차 질의응답, 문서/코드 생성, 분석 보조 | 자율적 이상 탐지, 포렌식 조사 연쇄 호출, 프로세스 능동 제어 |
 | **상호작용 주체** | 인간 중심 (Human-in-the-Loop 요청에 AI가 응답) | 에이전트 중심 (에이전트가 자율 조사 후 인간에게 승인 요청) |
@@ -140,57 +139,86 @@ related:
 
 ### 패널 너비 상태 영속화 패턴 (Pane Width State Persistence)
 
-`GridSplitter`를 사용자가 조절하더라도 앱을 다시 실행하거나 화면을 전환할 때 초기값(320px, 380px)으로 리셋되면 심각한 UX 피로를 유발합니다. 상용 프로 데스크톱 도구(PowerToys, ScreenToGif, Fork)와 동일하게 **사용자가 조정한 각 패널 너비를 ViewModel 또는 로컬 설정에 TwoWay로 바인딩하여 영속화**합니다.
+`GridSplitter`를 사용자가 조절하더라도 앱을 다시 실행하거나 화면을 전환할 때 초기값(320px, 380px)으로 리셋되면 심각한 UX 피로를 유발합니다. 
 
+> [!CAUTION]
+> **[WPF 런타임 함정: `ColumnDefinition.Width` TwoWay 바인딩 파괴]**  
+> XAML에서 `<ColumnDefinition Width="{Binding LeftPaneWidth, Mode=TwoWay}" />`로 선언하는 것은 동작하지 않는 안티패턴입니다. WPF에서 사용자가 `GridSplitter`를 마우스로 드래그하면 내부적으로 `ColumnDefinition.Width = new GridLength(...)`로 **로컬 값(Local Value)을 직접 할당**합니다. WPF 의존성 속성 우선순위 원칙상 로컬 값이 셋팅되면 기존 `BindingExpression`이 즉시 덮어씌워져 영구 파괴(Broken)되므로, 드래그 후 바인딩이 완전히 끊어집니다.
+
+따라서 상용 엔터프라이즈 도구(PowerToys, ScreenToGif, Fork)와 동일하게 **`GridSplitter.DragCompleted` 이벤트와 View `Loaded` 이벤트를 통해 안전하게 너비를 저장/복원하는 표준 패턴**을 사용합니다.
+
+#### XAML 구현 (`Views/WorkbenchView.xaml`)
 ```xml
-<Grid.ColumnDefinitions>
-    <!-- Pane 1: 좌측 텔레메트리 (너비 영속화 바인딩) -->
-    <ColumnDefinition Width="{Binding LeftPaneWidth, Mode=TwoWay}" MinWidth="240" />
+<Grid Margin="12" Loaded="OnViewLoaded">
+    <Grid.ColumnDefinitions>
+        <!-- Pane 1: 좌측 텔레메트리 (이름 지정) -->
+        <ColumnDefinition x:Name="LeftPaneColumn" Width="320" MinWidth="240" />
+        <!-- 스플리터 1 (DragCompleted 이벤트 연결) -->
+        <ColumnDefinition Width="6" />
+        <!-- Pane 2: 중앙 주 작업 캔버스 (가변 폭) -->
+        <ColumnDefinition Width="*" MinWidth="360" />
+        <!-- 스플리터 2 (DragCompleted 이벤트 연결) -->
+        <ColumnDefinition Width="6" />
+        <!-- Pane 3: 우측 AI 사고 피드 (이름 지정) -->
+        <ColumnDefinition x:Name="RightPaneColumn" Width="380" MinWidth="300" />
+    </Grid.ColumnDefinitions>
+
     <!-- 스플리터 1 -->
-    <ColumnDefinition Width="6" />
-    <!-- Pane 2: 중앙 주 작업 캔버스 (가변 폭) -->
-    <ColumnDefinition Width="*" MinWidth="360" />
+    <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center"
+                  Background="Transparent" Cursor="SizeWE"
+                  DragCompleted="OnSplitterDragCompleted" />
+
     <!-- 스플리터 2 -->
-    <ColumnDefinition Width="6" />
-    <!-- Pane 3: 우측 AI 사고 피드 (너비 영속화 바인딩) -->
-    <ColumnDefinition Width="{Binding RightPaneWidth, Mode=TwoWay}" MinWidth="300" />
-</Grid.ColumnDefinitions>
+    <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Center"
+                  Background="Transparent" Cursor="SizeWE"
+                  DragCompleted="OnSplitterDragCompleted" />
+</Grid>
 ```
 
+#### View 코드-비하인드 (`Views/WorkbenchView.xaml.cs`)
 ```csharp
-// ViewModel에서의 GridLength 영속화 프로퍼티
+private void OnViewLoaded(object sender, RoutedEventArgs e)
+{
+    // 화면 진입 시 영속화된 설정값으로 너비 복원
+    if (DataContext is WorkbenchViewModel vm)
+    {
+        LeftPaneColumn.Width = new GridLength(vm.LeftPaneWidth);
+        RightPaneColumn.Width = new GridLength(vm.RightPaneWidth);
+    }
+}
+
+private void OnSplitterDragCompleted(object sender, DragCompletedEventArgs e)
+{
+    // 사용자가 드래그를 완료한 시점에만 ViewModel로 실제 픽셀 너비 안전 저장
+    if (DataContext is WorkbenchViewModel vm)
+    {
+        vm.SavePaneWidths(LeftPaneColumn.ActualWidth, RightPaneColumn.ActualWidth);
+    }
+}
+```
+
+#### ViewModel 구현 (`ViewModels/WorkbenchViewModel.cs`)
+```csharp
 public partial class WorkbenchViewModel : ObservableObject
 {
     private readonly ISettingsService _settingsService;
 
-    [ObservableProperty]
-    private GridLength _leftPaneWidth;
-
-    [ObservableProperty]
-    private GridLength _rightPaneWidth;
+    public double LeftPaneWidth { get; private set; }
+    public double RightPaneWidth { get; private set; }
 
     public WorkbenchViewModel(ISettingsService settingsService)
     {
         _settingsService = settingsService;
-        // 로컬 설정에서 저장된 너비 로드 (없을 경우 기본값 적용)
-        _leftPaneWidth = new GridLength(_settingsService.Get("LeftPaneWidth", 320.0));
-        _rightPaneWidth = new GridLength(_settingsService.Get("RightPaneWidth", 380.0));
+        LeftPaneWidth = _settingsService.Get("LeftPaneWidth", 320.0);
+        RightPaneWidth = _settingsService.Get("RightPaneWidth", 380.0);
     }
 
-    partial void OnLeftPaneWidthChanged(GridLength value)
+    public void SavePaneWidths(double leftWidth, double rightWidth)
     {
-        if (value.IsAbsolute)
-        {
-            _settingsService.Set("LeftPaneWidth", value.Value);
-        }
-    }
-
-    partial void OnRightPaneWidthChanged(GridLength value)
-    {
-        if (value.IsAbsolute)
-        {
-            _settingsService.Set("RightPaneWidth", value.Value);
-        }
+        LeftPaneWidth = leftWidth;
+        RightPaneWidth = rightWidth;
+        _settingsService.Set("LeftPaneWidth", leftWidth);
+        _settingsService.Set("RightPaneWidth", rightWidth);
     }
 }
 ```
@@ -221,6 +249,7 @@ LLM 토큰이 초당 50~100개씩 쏟아질 때 전체 문자열을 매번 다�
 ```csharp
 using System;
 using System.Text;
+using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using System.Windows;
@@ -228,15 +257,16 @@ using System.Windows.Threading;
 
 namespace MyWpfApp.Services.Implementations;
 
-public class StreamingNarrativeBuffer
+public sealed class StreamingNarrativeBuffer : IDisposable
 {
     private readonly Channel<string> _tokenChannel = Channel.CreateUnbounded<string>();
     private readonly Action<string> _appendAction;
+    private readonly CancellationTokenSource _cts = new();
 
     public StreamingNarrativeBuffer(Action<string> appendAction)
     {
         _appendAction = appendAction;
-        _ = ProcessTokenQueueAsync();
+        _ = ProcessTokenQueueAsync(_cts.Token);
     }
 
     public void PushToken(string token)
@@ -244,28 +274,54 @@ public class StreamingNarrativeBuffer
         _tokenChannel.Writer.TryWrite(token);
     }
 
-    private async Task ProcessTokenQueueAsync()
+    private async Task ProcessTokenQueueAsync(CancellationToken cancellationToken)
     {
         var reader = _tokenChannel.Reader;
         var sb = new StringBuilder();
 
-        while (await reader.WaitToReadAsync())
+        try
         {
-            sb.Clear();
-            // 채널에 쌓인 토큰을 한 번에 비워서 일괄 갱신
-            while (reader.TryRead(out var token))
+            while (await reader.WaitToReadAsync(cancellationToken))
             {
-                sb.Append(token);
-            }
+                sb.Clear();
+                // 채널에 쌓인 토큰을 한 번에 비워서 일괄 갱신
+                while (reader.TryRead(out var token))
+                {
+                    sb.Append(token);
+                }
 
-            var chunk = sb.ToString();
-            if (!string.IsNullOrEmpty(chunk))
-            {
-                await Application.Current.Dispatcher.InvokeAsync(
-                    () => _appendAction(chunk),
-                    DispatcherPriority.Render);
+                var chunk = sb.ToString();
+                if (!string.IsNullOrEmpty(chunk))
+                {
+                    await Application.Current.Dispatcher.InvokeAsync(
+                        () => _appendAction(chunk),
+                        DispatcherPriority.Render);
+                }
             }
         }
+        catch (OperationCanceledException)
+        {
+            // 화면 이탈 및 Dispose 시 안전하게 백그라운드 태스크 종료
+        }
+    }
+
+    public void Dispose()
+    {
+        _tokenChannel.Writer.TryComplete();
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}
+
+// ViewModel(ICleanup 구현체)에서의 수명주기 해제 연동
+public partial class InvestigationViewModel : ObservableObject, ICleanup
+{
+    private readonly StreamingNarrativeBuffer _narrativeBuffer;
+
+    public void Cleanup()
+    {
+        // 화면 전환 또는 파괴 시 백그라운드 토큰 루프 완전 해제 (메모리/스레드 누수 원천 차단)
+        _narrativeBuffer.Dispose();
     }
 }
 ```
@@ -328,13 +384,16 @@ public class StreamingNarrativeBuffer
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="Enterprise AI Workbench"
         Height="800" Width="1300"
-        Background="#0B0C10"
+        Background="Transparent"
         WindowStartupLocation="CenterScreen">
+        <!-- 주의: Windows 11 Mica 백드롭을 적용할 때는 Window.Background="Transparent"로 설정하고,
+             루트 컨테이너(Grid/Border)에 반투명 틴트(#E60B0C10)를 지정하여 가독성과 글래스 질감을 양립합니다. -->
 
+    <!-- 윈도우 크롬 일체화 및 DWM GlassFrame 전체 확장 (Mica 투과를 위해 GlassFrameThickness="-1" 필수) -->
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="44"
                             CornerRadius="0"
-                            GlassFrameThickness="0"
+                            GlassFrameThickness="-1"
                             NonClientFrameEdges="None"
                             ResizeBorderThickness="6"
                             UseAeroCaptionButtons="False" />
@@ -352,14 +411,15 @@ public class StreamingNarrativeBuffer
         </Style>
     </Window.Style>
 
-    <Grid Background="#0B0C10">
+    <!-- 반투명 다크 틴트 레이어 (Mica 질감 투과 + 텍스트 가독성 확보) -->
+    <Grid Background="#E60B0C10">
         <Grid.RowDefinitions>
             <RowDefinition Height="44" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
         <!-- 타이틀바 컨테이너 -->
-        <Border Grid.Row="0" Background="#13141C" BorderBrush="#1AFFFFFF" BorderThickness="0,0,0,1">
+        <Border Grid.Row="0" Background="#CC13141C" BorderBrush="#1AFFFFFF" BorderThickness="0,0,0,1">
             <Grid Margin="16,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -414,6 +474,18 @@ public partial class MainWindow : Window
     private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     private const int DWMWCP_ROUND = 2;
 
+    // Windows 11 22H2 (Build 22621)+ 시스템 백드롭 상수
+    private const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
+
+    public enum DWM_SYSTEMBACKDROP_TYPE
+    {
+        DWMSBT_AUTO = 0,
+        DWMSBT_NONE = 1,
+        DWMSBT_MAINWINDOW = 2,      // Mica (기본 은은한 투과)
+        DWMSBT_TRANSIENTWINDOW = 3,  // Acrylic (블러 강조 반투명)
+        DWMSBT_TABBEDWINDOW = 4      // Mica Alt (탭 윈도우용 고대비)
+    }
+
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
@@ -448,7 +520,11 @@ public partial class MainWindow : Window
         int cornerPreference = DWMWCP_ROUND;
         DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPreference, sizeof(int));
 
-        // 3. 메시지 훅 추가
+        // 3. Windows 11 Mica 백드롭 활성화 (Window.Background="Transparent" 필수)
+        int backdropType = (int)DWM_SYSTEMBACKDROP_TYPE.DWMSBT_MAINWINDOW;
+        DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, ref backdropType, sizeof(int));
+
+        // 4. 메시지 훅 추가
         var hwndSource = HwndSource.FromHwnd(hwnd);
         hwndSource?.AddHook(WndProc);
     }
@@ -490,6 +566,20 @@ public partial class MainWindow : Window
     private void Close_Click(object sender, RoutedEventArgs e) => SystemCommands.CloseWindow(this);
 }
 ```
+
+### C. Windows 11 Mica / Acrylic 시스템 백드롭(Backdrop) 시스템 통합
+
+Windows 11 22H2(Build 22621)부터 공식 지원되는 `DWMWA_SYSTEMBACKDROP_TYPE (38)` API를 사용하면 별도의 외부 무거운 그래픽 라이브러리 없이 네이티브 OS 레벨에서 하드웨어 가속되는 Mica/Acrylic 텍스처를 구현할 수 있습니다.
+
+1. **백드롭 타입 선택 기준**:
+   * `DWMSBT_MAINWINDOW (2) - Mica`: 메인 앱 프레임워크 표준. 데스크톱 배경화면 색상이 윈도우 뒤로 은은하게 반사되어 일체감을 형성합니다.
+   * `DWMSBT_TRANSIENTWINDOW (3) - Acrylic`: 일시적인 모달 다이얼로그나 드롭다운 플라이아웃용. 블러와 반투명도가 높아 배경 시각 정보가 부드럽게 흐려집니다.
+   * `DWMSBT_TABBEDWINDOW (4) - Mica Alt`: 다중 탭 문서 편집기나 복합 브라우징 인터페이스용. 배경 투과율이 Mica보다 낮아 탭 간 시각적 구분이 명확합니다.
+
+2. **XAML 반투명 틴팅(Tinting) 설계 원칙**:
+   * **원칙 1 (완전 투명 금지)**: 백드롭 효과를 낸다고 내부 레이어까지 100% 투명하게 두면, 바탕화면 아이콘이나 다른 창의 글자가 겹쳐 심각한 가독성 저하를 초래합니다.
+   * **원칙 2 (반투명 틴트 브러시 적용)**: 최상위 `Window.Background="Transparent"`를 지정한 후, 루트 레이아웃 컨테이너(`Grid`)의 배경색을 `#E60B0C10` (불투명도 약 90%)으로 설정합니다. 이를 통해 텍스트 명암비를 100% 확보하면서 창 모서리와 타이틀바 주변으로 은은한 OS 네이티브 글래스 깊이감을 자연스럽게 투과시킵니다.
+   * **원칙 3 (Windows 10 하위 호환)**: Windows 10 또는 구형 빌드에서는 `DWMWA_SYSTEMBACKDROP_TYPE` 호출이 안전하게 무시되며, 루트 `Grid`의 `#E60B0C10` 브러시가 진한 솔리드 다크 테마 배경으로 자연스럽게 작동(Graceful Fallback)합니다.
 
 ---
 
@@ -631,6 +721,35 @@ public partial class MainWindow : Window
                 <Setter Property="Foreground" Value="#FFFFFF" />
             </Trigger>
         </Style.Triggers>
+    </Style>
+
+    <!-- 4. 고밀도 가상화 리스트뷰 (60fps 픽셀 스크롤 & 컨테이너 재활용 완결 스타일) -->
+    <!-- 주의: ScrollUnit="Pixel" 적용 시 ItemTemplate 내부 요소의 높이가 균일(Fixed Height)해야 스크롤바 점핑(Jumping Thumb)을 방지할 수 있습니다 -->
+    <Style x:Key="VirtualizingListViewStyle" TargetType="ListView">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+        <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+        <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+        <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+        <Setter Property="VirtualizingPanel.CacheLength" Value="20,20" />
+        <Setter Property="VirtualizingPanel.CacheLengthUnit" Value="Item" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListView">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                        <ScrollViewer Focusable="False" Padding="{TemplateBinding Padding}">
+                            <ItemsPresenter />
+                        </ScrollViewer>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
 </ResourceDictionary>

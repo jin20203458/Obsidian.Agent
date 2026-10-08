@@ -3,13 +3,12 @@ description: WPF 현대적 MVVM 아키텍처, 수명주기 관리, 고성능 스
 related:
   - ../README.md
   - ./Modern_AI_Desktop_UI_Guidelines.md
-  - ../Phalanx/docs/01_system_architecture.md
 ---
 # WPF Architecture Guidelines
 
 본 문서는 현대적인 WPF(.NET 8.0/9.0/10.0) 애플리케이션을 초기 구축하거나 대규모 리팩토링할 때 AI 에이전트와 엔지니어가 반드시 준수해야 하는 **엔터프라이즈 아키텍처 단일 진실 공급원(SSOT) 마스터 지침서**입니다.
 
-과거 .NET Framework 시절의 레거시 관행(수동 INPC 구현, 무거운 외부 래퍼 라이브러리 남용, 갓 윈도우/뷰모델 결합)을 완전히 배제하고, 실전 대규모 프로덕션(Phalanx EDR, ARQA 정적 분석기, GRC AI 클라이언트)의 실증 검증을 거친 **초고속 스트리밍, 엄격한 수명주기 메모리 회수, 모듈형 셸, 그리고 제로 결함(Zero Defect) 코드 패턴**을 집대성하여 제공합니다.
+과거 .NET Framework 시절의 레거시 관행(수동 INPC 구현, 무거운 외부 래퍼 라이브러리 남용, 갓 윈도우/뷰모델 결합)을 완전히 배제하고, 실전 대규모 엔터프라이즈 데스크톱 소프트웨어의 실증 검증을 거친 **초고속 스트리밍, 엄격한 수명주기 메모리 회수, 모듈형 셸, 그리고 제로 결함(Zero Defect) 코드 패턴**을 집대성하여 제공합니다.
 
 ---
 
@@ -17,7 +16,7 @@ related:
 
 WPF 애플리케이션은 시스템의 목적과 데이터 처리량에 따라 구조적 접근이 달라져야 합니다. 아래의 세 가지 아키텍처 원형 중 프로젝트의 성격에 부합하는 모델을 우선 선정합니다.
 
-| 분류 항목 | 원형 1: 순수 ViewModel-First 단일 셸 (GRC 패턴) | 원형 2: 모듈형 셸 + 레일 + CQRS 리드 모델 (Phalanx 패턴) | 원형 3: 멀티 도구 분석 워크벤치 (ARQA 패턴) |
+| 분류 항목 | 원형 1: 순수 ViewModel-First 단일 셸 | 원형 2: 모듈형 셸 + 레일 + CQRS 리드 모델 | 원형 3: 멀티 도구 분석 워크벤치 |
 | :--- | :--- | :--- | :--- |
 | **적합한 앱 유형** | 대화형 AI 클라이언트, 설정 마법사, 단일 워크플로 생산성 도구 | 실시간 보안 관제(SOC), 텔레메트리 대시보드, 클라우드 플릿 모니터링 | 정적 코드 분석기, 진단 도구, 복합 데이터그리드 IDE |
 | **창/네비게이션 구조** | 초경량 `MainWindow`(50줄 이하) + `<ContentControl Content="{Binding CurrentPage}" />` | 52px 슬림 좌측 레일 + 모듈별 `UserControl` 교체 | 다중 분할 도킹 패널(`GridSplitter`), 탭 기반 워크스페이스 |
@@ -172,7 +171,7 @@ namespace MyWpfApp
 }
 ```
 
-### E. `ICleanup`을 통한 페이지 이탈 시 메모리 회수 패턴 (GRC 검증)
+### E. `ICleanup`을 통한 페이지 이탈 시 메모리 회수 패턴
 
 뷰모델이 `Transient`로 생성되더라도 백그라운드 태스크나 이벤트 핸들러를 구독 중이면 GC가 수거하지 못합니다. 명시적인 `ICleanup` 계약을 통해 화면 전환 즉시 리소스를 해제해야 합니다.
 
@@ -214,7 +213,7 @@ public partial class DashboardViewModel : ObservableObject, ICleanup
 }
 ```
 
-### F. 헤드리스(Headless) 환경 및 단위 테스트 안전성 가드 (Phalanx 검증)
+### F. 헤드리스(Headless) 환경 및 단위 테스트 안전성 가드
 
 WPF UI 스레드 마샬링 코드(`Application.Current.Dispatcher`)는 단위 테스트 러너나 CLI 배치 실행 시 `Application.Current`가 `null`이 되어 크래시를 유발합니다. 이를 추상화한 안전 브릿지를 사용해야 합니다.
 
@@ -484,9 +483,10 @@ public sealed class ThrottledStreamProjector<T> : IDisposable
    * `VirtualizingPanel.VirtualizationMode="Recycling"`을 명시하여 스크롤 시 시각적 요소(Item Container)를 파괴/재생성하지 않고 재사용합니다.
 4. **`DataTemplate` 내부 Visual Tree 경량화**:
    * 아이템 템플릿 내부에 무거운 `DropShadowEffect`나 다중 중첩 `Grid`/`Border`를 배제합니다.
-5. **픽셀 단위 부드러운 가상화 스크롤 (`VirtualizingPanel.ScrollUnit="Pixel"`)**:
+5. **픽셀 단위 부드러운 가상화 스크롤 (`VirtualizingPanel.ScrollUnit="Pixel"`) 및 가변 높이 제약**:
    * 기본 WPF 동작은 `ScrollUnit="Item"`으로 설정되어 있어 마우스 휠 스크롤 시 한 항목 단위로 툭툭 끊기며 이동하여 부자연스러운 UX를 유발합니다.
    * 최신 .NET 8/9/10 WPF 표준: `VirtualizingPanel.ScrollUnit="Pixel"` (또는 `VirtualizingStackPanel.ScrollUnit="Pixel"`)을 선언하면 `ScrollViewer.CanContentScroll="True"`의 **컨테이너 가상화를 100% 온전히 유지한 채로 60fps의 매끄러운 픽셀 단위 부드러운 스크롤(Pixel-based smooth scrolling)**을 실현할 수 있습니다. 상용 고밀도 데이터 그리드 및 대용량 텔레메트리 리스트 컨트롤에는 반드시 명시해야 합니다.
+   * **[필수 제약 - 가변 높이(Variable-Height) 레이아웃 스래싱 방어]**: 아이템 템플릿의 높이가 제각각인 컬렉션(예: `TextWrapping="Wrap"`이 적용된 동적 멀티라인 로그)에 `ScrollUnit="Pixel"`을 적용하면, WPF 엔진이 스크롤바 Thumb 크기와 스크롤 비율을 계산할 때 과도한 레이아웃 스래싱(Layout Thrashing)을 일으켜 스크롤바가 미친듯이 튀는 현상(Jumping Thumb)이 발생합니다. 따라서 `ScrollUnit="Pixel"`은 **아이템 높이가 균일(Fixed / Uniform Height)하거나 명시적으로 높이(`Height` / `MaxHeight`)가 고정된 리스트뷰에만 적용**해야 합니다. 임의 줄바꿈이 빈번한 비정형 멀티라인 로그 콘솔의 경우 `ScrollUnit="Item"`을 유지하는 것이 실전 안정성 원칙입니다.
 
 ### B. 가상화 극대화 프로덕션 ListView XAML 표준
 
@@ -502,9 +502,9 @@ public sealed class ThrottledStreamProjector<T> : IDisposable
           ScrollViewer.VerticalScrollBarVisibility="Auto">
     <ListView.ItemTemplate>
         <DataTemplate>
-            <!-- 경량화된 아이템 Visual Tree (단일 경계선 및 텍스트) -->
-            <Border Padding="8,6" BorderBrush="#1AFFFFFF" BorderThickness="0,0,0,1">
-                <TextBlock Text="{Binding Summary}" Foreground="#F2F4F8" FontSize="12" />
+            <!-- 경량화된 균일 높이(Fixed Height: 32px) 아이템 Visual Tree (스크롤바 점핑 원천 차단) -->
+            <Border Height="32" Padding="8,0" BorderBrush="#1AFFFFFF" BorderThickness="0,0,0,1">
+                <TextBlock Text="{Binding Summary}" Foreground="#F2F4F8" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </Border>
         </DataTemplate>
     </ListView.ItemTemplate>
@@ -589,7 +589,7 @@ private async Task ExecuteCriticalActionAsync()
 
 ---
 
-## 8. 디자인 시스템 및 커스텀 컨트롤 템플릿 아키텍처 (Lessons from ARQA & Phalanx)
+## 8. 디자인 시스템 및 커스텀 컨트롤 템플릿 아키텍처
 
 무거운 서드파티 라이브러리 없이, `OverridesDefaultStyle="True"`를 활용하여 시스템 기본 컨트롤을 100% 네이티브 XAML로 재정의합니다.
 
@@ -790,21 +790,21 @@ private async Task ExecuteCriticalActionAsync()
         Title="Enterprise Pro App"
         Height="800" Width="1300"
         MinHeight="600" MinWidth="900"
-        Background="#0B0C10"
+        Background="Transparent"
         WindowStartupLocation="CenterScreen">
-        <!-- 주의: Windows 11 Mica 백드롭을 적용할 때는 Background="Transparent"로 지정하고 내부 패널에 반투명 브러시를 적용합니다 -->
 
-    <!-- 윈도우 크롬 일체화 -->
+    <!-- 윈도우 크롬 일체화 및 DWM GlassFrame 전체 확장 (Mica 투과를 위해 GlassFrameThickness="-1" 필수) -->
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="44"
                             CornerRadius="0"
-                            GlassFrameThickness="0"
+                            GlassFrameThickness="-1"
                             NonClientFrameEdges="None"
                             ResizeBorderThickness="6"
                             UseAeroCaptionButtons="False" />
     </shell:WindowChrome.WindowChrome>
 
-    <Grid>
+    <!-- 반투명 다크 틴트 레이어 (Mica 질감 투과 + 텍스트 가독성 확보 및 HitTest 클릭 관통 버그 방지) -->
+    <Grid Background="#E60B0C10">
         <Grid.RowDefinitions>
             <RowDefinition Height="44" /> <!-- 커스텀 타이틀바 -->
             <RowDefinition Height="*" />  <!-- 본문 영역 -->
