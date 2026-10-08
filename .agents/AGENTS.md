@@ -4,12 +4,12 @@ Focus: Human-agent shared SSOT knowledge architecture, minimal context overhead,
 
 <engineering_rules>
 - **SSOT**: Every policy, workflow, and standard lives in exactly one canonical document. Reference via cross-links; never duplicate.
-- **Paths & Formatting**: ASCII snake_case paths only (no spaces/non-ASCII). Technical markdown; zero decorative emojis.
-- **Links & Navigation**: Use explicit relative Markdown links (`.md`) exclusively; avoid wikilinks (`[[...]]`). Traverse projects sequentially via `README.md` and frontmatter `related` links.
+- **Naming & Style**: ASCII snake_case filenames and paths (no spaces/non-ASCII). Technical markdown; zero decorative emojis.
+- **Links & Navigation**: Use standard Markdown syntax (`.md`) exclusively; NEVER use Obsidian wikilinks (`[[...]]`). Traverse projects sequentially via `README.md` and frontmatter `related` links.
 </engineering_rules>
 
 <critical_rules>
-- **Paths & Integrity**: From repo root, use relative paths (`ai_agent_refs/`, `troubleshooting/`, `../<Repo>`). Inside `<Project>/docs/`, sibling repos are `../../../<Repo>`. Verify all links resolve to physical files.
+- **Relative Paths & Integrity**: From repo root, use relative paths (`ai_agent_refs/`, `troubleshooting/`, `../<Repo>`). Inside `<Project>/docs/`, sibling repos are `../../../<Repo>`. Verify all links resolve to physical files.
 </critical_rules>
 
 <context_triggers>
