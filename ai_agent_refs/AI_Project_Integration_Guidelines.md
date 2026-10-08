@@ -21,10 +21,9 @@ related:
 * **작성 규칙**: 시스템 프롬프트의 지시 준수율을 극대화하고 오염을 방지하기 위해 **[AI_Prompt_Engineering_Guidelines.md](./AI_Prompt_Engineering_Guidelines.md)의 핵심 원칙(XML 태그 경계 격리, Junk 토큰 배제, 긍정 프레이밍, 직교성 분리)**을 준수하며 다음 불변식을 적용합니다:
   - **Style 1 고밀도 화살표 매핑 (`Keywords -> Path`)**: 자연어 상투어(`If modifying...`, `When creating...`, `read ... before coding`)를 전면 배제하고, 핵심 엔티티 키워드 목록과 파일 경로를 `->`로 직결하는 High-SNR 시맨틱 인덱스 구조를 적용합니다. (토큰 바이트 ~20% 절감, 어텐션 헤드의 코사인 유사도 매칭 최적화).
   - **경로 이식성 (Path Portability)**: 특정 호스트 환경에 종속된 절대 경로(`C:/Users/...`) 하드코딩을 영구 금지하고, 저장소 루트 또는 형제 저장소 기준의 OS/CI 독립적인 **상대 경로(`../Obsidian.Agent/`, `../../../Users/user/...`)**만을 사용합니다.
-  - **우선순위 사다리 (Priorities)**: 가치 충돌(예: 속도 vs 정확성, 코드 압축 vs 완전성) 발생 시 에이전트가 흔들림 없이 판단할 수 있도록 `<project_philosophy>`에 명확한 우선순위 순서를 선언합니다.
   - **CLI 명령어 구조화 (Structured CLI Commands)**: 복합 테스트 스위트의 경우 단일 긴 줄 대신 계층형 서브 불렛을 적용하여 Fast QA 필터와 생략 시의 위험 경고(Warning)를 에이전트가 기계적으로 오인 없이 파싱하도록 구성합니다.
 * **표준 구조 및 5대 필수 태그**:
-  1. **`<project_philosophy>`**: 프로젝트 핵심 지향점, 아키텍처 설계 원칙 및 가치 충돌 해결용 `Priorities` 선언
+  1. **`<project_philosophy>`**: 프로젝트 핵심 미션 및 아키텍처 설계 지향점 (`Focus:` 단일 라인으로 압축, 과도한 부등호(`>`) 비교 사다리 지양)
   2. **`<engineering_rules>`**: 언어별 코딩 규약, 메모리/동시성 모델, 기술적 제약조건 및 안티패턴 방지 (이모지 절대 금지)
   3. **`<critical_rules>`**: 빌드 명령어, 계층형 Fast QA 테스트 필터, 실행 권한/자격증명 격리 및 상대 경로 강제
   4. **`<context_triggers>`**: Style 1 화살표 매핑 기반의 High-SNR 온디맨드(JIT) 지식베이스 로딩 게이트웨이 (2~6개 이내)
@@ -34,7 +33,6 @@ related:
   ```markdown
   <project_philosophy>
   Focus: [Core architectural mission and primary system design goals]
-  Priorities: Ground Truth & Factual Integrity > SSOT Canonical Structure > Progressive Disclosure > Terse Simplicity.
   </project_philosophy>
 
   <engineering_rules>

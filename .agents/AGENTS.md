@@ -1,6 +1,5 @@
 <project_philosophy>
 Focus: Human-agent shared SSOT knowledge architecture, minimal context overhead, and progressive disclosure.
-Priorities: Ground Truth & Factual Integrity > SSOT Canonical Structure > Progressive Disclosure > Terse Simplicity.
 </project_philosophy>
 
 <engineering_rules>
