@@ -21,9 +21,9 @@ related:
 * **지식베이스 리포지토리**: `../Obsidian.Agent`
   * 공식 스펙: `Phalanx/docs/`
   * 트러블슈팅 런북: `troubleshooting/phalanx.md`
-* **솔루션 파일**: `Phalanx.sln` (Visual Studio 2026 / Dev18 및 VS 2022 v17.x 호환)
+* **솔루션 및 빌드 체계**: `Phalanx.sln` (C# 콕핏/에이전트) / `CMakePresets.json` (C++ 센서, Ninja)
 * **현재 활성 마일스톤**: Phase 6 (차기 과제) - 1순위 과제: MITRE ATT&CK 내비게이터 뷰 (12대 전술 매트릭스 시각화)
-* **단위 테스트**: 85개 전원 통과 (Category=Unit, 2026-10-01 기준)
+* **단위 테스트**: 170개 전원 통과 (Category=Unit, 2026-10-08 기준)
 
 ---
 
@@ -134,6 +134,16 @@ Phalanx Root
 | **99** | Custom Dynamic Scenario Studio | 사용자 지정 | 동적 텔레메트리 주입 -> AI ReAct 검증 |
 
 **3-모드 주입 체계**: CleanRoom (기본, 인프로세스) / OsHybrid (실제 PID 연동) / LiveExpert (실제 페이로드, Safe Weaponization 적용)
+
+### 5.3 C++ / C# 개발 환경 및 외부 종속성 SDK (vcpkg) 관리
+
+1. **Git 저장소 vs 로컬 종속성 용량 분리**:
+   * **Git 리포지토리 (`phalanx-edr`)**: 소스 코드 및 센서 번들 바이너리 중심 500MB 유지.
+   * **로컬 외부 SDK (`vcpkg_installed`, 14.2GB)**: Google gRPC, Protobuf, Boost 1.91 등 C++ 컴파일에 필수적인 `.lib`(13.2GB) 및 헤더(819MB). `.gitignore`로 관리되며 로컬 캐시(`%LOCALAPPDATA%\vcpkg\archives`)에서 자동 복원.
+2. **Visual Studio C++ / C# 개발 워크플로**:
+   * **C# 개발 (콕핏 UI, AI 수사관)**: Visual Studio에서 `Phalanx.sln` 열기 -> `F5` 실행 및 디버깅.
+   * **C++ 개발 (커널 센서)**: Visual Studio에서 `phalanx-edr` 폴더 열기 (`windows-default` CMake 프리셋) -> `Phalanx.Sensor.exe` 선택 후 `F5` 원클릭 증분 빌드(1.2초) 및 중단점 디버깅.
+   * **빌드 프리셋 보호**: `CMakePresets.json`에 `VCPKG_MANIFEST_INSTALL: OFF`를 적용하여 불필요한 라이브러리 재다운로드 방지.
 
 ---
 
