@@ -39,14 +39,14 @@ related:
   <engineering_rules>
   - **Architecture**: [Core design patterns, modular boundaries, and dependency rules]
   - **Concurrency/Resource**: [Concurrency model, resource lifecycle (RAII/Dispose), anti-pattern prevention]
-  - **Formatting**: Strictly follow target file style and indentation. Technical plain-text markdown only.
+  - **Formatting**: Strictly follow target file style and indentation. Technical markdown; zero decorative emojis.
   </engineering_rules>
 
   <critical_rules>
   - **Build**: `<standard_build_command>`
   - **Test**:
     - Fast QA: `<fast_qa_unit_test_command>` (Enforce category/filter)
-    - Requirement: Always specify the fast QA filter to isolate local tests from long-running cloud suites.
+    - Warning: NEVER omit filter during standard QA (unfiltered runs trigger heavy integration suites / cloud API calls).
     - Full-Chain: `<fullchain_test_script_command>`
   - **Paths**: Use relative paths exclusively (`../Obsidian.Agent/`, etc.).
   </critical_rules>
