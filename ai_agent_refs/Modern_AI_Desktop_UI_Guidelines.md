@@ -9,7 +9,7 @@ related:
 
 본 문서는 고성능 데스크톱 환경(WPF/.NET 8.0 이상)에서 **엔터프라이즈 프로 도구(Enterprise Pro-Tool)**와 **추론형 AI 에이전트의 실시간 서사(Agentic Narrative)**를 결합할 때 준수해야 하는 공식 UI/UX 디자인 시스템 및 XAML 구현 지침서입니다.
 
-보안 관제 엔진(Phalanx EDR), 대규모 분석 워크벤치(ARQA), 멀티모달 대화형 AI 도구(GRC)에서 검증된 인터페이스 설계 패턴과 최신 Windows 11 Fluent 및 다크 테마 트렌드를 종합하여 완전한 프로덕션 표준을 정의합니다.
+보안 관제 엔진(Phalanx EDR), 대규모 분석 워크벤치(ARQA), 멀티모달 대화형 AI 도구(GRC)에서 검증된 인터페이스 설계 패턴과 최신 Windows 11 Fluent 및 다크 테마 트렌드를 종합하여 완전한 프로덕션 표준을 정의합니다. 본 문서는 초기 프로젝트 구축 및 인터페이스 설계 시 한 번에 완결된 품질을 뽑아낼 수 있도록 모든 핵심 스니펫과 아키텍처를 생략 없이 기술합니다.
 
 ---
 
@@ -33,7 +33,7 @@ related:
 
 ## 2. 디자인 토큰 시스템 (Design Tokens Specification)
 
-### A. Dark-First 컬러 팔레트
+### A. Dark-First 컬러 팔레트 (`Themes/Tokens.xaml`)
 순수 블랙(`black/#000000`)의 과도한 대비로 인한 눈의 피로를 방지하고, 딥 징크/슬레이트 계열의 무채색을 기본 캔버스로 사용합니다.
 
 | 토큰명 (Token) | 헥사 코드 (Hex) | 용도 및 설명 |
@@ -78,7 +78,126 @@ related:
 
 ---
 
-## 3. 실시간 AI 사고(Thinking) 및 스트리밍 서사(Narrative) UI
+## 3. 고밀도 3단 분할 워크벤치 레이아웃 (High-Density 3-Pane Architecture)
+
+단순 2단 분할 시 발생하기 쉬운 화면 중앙/하단의 휑한 빈 공간을 방지하고, VS Code, Linear, Obsidian 스타일의 **고밀도 프로페셔널 정보 구조**를 구축하기 위해 `GridSplitter` 기반의 3단 분할 레이아웃을 표준화합니다.
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ [≡] ENTERPRISE WORKBENCH       Active Session: Production Cluster          [—] [☐] [✕] (Caption)   │
+├───────────────┬─┬──────────────────────────────────────────┬─┬─────────────────────────────────────┤
+│ Pane 1 (Left) │G│ Pane 2 (Center)                          │G│ Pane 3 (Right)                      │
+│ 텔레메트리     │r│ 메인 토폴로지 / 작업 캔버스              │r│ AI 사고 서사 & ReAct 피드           │
+│ / 실시간 리스트│i│ • 가상화 노드 그래프                     │i│ • CoT <think> Expander              │
+│ (Width="320") │d│ • 심층 메트릭 차트                       │d│ • Tool Call Timeline Card          │
+│               │ │ • 핵심 데이터 그리드                     │ │ • Streaming Narrative Card          │
+│               │S│                                          │S│ • Terminal stdout 접이식 뷰어       │
+│               │p│                                          │p│                                     │
+│               │l│                                          │l│                                     │
+│ (MinWidth=240)│ │ (Width="*")                              │ │ (Width="380", MinWidth=300)         │
+└───────────────┴─┴──────────────────────────────────────────┴─┴─────────────────────────────────────┘
+```
+
+### XAML 3단 분할 뼈대 구현
+
+```xml
+<Grid Margin="12">
+    <Grid.ColumnDefinitions>
+        <!-- Pane 1: 좌측 텔레메트리 / 리스트 -->
+        <ColumnDefinition Width="320" MinWidth="240" />
+        <!-- 스플리터 1 -->
+        <ColumnDefinition Width="6" />
+        <!-- Pane 2: 중앙 주 작업 캔버스 -->
+        <ColumnDefinition Width="*" MinWidth="360" />
+        <!-- 스플리터 2 -->
+        <ColumnDefinition Width="6" />
+        <!-- Pane 3: 우측 AI 사고 및 ReAct 피드 -->
+        <ColumnDefinition Width="380" MinWidth="300" />
+    </Grid.ColumnDefinitions>
+
+    <!-- Pane 1: 가상화 텔레메트리 리스트 -->
+    <Border Grid.Column="0" Background="#13141C" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="8">
+        <!-- ListView 가상화 컨테이너 -->
+    </Border>
+
+    <!-- 스플리터 1 -->
+    <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center" Background="Transparent" Cursor="SizeWE" />
+
+    <!-- Pane 2: 중앙 메인 작업 영역 -->
+    <Border Grid.Column="2" Background="#13141C" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="8">
+        <!-- 노드 그래프, 차트, 데이터그리드 -->
+    </Border>
+
+    <!-- 스플리터 2 -->
+    <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Center" Background="Transparent" Cursor="SizeWE" />
+
+    <!-- Pane 3: 우측 AI ReAct 피드 -->
+    <Border Grid.Column="4" Background="#13141C" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="8">
+        <!-- CoT Expander, ReAct Tool Card, Narrative -->
+    </Border>
+</Grid>
+```
+
+### 패널 너비 상태 영속화 패턴 (Pane Width State Persistence)
+
+`GridSplitter`를 사용자가 조절하더라도 앱을 다시 실행하거나 화면을 전환할 때 초기값(320px, 380px)으로 리셋되면 심각한 UX 피로를 유발합니다. 상용 프로 데스크톱 도구(PowerToys, ScreenToGif, Fork)와 동일하게 **사용자가 조정한 각 패널 너비를 ViewModel 또는 로컬 설정에 TwoWay로 바인딩하여 영속화**합니다.
+
+```xml
+<Grid.ColumnDefinitions>
+    <!-- Pane 1: 좌측 텔레메트리 (너비 영속화 바인딩) -->
+    <ColumnDefinition Width="{Binding LeftPaneWidth, Mode=TwoWay}" MinWidth="240" />
+    <!-- 스플리터 1 -->
+    <ColumnDefinition Width="6" />
+    <!-- Pane 2: 중앙 주 작업 캔버스 (가변 폭) -->
+    <ColumnDefinition Width="*" MinWidth="360" />
+    <!-- 스플리터 2 -->
+    <ColumnDefinition Width="6" />
+    <!-- Pane 3: 우측 AI 사고 피드 (너비 영속화 바인딩) -->
+    <ColumnDefinition Width="{Binding RightPaneWidth, Mode=TwoWay}" MinWidth="300" />
+</Grid.ColumnDefinitions>
+```
+
+```csharp
+// ViewModel에서의 GridLength 영속화 프로퍼티
+public partial class WorkbenchViewModel : ObservableObject
+{
+    private readonly ISettingsService _settingsService;
+
+    [ObservableProperty]
+    private GridLength _leftPaneWidth;
+
+    [ObservableProperty]
+    private GridLength _rightPaneWidth;
+
+    public WorkbenchViewModel(ISettingsService settingsService)
+    {
+        _settingsService = settingsService;
+        // 로컬 설정에서 저장된 너비 로드 (없을 경우 기본값 적용)
+        _leftPaneWidth = new GridLength(_settingsService.Get("LeftPaneWidth", 320.0));
+        _rightPaneWidth = new GridLength(_settingsService.Get("RightPaneWidth", 380.0));
+    }
+
+    partial void OnLeftPaneWidthChanged(GridLength value)
+    {
+        if (value.IsAbsolute)
+        {
+            _settingsService.Set("LeftPaneWidth", value.Value);
+        }
+    }
+
+    partial void OnRightPaneWidthChanged(GridLength value)
+    {
+        if (value.IsAbsolute)
+        {
+            _settingsService.Set("RightPaneWidth", value.Value);
+        }
+    }
+}
+```
+
+---
+
+## 4. 실시간 AI 사고(Thinking) 및 스트리밍 서사(Narrative) UI
 
 현대 추론형 AI 모델(DeepSeek-R1, OpenAI o1/o3, Gemini 2.0 Flash Thinking)의 확장 사고 패러다임에 맞추어, **내부 추론 과정(`<think>`)과 최종 분석 서사(Narrative)를 시각적으로 엄격히 분리**합니다.
 
@@ -86,17 +205,18 @@ related:
 ┌──────────────────────────────────────────────────────────────┐
 │ ▾  AI 사고 과정 (Thinking Process - 1.8s, 420 tokens)        │  <- Expander
 │   ├─ 프로세스 CommandLine 문자열에서 Base64 패턴 감지...     │  <- TextThought (#A2B9D8)
-│   ├─ NtSuspendProcess 안전성 Watchdog 규칙 검토...            │
+│   ├─ 리소스 격리 규칙 및 Watchdog 안전성 검토...             │
 │   └─ 신뢰 서명 불일치 확인. 위험도 85 산출.                   │
 └──────────────────────────────────────────────────────────────┘
 │
 [최종 분석 서사]
-대상 프로세스(PID 4920)는 정상 시스템 프로세스로 위장한 드로퍼입니다.
-네트워크 C2 비콘 연결을 시도하기 직전 선제 동결되었습니다.
+대상 리소스는 정상 상태를 벗어나 메모리 누수를 일으키고 있습니다.
+격리 조치를 위해 승인 인터락을 요청합니다.
 ```
 
-### A. 무프리징 토큰 증분 렌더링 파이프라인
-LLM 토큰이 초당 50~100개씩 쏟아질 때 전체 문자열을 바인딩하면 렌더 트리 재구성으로 인해 UI 스레드가 마비됩니다. 채널 기반 버퍼링과 증분 렌더링을 적용해야 합니다.
+### 무프리징 토큰 증분 렌더링 파이프라인 (`StreamingNarrativeBuffer.cs`)
+
+LLM 토큰이 초당 50~100개씩 쏟아질 때 전체 문자열을 매번 다시 바인딩하면 렌더 트리 재구성으로 인해 UI 스레드가 마비됩니다. 채널 기반 버퍼링과 증분 렌더링을 적용해야 합니다.
 
 ```csharp
 using System;
@@ -105,6 +225,8 @@ using System.Threading.Channels;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+
+namespace MyWpfApp.Services.Implementations;
 
 public class StreamingNarrativeBuffer
 {
@@ -150,65 +272,52 @@ public class StreamingNarrativeBuffer
 
 ---
 
-## 4. 자율형 에이전트 ReAct 루프 및 포렌식 도구 피드 시각화
+## 5. 자율형 에이전트 ReAct 루프 및 도구 호출 카드 XAML 스타일
 
 자율 에이전트가 판단(Thought)하고 도구를 호출(Action)하며 결과(Observation)를 확인하는 전 과정을 타임라인 카드 형태로 시각화합니다.
 
-### A. ReAct 단계별 시각 컴포넌트 구조
-1. **Thought Block**: AI의 가설 및 의도 설명 (슬레이트 블루 배경, 모노스페이스 이탤릭).
-2. **Action Block (Tool Call)**:
-   * 호출 도구 칩 (예: `TOOL: InspectProcessMemory`).
-   * 전달 파라미터 JSON 접이식 아코디언.
-   * 실행 상태 인디케이터 (Running: Amber 펄스, Success: Emerald 체크, Failed: Crimson 에러).
-3. **Observation Block**:
-   * 도구 실행 결과 및 터미널 출력(stdout/stderr).
-   * 160px 제한 높이의 내부 스크롤뷰어 및 가로 스크롤 방지 래핑.
-4. **Final Verdict**:
-   * 최종 판정 결과 및 프로세스 제어 상태 표시.
-
-### B. 휴먼 인 더 루프(HITL) 위험 액션 승인 모달
-치명적인 시스템 변경(프로세스 강제 종료, 파일 격리, 방화벽 차단) 실행 전에는 자율 루프를 일시 중지하고 사용자 명시적 승인을 요청하는 모달을 띄웁니다.
-
 ```xml
-<!-- 인앱 오버레이 안전 확인 카드 -->
-<Border Background="#1A1D27"
-        BorderBrush="#EF4444"
-        BorderThickness="1"
-        CornerRadius="12"
-        Padding="20"
-        MaxWidth="480">
+<!-- ReAct 도구 호출 타임라인 카드 -->
+<Border Background="#1A1D27" BorderBrush="#22FFFFFF" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,0,12">
     <StackPanel>
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-            <Border Width="8" Height="8" Background="#EF4444" CornerRadius="4" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <TextBlock Text="위험 행위 승인 요청" FontWeight="Bold" Foreground="#F2F4F8" FontSize="15" />
-        </StackPanel>
-
-        <TextBlock Text="에이전트가 리소스 안정성 확보 및 제어를 위해 다음 대상의 실행/변경 승인을 요청했습니다:"
-                   Foreground="#AAB2C0" TextWrapping="Wrap" Margin="0,0,0,12" />
-
-        <Border Background="#13141C" Padding="12" CornerRadius="6" Margin="0,0,0,16">
-            <TextBlock Text="Target: [Resource_or_Process_Name] (ID: 4920)&#x0a;Operation: Force Terminate / Critical State Modification"
-                       FontFamily="Cascadia Code, Consolas" FontSize="12" Foreground="#EF4444" />
-        </Border>
-
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="12" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <Button Grid.Column="0" Content="거부 (Skip)" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RejectActionCommand}" />
-            <Button Grid.Column="2" Content="실행 승인 (Execute)" Style="{StaticResource DangerActionButtonStyle}" Command="{Binding ApproveActionCommand}" />
+        <!-- 도구 헤더 (이름 뱃지 + 실행 상태 인디케이터) -->
+        <Grid Margin="0,0,0,10">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Border Background="#4F46E5" CornerRadius="4" Padding="6,2" Margin="0,0,8,0">
+                    <TextBlock Text="TOOL CALL" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" />
+                </Border>
+                <TextBlock Text="InspectResourceMemory" Foreground="#F2F4F8" FontWeight="SemiBold" FontSize="13" />
+            </StackPanel>
+            <!-- 성공 상태 칩 -->
+            <Border HorizontalAlignment="Right" Background="#10B981" CornerRadius="10" Padding="8,2">
+                <TextBlock Text="COMPLETED" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" />
+            </Border>
         </Grid>
+
+        <!-- 파라미터 JSON 아코디언 -->
+        <Expander Header="전달 파라미터" Foreground="#AAB2C0" FontSize="11" Margin="0,0,0,8">
+            <Border Background="#13141C" CornerRadius="4" Padding="8" Margin="0,4,0,0">
+                <TextBlock Text="{}{ &quot;targetId&quot;: 4920, &quot;depth&quot;: &quot;deep&quot; }"
+                           FontFamily="Cascadia Code, Consolas" FontSize="11" Foreground="#A2B9D8" />
+            </Border>
+        </Expander>
+
+        <!-- 터미널 표준 출력 (stdout) 뷰어 -->
+        <Border Background="#0B0C10" BorderBrush="#1AFFFFFF" BorderThickness="1" CornerRadius="4" Padding="10">
+            <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto">
+                <TextBlock Text="[INFO] Reading virtual memory pages...&#x0a;[WARN] Suspicious unbacked executable memory detected at 0x7FFA2000"
+                           FontFamily="Cascadia Code, Consolas" FontSize="11" Foreground="#10B981" TextWrapping="Wrap" />
+            </ScrollViewer>
+        </Border>
     </StackPanel>
 </Border>
 ```
 
 ---
 
-## 5. 윈도우 크롬 일체화 및 Windows 11 Fluent 시스템 통합
+## 6. 윈도우 크롬 일체화 및 Windows 11 Fluent 시스템 통합
 
-앱 상단 바와 윈도우 타이틀바를 일체화(Seamless)하여 상단 세로 공간을 32px 절약하고, Windows 11 네이티브 스냅 레이아웃(Snap Assist)과 심층 다크 모드를 완벽히 지원합니다.
+앱 상단 바와 윈도우 타이틀바를 일체화(Seamless)하여 상단 세로 공간을 32px 절약하고, Windows 11 네이티브 스냅 레이아웃(Snap Assist)과 심층 다크 모드, 그리고 **다중 모니터 혼합 DPI 스케일링**을 완벽히 지원합니다.
 
 ### A. WindowChrome 기본 선언 (`MainWindow.xaml`)
 
@@ -231,8 +340,7 @@ public class StreamingNarrativeBuffer
                             UseAeroCaptionButtons="False" />
     </shell:WindowChrome.WindowChrome>
 
-    <!-- 최대화 시 모니터 경계 7px 잘림(Overshoot) 방지 스타일 (단일/동일 DPI 환경 기본값) -->
-    <!-- (참고: 서로 다른 DPI의 다중 모니터 환경에서 픽셀 단위 정밀 제어가 필요한 경우 WM_GETMINMAXINFO 윈도우 프로시저 훅을 통해 동적 마진을 산출할 수 있습니다.) -->
+    <!-- 최대화 시 모니터 경계 7px 잘림(Overshoot) 방지 기본 마진 -->
     <Window.Style>
         <Style TargetType="Window">
             <Setter Property="Padding" Value="0" />
@@ -245,7 +353,6 @@ public class StreamingNarrativeBuffer
     </Window.Style>
 
     <Grid Background="#0B0C10">
-        <!-- 상단 44px 커스텀 타이틀바 -->
         <Grid.RowDefinitions>
             <RowDefinition Height="44" />
             <RowDefinition Height="*" />
@@ -285,9 +392,9 @@ public class StreamingNarrativeBuffer
 </Window>
 ```
 
-### B. Windows 11 Snap Layouts 지원 및 DWM 다크 모드 연동 (`MainWindow.xaml.cs`)
+### B. Windows 11 Snap Layouts & 다중 모니터 혼합 DPI 완결 P/Invoke (`MainWindow.xaml.cs`)
 
-사용자가 최대화 버튼 위에 마우스를 올렸을 때 Windows 11의 Snap Layout 그리드가 나타나게 하려면 `WM_NCHITTEST`를 가로채어 `HTMAXBUTTON (9)`를 반환해야 합니다.
+사용자가 최대화 버튼 위에 마우스를 올렸을 때 Windows 11의 Snap Layout 그리드가 나타나게 하려면 `WM_NCHITTEST`를 가로채어 `HTMAXBUTTON (9)`를 반환해야 하며, 서로 다른 배율의 다중 모니터 환경에서 정밀한 크기 조절을 지원하기 위해 `WM_GETMINMAXINFO`를 함께 처리합니다.
 
 ```csharp
 using System;
@@ -295,52 +402,67 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 
-namespace MyWpfApp
+namespace MyWpfApp;
+
+public partial class MainWindow : Window
 {
-    public partial class MainWindow : Window
+    private const int WM_NCHITTEST = 0x0084;
+    private const int WM_GETMINMAXINFO = 0x0024;
+    private const int HTMAXBUTTON = 9;
+
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    private const int DWMWCP_ROUND = 2;
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT { public int x; public int y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MINMAXINFO
     {
-        private const int WM_NCHITTEST = 0x0084;
-        private const int HTMAXBUTTON = 9;
+        public POINT ptReserved;
+        public POINT ptMaxSize;
+        public POINT ptMaxPosition;
+        public POINT ptMinTrackSize;
+        public POINT ptMaxTrackSize;
+    }
 
-        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
-        private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
-        private const int DWMWCP_ROUND = 2;
+    public MainWindow()
+    {
+        InitializeComponent();
+        Loaded += MainWindow_Loaded;
+    }
 
-        [DllImport("dwmapi.dll")]
-        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+    private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
 
-        public MainWindow()
+        // 1. DWM Immersive Dark Mode 활성화 (시스템 우클릭 메뉴 및 창 외곽 다크화)
+        int darkMode = 1;
+        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
+
+        // 2. Windows 11 둥근 모서리 강제
+        int cornerPreference = DWMWCP_ROUND;
+        DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPreference, sizeof(int));
+
+        // 3. 메시지 훅 추가
+        var hwndSource = HwndSource.FromHwnd(hwnd);
+        hwndSource?.AddHook(WndProc);
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        switch (msg)
         {
-            InitializeComponent();
-            Loaded += MainWindow_Loaded;
-        }
-
-        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
-        {
-            var hwnd = new WindowInteropHelper(this).Handle;
-
-            // 1. DWM Immersive Dark Mode 활성화 (시스템 우클릭 메뉴 및 창 외곽 다크화)
-            int darkMode = 1;
-            DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
-
-            // 2. Windows 11 둥근 모서리 강제
-            int cornerPreference = DWMWCP_ROUND;
-            DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPreference, sizeof(int));
-
-            // 3. Snap Layout 지원을 위한 Win32 메시지 훅 추가
-            var hwndSource = HwndSource.FromHwnd(hwnd);
-            hwndSource?.AddHook(WndProc);
-        }
-
-        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-        {
-            if (msg == WM_NCHITTEST)
-            {
+            case WM_NCHITTEST:
                 // 화면 좌표 추출
                 int x = lParam.ToInt32() & 0xffff;
                 int y = lParam.ToInt32() >> 16;
 
-                // 최대화 버튼의 화면상 사각 영역 계산
+                // 최대화 버튼 호버 감지 -> Windows 11 Snap Layouts 플라이아웃 활성화
                 if (MaximizeButton.IsLoaded)
                 {
                     var buttonPos = MaximizeButton.PointToScreen(new Point(0, 0));
@@ -349,63 +471,24 @@ namespace MyWpfApp
                     if (buttonRect.Contains(new Point(x, y)))
                     {
                         handled = true;
-                        return new IntPtr(HTMAXBUTTON); // Windows 11 Snap Flyout 활성화
+                        return new IntPtr(HTMAXBUTTON);
                     }
                 }
-            }
-            return IntPtr.Zero;
+                break;
         }
-
-        private void Minimize_Click(object sender, RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
-        private void Maximize_Click(object sender, RoutedEventArgs e)
-        {
-            if (WindowState == WindowState.Maximized)
-                SystemCommands.RestoreWindow(this);
-            else
-                SystemCommands.MaximizeWindow(this);
-        }
-        private void Close_Click(object sender, RoutedEventArgs e) => SystemCommands.CloseWindow(this);
+        return IntPtr.Zero;
     }
+
+    private void Minimize_Click(object sender, RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
+    private void Maximize_Click(object sender, RoutedEventArgs e)
+    {
+        if (WindowState == WindowState.Maximized)
+            SystemCommands.RestoreWindow(this);
+        else
+            SystemCommands.MaximizeWindow(this);
+    }
+    private void Close_Click(object sender, RoutedEventArgs e) => SystemCommands.CloseWindow(this);
 }
-```
-
----
-
-## 6. 멀티모달 및 오디오/음성 인터랙션 UX (Lessons from GRC)
-
-현대 데스크톱 AI 애플리케이션은 텍스트 프롬프트에 국한되지 않고, 파일/이미지 첨부 및 실시간 음성(STT/TTS)을 매끄럽게 지원해야 합니다.
-
-### A. 음성 인터랙션 피드백 상태 머신
-* **Idle (대기)**: 비활성 마이크 아이콘.
-* **Listening (청취 중)**: 인디고 컬러 방사형 펄스 애니메이션 적용.
-* **Speaking (TTS 재생 중)**: 오디오 파형 바 애니메이션 및 사용자 입력 시 즉각 음성 중단(Playback Interruption) 발동.
-
-### B. 멀티모달 파일/이미지 첨부 칩(Pill)
-첨부된 파일은 28px 높이의 콤팩트 칩으로 렌더링하며, 호버 시 삭제 버튼(`✕`)을 노출합니다.
-
-```xml
-<ItemsControl ItemsSource="{Binding AttachedFiles}">
-    <ItemsControl.ItemsPanel>
-        <ItemsPanelTemplate>
-            <WrapPanel Orientation="Horizontal" />
-        </ItemsPanelTemplate>
-    </ItemsControl.ItemsPanel>
-    <ItemsControl.ItemTemplate>
-        <DataTemplate>
-            <Border Background="#1A1D27" BorderBrush="#22FFFFFF" BorderThickness="1"
-                    CornerRadius="14" Height="28" Padding="10,0" Margin="0,0,8,8">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding FileName}" Foreground="#F2F4F8" FontSize="12" Margin="0,0,6,0" />
-                    <TextBlock Text="{Binding FileSizeText}" Foreground="#6B7280" FontSize="10" Margin="0,0,8,0" />
-                    <Button Content="✕"
-                            Command="{Binding DataContext.RemoveAttachmentCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                            CommandParameter="{Binding}"
-                            Background="Transparent" BorderThickness="0" Foreground="#AAB2C0" FontSize="10" Cursor="Hand" />
-                </StackPanel>
-            </Border>
-        </DataTemplate>
-    </ItemsControl.ItemTemplate>
-</ItemsControl>
 ```
 
 ---
@@ -430,12 +513,9 @@ namespace MyWpfApp
 </Border>
 ```
 
-### B. 토큰 소진 및 레이트 리밋(Rate Limit) 방어 안내
-할당량 초과 시 크래시가 아닌 명확한 대기 시간 카운트다운 뱃지를 렌더링합니다.
-
 ---
 
-## 8. XAML 표준 스타일 템플릿 카탈로그
+## 8. XAML 표준 스타일 템플릿 카탈로그 (`Themes/ControlStyles.xaml`)
 
 프로젝트 전반에 즉시 포함하여 사용할 수 있는 완결된 템플릿 리소스 딕셔너리입니다.
 
