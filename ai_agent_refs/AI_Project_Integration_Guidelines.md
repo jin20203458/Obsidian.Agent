@@ -21,7 +21,7 @@ related:
 * **작성 규칙**: 시스템 프롬프트의 지시 준수율을 극대화하고 오염을 방지하기 위해 **[AI_Prompt_Engineering_Guidelines.md](./AI_Prompt_Engineering_Guidelines.md)의 핵심 원칙(XML 태그 경계 격리, Junk 토큰 배제, 긍정 프레이밍, 직교성 분리)**을 준수하며 다음 불변식을 적용합니다:
   - **Style 1 고밀도 화살표 매핑 (`Keywords -> Path`)**: 자연어 상투어를 배제하고, 핵심 엔티티 키워드 목록과 파일 경로를 `->`로 직결하는 High-SNR 시맨틱 인덱스 구조를 적용합니다. (토큰 바이트 ~20% 절감, 어텐션 헤드의 코사인 유사도 매칭 최적화).
   - **경로 이식성 (Path Portability)**: 모든 파일 및 문서 참조는 저장소 루트 또는 형제 저장소 기준의 OS/CI 독립적인 **상대 경로(`../Obsidian.Agent/`, `../../../Users/user/...`)**로만 구성합니다.
-  - **핑크 엘리펀트 효과 배제 (Positive Actionable Framing)**: 금지어 중심의 부정 지시문(~하지 마라, NEVER, 금지)은 모델의 어텐션을 금지 대상 토큰에 집중시켜 역효과(Pink Elephant Problem)를 초래하므로, 에이전트가 "대신 무엇을 해야 하는지(What to do instead)"를 명확한 **긍정적 실행 지시(Affirmative Instructions)**로 작성합니다.
+  - **불변식 금지선과 긍정 대안 결합 (Bounded Invariant Fences & Positive Pairing)**: 모호한 부정("환각하지 마라", "실수 금지")은 모델 어텐션을 금지 대상에 집중시켜 역효과(Pink Elephant Problem)를 초래하므로 배제합니다. 반면 시스템 크래시나 정합성 파괴를 막는 치명적 안티패턴은 `NEVER`/`금지` 형태의 **유한하고(3~5개 이내) 구체적인 불변식 경계선(Hard Guardrails)**으로 선언하되, 반드시 **대체할 긍정적 실행 대안(What to do instead)**을 한 쌍으로 결합하여 명시합니다 (예: `NEVER block synchronously; use async/await end-to-end`, `NEVER use Obsidian wikilinks; use standard Markdown links (.md)`).
   - **CLI 명령어 구조화 (Structured CLI Commands)**: 복합 테스트 스위트의 경우 단일 긴 줄 대신 계층형 서브 불렛을 적용하여 Fast QA 필터와 격리 옵션을 에이전트가 기계적으로 오인 없이 파싱하도록 구성합니다.
 * **표준 구조 및 5대 필수 태그**:
   1. **`<project_philosophy>`**: 프로젝트 핵심 미션 및 아키텍처 설계 지향점 (`Focus:` 단일 라인으로 고밀도 선언)
