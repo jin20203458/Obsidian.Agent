@@ -181,7 +181,7 @@ gantt
 ## 7. [Phase 3] AI 자율 헌터 ReAct 루프 및 3대 LLM 통신 아키텍처 실측 벤치마크
 
 ### A. 실험 목적 및 통제 조건
-* **실험 목적**: C# `AutonomousHunterAgent`가 의심 프로세스 동결 상태에서 Gemini LLM 및 로컬 포렌식 도구를 연동하여 침해 조사를 수행하고 최종 처분(`ACTION_KILL`)을 집행하는 과정에서, 3대 LLM 통신 아키텍처 패러다임의 실시간 성능 및 신뢰성을 비교 검증.
+* **실험 목적**: C# [`AutonomousHunterAgent.cs`](../../../phalanx-edr/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs)가 의심 프로세스 동결 상태에서 Gemini LLM 및 로컬 포렌식 도구를 연동하여 침해 조사를 수행하고 최종 처분(`ACTION_KILL`)을 집행하는 과정에서, 3대 LLM 통신 아키텍처 패러다임의 실시간 성능 및 신뢰성을 비교 검증.
 * **실험 환경**:
   * **타깃 모델**: Google Cloud Vertex AI `gemini-3.7-flash` (`global` 엔드포인트)
   * **인증 인프라**: Google Cloud Service Account (`grc0-494913`), OAuth 2.0 Bearer Token 통신
@@ -236,7 +236,7 @@ gantt
 
 #### 4. 클라우드 API 호출 한도(HTTP 429) 및 복원력 (Resilience)
 * 3대 방식 공통으로 고빈도 연속 요청(간격 250ms) 시 Google Cloud Vertex AI 프리뷰 티어의 분당 요청 수(RPM) 제한에 의해 `HTTP 429 RESOURCE_EXHAUSTED` 에러 발생 확인.
-* **대응**: `GeminiRestClient.cs`에 시도별 독립 타임아웃(25초) 및 지수 백오프(2.5초, 5.0초) 자동 재시도 로직을 탑재하여 일시적 쿼터 고갈 상황에서의 복원력 확보.
+* **대응**: [`GeminiRestClient.cs`](../../../phalanx-edr/src/Phalanx.Cockpit/Agent/Gemini/GeminiRestClient.cs)에 시도별 독립 타임아웃(25초) 및 지수 백오프(2.5초, 5.0초) 자동 재시도 로직을 탑재하여 일시적 쿼터 고갈 상황에서의 복원력 확보.
 
 ### D. 최종 아키텍처 채택 결론
 실측 데이터(Ground Truth)에 기반하여 Phalanx EDR의 AI 수사 파이프라인은 단일 WAN 왕복 지연시간 최소화, 완전한 감사 추적(XAI) 확보, C++ 커널 기계어 열거형 연동성을 충족하는 **[방식 1: One-Shot ReAct JSON Mode + LlmJsonParser + C# 로컬 체이닝]**을 프로덕션 표준 아키텍처로 채택.
@@ -250,7 +250,7 @@ gantt
 * **실험 환경**:
   * 타깃 모델: Google Cloud Vertex AI `gemini-3.7-flash` (`global` 엔드포인트)
   * 인증 인프라: Google Cloud Service Account OAuth 2.0 Bearer Token (로컬 클린룸 Config 연동)
-  * 실행 단위 테스트: `AutonomousHunterAgentTests.TestLive_MultiScenario_AverageTurnAndLatencyBenchmark`
+  * 실행 단위 테스트: [`AutonomousHunterAgentTests.cs`](../../../phalanx-edr/tests/Phalanx.Agent.Tests/AutonomousHunterAgentTests.cs) (`TestLive_MultiScenario_AverageTurnAndLatencyBenchmark`)
 
 ### B. 10대 실무 시나리오 종합 실측 결과표 (Ground Truth)
 
@@ -353,7 +353,3 @@ gantt
 ### D. 기술적 의의
 * **단일 책임 원칙(SRP) 준수**: 디스크 정밀 포렌식은 `FileInspectionTool`, 윈도우 구성 검사는 `RegistryInspectionTool`, 인메모리 아티팩트는 `ProcessMemoryScanTool`이 전담하도록 설계 분리하여 각 도구의 신뢰성과 단위 검증성을 극대화.
 * **오탐 저항성 보존**: 회피 공격을 잡기 위해 임계치를 무차별적으로 낮추는 편향을 배제하고, 공격 특징(UTR #39 자모 치환, 비표준 디렉터리 시스템 라이브러리 존재, 레지스트리 CLSID 스크립틀릿)을 정밀 핀포인트로 식별함으로써 **정상 업무 오탐 0건(Precision 100%)**을 완벽하게 수호.
-
-
-
-

@@ -55,8 +55,8 @@ flowchart TD
   * 1턴 조기 판결(One-Shot Guess) 숏컷을 원천 차단하고, LLM이 도구 실행 결과를 실제로 관찰(Observation)한 후 결론을 내리도록 대화 히스토리(`List<Content>`) 핑퐁을 유지합니다.
 * **세이프티 워치독 SLA 계약 및 레이스 컨디션 방어**:
   * C++ `SafetyWatchdog`는 기본 10초(10,000ms) 안전 타임아웃을 적용하며, C# 오프라인 결정론적 수사 엔진(실측 23.1ms) 동작 시에는 타임아웃 연장 없이 기본 10초 내에 즉시 완결되어 데드락 복구를 보장합니다 (C++ 로컬 룰 엔진은 0.354μs 만에 사전 선제 조치 완료).
-  * 외부 LLM(Gemini) 심층 수사 진입 시 다중 왕복 통신 지연을 수용하기 위해 즉시 1회성 `ACTION_EXTEND_TIMEOUT`(+50,000ms) 티켓을 선제 발송하여 기본 프로필 기준 총 60초 예산을 확보합니다 ([SafetyWatchdog.h:55](../../../phalanx-edr/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h#L55), [AutonomousHunterAgent.cs:500-516](../../../phalanx-edr/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs#L500-L516)).
-  * C++ 워치독 자동 동결 해제(Auto-Resume)와의 데드락/좀비 프로세스 레이스 컨디션을 원천 차단하기 위해 C# 상위 타임아웃 CTS는 **50초(50,000ms, 관제 설정에서 동적 조절 가능)**로 설정하여 워치독 만료 10초 전 안전 마진을 보장합니다 ([troubleshooting/phalanx.md#L26](../../troubleshooting/phalanx.md#L26)).
+  * 외부 LLM(Gemini) 심층 수사 진입 시 다중 왕복 통신 지연을 수용하기 위해 즉시 1회성 `ACTION_EXTEND_TIMEOUT`(+50,000ms) 티켓을 선제 발송하여 기본 프로필 기준 총 60초 예산을 확보합니다 ([SafetyWatchdog.h](../../../phalanx-edr/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h), [AutonomousHunterAgent.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs)).
+  * C++ 워치독 자동 동결 해제(Auto-Resume)와의 데드락/좀비 프로세스 레이스 컨디션을 원천 차단하기 위해 C# 상위 타임아웃 CTS는 **50초(50,000ms, 관제 설정에서 동적 조절 가능)**로 설정하여 워치독 만료 10초 전 안전 마진을 보장합니다 ([troubleshooting/phalanx.md](../../troubleshooting/phalanx.md)).
 * **루프 한계 도달 시 Fail-Secure 정책**:
   * 최대 5턴(`MaxSteps = 5`) 소진 시까지 결론이 도출되지 않을 경우, 선제 동결된 회색지대 타깃을 방치하지 않고 즉시 사살(`ACTION_KILL`) 격리를 집행하여 시스템 안전을 최우선 보장합니다.
 * **도구 예외 방어 및 자가 치유(Self-Correction)**:
