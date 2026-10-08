@@ -13,9 +13,12 @@ related:
 ## 1. 파일 및 디렉토리 명명 규칙 (Naming Conventions)
 에이전트의 터미널 도구, 스크립트 파싱 및 크로스 플랫폼(OS) 호환성을 위해 다음 규칙을 엄격히 적용합니다.
 
-* **영문 및 스네이크/카멜 케이스 사용:** 모든 파일명과 폴더명은 순수 영문(ASCII) 및 snake_case/PascalCase로만 구성합니다.
-  * [Bad] `기타 메모/엔터티 종류.md` (공백/비ASCII 포함)
-  * [Good] `memo/entity_types.md` (ASCII snake_case)
+* **영문 및 표준 케이스 규칙 (ASCII only, zero spaces):** 모든 경로는 공백이 없는 순수 영문(ASCII)으로 작성하며 디렉토리 목적에 따라 다음 표준 케이스를 적용합니다:
+  * **최상위 지침서 (`ai_agent_refs/`)**: 단어 첫 글자 대문자와 언더스코어가 결합된 `Title_Snake_Case.md`를 사용합니다 (예: `Agent_Runtime_Operations_Protocol.md`, `Knowledge_Base_Authoring_Guidelines.md`).
+  * **프로젝트 문서 및 런북 (`<Project>/docs/`, `troubleshooting/`, `memo/`)**: 소문자 `snake_case.md`를 사용합니다 (예: `01_system_architecture.md`, `phalanx.md`, `entity_types.md`).
+  * **프로젝트 폴더**: 공식 프로젝트 고유명(Canonical Names)을 유지합니다 (예: `Phalanx/`, `LLVM/`, `GRC/`, `MundusVivens/`).
+  * [Bad] `기타 메모/엔터티 종류.md` (공백/비ASCII 포함), `AgentRuntimeProtocol.md` (언더스코어 누락)
+  * [Good] `memo/entity_types.md` (ASCII snake_case), `ai_agent_refs/Agent_Runtime_Operations_Protocol.md` (Title_Snake_Case)
 
 ## 2. 필수 YAML Frontmatter (AI Metadata Standard)
 모든 마크다운 파일의 최상단에는 반드시 **에이전트 지식 식별 및 탐색(Progressive Disclosure)에 필요한 최소 메타데이터**인 `description`과 `related` 두 가지 속성만을 유지합니다. 이는 불필요한 토큰 소모를 방지하고 단일 제목(H1) 원칙을 유지합니다.
