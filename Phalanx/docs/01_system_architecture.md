@@ -19,15 +19,15 @@ Phalanx는 불필요한 다계층 복잡성을 배제하고, **C++ 네이티브 
 ```mermaid
 flowchart TD
     subgraph KERNEL ["Windows OS Kernel Layer"]
-        ETW_Proc["Microsoft-Windows-Kernel-Process"]
-        ETW_Net["Microsoft-Windows-Kernel-Network"]
-        ETW_Img["Microsoft-Windows-Kernel-Image"]
+        ETW_Proc["Microsoft-Windows-Kernel-Process (실시간 구독)"]
+        ETW_Net["Microsoft-Windows-Kernel-Network (proto 규격 확장 대기)"]
+        ETW_Img["Microsoft-Windows-Kernel-Image (proto 규격 확장 대기)"]
     end
 
     subgraph CPP_ENGINE ["Layer 1: C++20 Native EDR Sensor (Phalanx.Sensor)"]
         ETW_Proc --> Krabs["krabs-etw Session Manager"]
-        ETW_Net --> Krabs
-        ETW_Img --> Krabs
+        ETW_Net -.->|"규격 확장"| Krabs
+        ETW_Img -.->|"규격 확장"| Krabs
         
         Krabs --> ProcTree["In-Memory Process Tree DAG (O(1) Hash Map)"]
         ProcTree --> LocalRules{"Local Rule Engine (< 100μs / 354ns)"}
@@ -70,7 +70,7 @@ flowchart TD
 | **Layer 1** | **인메모리 프로세스 트리** | [ProcessTree.h](../../../phalanx-edr/src/Phalanx.Sensor/Process/ProcessTree.h) | `std::unordered_map` 기반 O(1) DAG 유지, 족보 역추적 0.436μs |
 | **Layer 1** | **초고속 로컬 룰 엔진** | [LocalRuleEngine.h](../../../phalanx-edr/src/Phalanx.Sensor/Rules/LocalRuleEngine.h) | 비할당 `string_view` 기반 0.354μs (초당 257만 건) 결정론적 룰 평가 |
 | **Layer 1** | **프로세스 제어 액추에이터** | [ProcessActuator.h](../../../phalanx-edr/src/Phalanx.Sensor/Actuator/ProcessActuator.h) | 0.1ms 현장 사살(`TerminateProcess`) 및 24μs 원자적 동결(`NtSuspendProcess`) |
-| **Layer 1** | **세이프티 워치독** | [SafetyWatchdog.h](../../../phalanx-edr/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h) | 기본 10초 타임아웃, AI 수사 시 +50초 1회 연장 가드, 만료 시 자동 복구 |
+| **Layer 1** | **세이프티 워치독** | [SafetyWatchdog.h](../../../phalanx-edr/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h) | 기본 10초 타임아웃, AI 수사 시 +50초 1회 연장 가드 (관제 설정 동적 조절 및 재기동 연동), 만료 시 자동 복구 |
 | **Layer 1** | **비동기 gRPC 클라이언트** | [GrpcStreamClient.h](../../../phalanx-edr/src/Phalanx.Sensor/Ipc/GrpcStreamClient.h) | `asio-grpc` 기반 단방향 텔레메트리 스트리밍 및 대응 명령 수신 |
 | **Layer 2** | **gRPC 수신 서비스** | [PhalanxGrpcService.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Services/PhalanxGrpcService.cs) | Kestrel HTTP/2 기반 텔레메트리 배치 수신 및 양방향 대응 명령 스트림 |
 | **Layer 2** | **CQRS 트리 프로젝션** | [ProcessTreeProjectionManager.cs](../../../phalanx-edr/src/Phalanx.Cockpit/CQRS/ProcessTreeProjectionManager.cs) | C++ 덤프 및 델타 이벤트 기반 C# 로컬 RAM `FlatNodeList` 가상화 트리 유지 (O(K) 슬라이스 갱신, 0초 족보 조회) |
@@ -120,7 +120,7 @@ flowchart LR
 * **센서의 3대 전담 스레드 구성**:
   1. **ETW 콜백 및 실시간 룰 집행 스레드**: 유저모드 ETW 수집, 0.436μs 족보 탐색, 0.354μs 로컬 룰 판정, 24μs 원자적 동결 집행 및 큐 `Push`.
   2. **asio-grpc I/O 및 100Hz 스트리밍 스레드**: 10ms 주기 `SwapAndFlush`, `TelemetryBatch` 직렬화, HTTP/2 양방향 스트리밍 송수신.
-  3. **SafetyWatchdog 백그라운드 감시 스레드**: 200ms 주기(5Hz) 만료 시한 검사 루프, 데드락 방지 10s/50s 타이머 관리 및 만료 시 자동 복구(Auto-Resume).
+  3. **SafetyWatchdog 백그라운드 감시 스레드**: 200ms 주기(5Hz) 만료 시한 검사 루프, 데드락 방지 기본 10s/50s(관제 설정 동적 조절 지원) 타이머 관리 및 만료 시 자동 복구(Auto-Resume).
 * **상세 구현 참조**: [DoubleBufferedSwapQueue.h](../../../phalanx-edr/src/Phalanx.Sensor/Queue/DoubleBufferedSwapQueue.h), [EtwKernelCollector.cpp](../../../phalanx-edr/src/Phalanx.Sensor/Collector/EtwKernelCollector.cpp), [GrpcStreamClient.cpp](../../../phalanx-edr/src/Phalanx.Sensor/Ipc/GrpcStreamClient.cpp)
 
 ### B. 인메모리 프로세스 트리(DAG) 및 로컬 룰 엔진
@@ -133,7 +133,7 @@ flowchart LR
   * 50,000회 연속 평가 실측 결과 **평균 0.354μs (초당 257만 건 처리, P99 0.7μs)**를 기록하여 요구 기준(100μs) 대비 280배 고속 판정을 달성했습니다.
 * **이원화 즉각 조치 (Dual Mitigation Actuator / [ProcessActuator.h](../../../phalanx-edr/src/Phalanx.Sensor/Actuator/ProcessActuator.h))**:
   1. **고신뢰도 악성 사살 (Immediate Kill, 0.1ms)**: 볼륨 섀도 복사본 삭제(`vssadmin.exe delete shadows`) 등 확정적 악성 행위 감지 시 `TerminateProcess`를 현장에서 즉각 집행합니다 (`is_terminated = true`).
-  2. **회색지대 선제 동결 (Atomic Suspend, 24μs)**: 오피스/브라우저의 스크립트 실행기 스폰 등 LOLBAS 행위 감지 시 `ntdll!NtSuspendProcess`를 동적 호출하여 **24~27μs** 만에 프로세스 전체를 원자적으로 동결합니다. 타깃 RAM을 보존한 후 세이프티 워치독(10초)을 가동하고 C# AI 관제기에 수사를 의뢰합니다 (`is_suspended = true`).
+  2. **회색지대 선제 동결 (Atomic Suspend, 24μs)**: 오피스/브라우저의 스크립트 실행기 스폰 등 LOLBAS 행위 감지 시 `ntdll!NtSuspendProcess`를 동적 호출하여 **24~27μs** 만에 프로세스 전체를 원자적으로 동결합니다. 타깃 RAM을 보존한 후 세이프티 워치독(기본 10초)을 가동하고 C# AI 관제기에 수사를 의뢰합니다 (`is_suspended = true`).
 
 ---
 
@@ -146,7 +146,7 @@ sequenceDiagram
     autonumber
     participant Kernel as "Windows OS 커널"
     participant Sensor as "C++ Sensor (LocalRuleEngine)"
-    participant Watchdog as "SafetyWatchdog (10s/50s)"
+    participant Watchdog as "SafetyWatchdog (기본 10s/50s)"
     participant Grpc as "gRPC 스트림 (HTTP/2)"
     participant Cockpit as "C# Cockpit (ProcessTree CQRS)"
     participant AI as "Autonomous Hunter (Gemini 3.7 Flash)"
@@ -154,7 +154,7 @@ sequenceDiagram
     Kernel->>Sensor: ProcessStart 이벤트 (winword.exe ➔ powershell.exe)
     Note over Sensor: 로컬 룰 엔진 평가 (0.354μs) ➔ 회색지대 위협 판정
     Sensor->>Kernel: ntdll!NtSuspendProcess (24μs 원자적 동결 집행)
-    Sensor->>Watchdog: RegisterSuspended(PID, 10,000ms 기본 타임아웃 등록)
+    Sensor->>Watchdog: RegisterSuspended(PID, 기본 10,000ms 타임아웃 등록)
     Sensor->>Grpc: StreamTelemetry (ProcessEvent: is_suspended=true)
 
     Grpc->>Cockpit: 델타 이벤트 수신 및 CQRS 로컬 메모리 노드 투영
@@ -164,7 +164,7 @@ sequenceDiagram
         Note over AI, Grpc: [SLA 연장] LLM 심층 수사 진입 시 선제 예산 확보
         AI->>Grpc: MitigationCommand (ACTION_EXTEND_TIMEOUT, +50초)
         Grpc->>Sensor: 명령 수신 ➔ Watchdog.ExtendTimeout(PID, 50,000ms)
-        Note over Watchdog: 만료 시한 60초로 갱신 (1회 한정 연장 가드 작동)
+        Note over Watchdog: 기본 프로필 기준 60초 만료 시한 갱신 (1회 한정 연장 가드)
     end
 
     rect rgb(20, 40, 30)

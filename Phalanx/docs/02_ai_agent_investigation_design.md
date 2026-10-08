@@ -55,8 +55,8 @@ flowchart TD
   * 1턴 조기 판결(One-Shot Guess) 숏컷을 원천 차단하고, LLM이 도구 실행 결과를 실제로 관찰(Observation)한 후 결론을 내리도록 대화 히스토리(`List<Content>`) 핑퐁을 유지합니다.
 * **세이프티 워치독 SLA 계약 및 레이스 컨디션 방어**:
   * C++ `SafetyWatchdog`는 기본 10초(10,000ms) 안전 타임아웃을 적용하며, C# 오프라인 결정론적 수사 엔진(실측 23.1ms) 동작 시에는 타임아웃 연장 없이 기본 10초 내에 즉시 완결되어 데드락 복구를 보장합니다 (C++ 로컬 룰 엔진은 0.354μs 만에 사전 선제 조치 완료).
-  * 외부 LLM(Gemini) 심층 수사 진입 시 다중 왕복 통신 지연을 수용하기 위해 즉시 1회성 `ACTION_EXTEND_TIMEOUT`(+50,000ms) 티켓을 선제 발송하여 총 60초 예산을 확보합니다 ([SafetyWatchdog.h:55](../../../phalanx-edr/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h#L55), [AutonomousHunterAgent.cs:465-475](../../../phalanx-edr/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs#L465-L475)).
-  * C++ 워치독 자동 동결 해제(Auto-Resume)와의 데드락/좀비 프로세스 레이스 컨디션을 원천 차단하기 위해 C# 상위 타임아웃 CTS는 **50초(50,000ms)**로 설정하여 워치독 만료 10초 전 안전 마진을 보장합니다 ([troubleshooting/phalanx.md#L26](../../troubleshooting/phalanx.md#L26)).
+  * 외부 LLM(Gemini) 심층 수사 진입 시 다중 왕복 통신 지연을 수용하기 위해 즉시 1회성 `ACTION_EXTEND_TIMEOUT`(+50,000ms) 티켓을 선제 발송하여 기본 프로필 기준 총 60초 예산을 확보합니다 ([SafetyWatchdog.h:55](../../../phalanx-edr/src/Phalanx.Sensor/Actuator/SafetyWatchdog.h#L55), [AutonomousHunterAgent.cs:500-516](../../../phalanx-edr/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs#L500-L516)).
+  * C++ 워치독 자동 동결 해제(Auto-Resume)와의 데드락/좀비 프로세스 레이스 컨디션을 원천 차단하기 위해 C# 상위 타임아웃 CTS는 **50초(50,000ms, 관제 설정에서 동적 조절 가능)**로 설정하여 워치독 만료 10초 전 안전 마진을 보장합니다 ([troubleshooting/phalanx.md#L26](../../troubleshooting/phalanx.md#L26)).
 * **루프 한계 도달 시 Fail-Secure 정책**:
   * 최대 5턴(`MaxSteps = 5`) 소진 시까지 결론이 도출되지 않을 경우, 선제 동결된 회색지대 타깃을 방치하지 않고 즉시 사살(`ACTION_KILL`) 격리를 집행하여 시스템 안전을 최우선 보장합니다.
 * **도구 예외 방어 및 자가 치유(Self-Correction)**:
@@ -79,7 +79,7 @@ flowchart TD
 | `RegistryInspectionTool` | `string registryKey` | 윈도우 64비트 레지스트리(CLSID, InprocServer32, ScriptletURL, Run/RunOnce) 간접 실행(T1218.010) 및 COM 하이재킹(T1546.015) 검증 | 간접 실행/하이재킹 여부, 추출 C2 URL/IP, 복합 이상 점수 | [RegistryInspectionTool.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Tools/RegistryInspectionTool.cs) |
 
 > **설계 원칙 및 구현 완료 상태 (Implementation Status)**:
-> * 본 문서는 에이전트와 도구 간의 상위 인터페이스 규격을 정의하며, **7대 OS 심층 포렌식 도구**는 Phase 3 및 Phase 5에서 전원 독립 구현 및 단위 검증(`InvestigationToolsTests`, `FileInspectionToolTests`, `RegistryInspectionToolTests`, `ProcessMemoryScanToolTests`, 총 85개 단위 테스트 전원 통과, Exit Code 0)이 완료되었습니다.
+> * 본 문서는 에이전트와 도구 간의 상위 인터페이스 규격을 정의하며, **7대 OS 심층 포렌식 도구**는 Phase 3 및 Phase 5에서 전원 독립 구현 및 단위 검증(`InvestigationToolsTests`, `FileInspectionToolTests`, `RegistryInspectionToolTests`, `ProcessMemoryScanToolTests`, `Phalanx.Agent.Tests` 총 170개 단위 테스트 전원 통과, Exit Code 0)이 완료되었습니다.
 > * 각 도구는 다단계 디코딩 재귀 종료 조건(최대 5회, 512KB 상한 Zip Bomb 방어), `ReadProcessMemory` 기반 VAD 스캔 및 RAII 모듈 스냅샷, 로컬 위협 DB 캐시, WFP 방화벽 로컬호스트 차단 방지 가드, UTR #39 Confusable 스켈레톤 매핑, 64비트 레지스트리 뷰 조회, 예약 DLL 검색 순서 하이재킹 검증 체계를 갖추고 있습니다.
 > * **추론 레이턴시 특성**: 실측 10대 실무 엔터프라이즈 스트레스 벤치마크 기준 평균 수사 완결 시간은 **38ms**에 불과하며, 외부 LLM(Gemini) 연동 시에도 2.4턴 기준 약 12.6초(C# 상위 타임아웃 50초 SLA 예산 내 안전 완결) 내에 완결됩니다.
 
