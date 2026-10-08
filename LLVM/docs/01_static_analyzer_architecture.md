@@ -217,8 +217,8 @@ cmake -S llvm -B build `
   -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra" `
   -DCMAKE_BUILD_TYPE=Release `
   -DLLVM_ENABLE_Z3_SOLVER=ON `
-  -DZ3_INCLUDE_DIR="C:/Users/user/Documents/GitHub/llvm-project/z3/include" `
-  -DZ3_LIBRARIES="C:/Users/user/Documents/GitHub/llvm-project/z3/bin/libz3.lib"
+  -DZ3_INCLUDE_DIR="${PWD}/z3/include" `
+  -DZ3_LIBRARIES="${PWD}/z3/bin/libz3.lib"
 
 # 2. 증분 빌드 타겟 실행 (clang-tidy 또는 clang 단일 타겟)
 cmake --build .\build --config Release --target clang-tidy
