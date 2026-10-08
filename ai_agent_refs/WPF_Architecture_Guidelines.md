@@ -775,6 +775,8 @@ private async Task ExecuteCriticalActionAsync()
    * UI 스레드에서 `.Result`, `.Wait()`, `.GetAwaiter().GetResult()` 호출 금지 (영구 데드락 유발).
 6. **[금지] 이벤트 구독 미해제 (메모리 누수)**:
    * 서비스 이벤트를 구독한 뷰모델은 반드시 `ICleanup`을 구현하고 소멸 시 `-=`로 구독을 해제해야 합니다.
+7. **[금지] 서비스 로케이터(`App.Current.Services`) 직접 접근**:
+   * 뷰모델 내부에서 `App.Current`나 정적 서비스 프로바이더를 직접 호출하여 의존성을 꺼내는 행위 금지. 모든 필수 의존성과 자식 뷰모델 팩토리는 생성자 매개변수를 통해 주입받아야 단위 테스트 격리와 헤드리스 실행이 보장됩니다.
 
 ---
 
