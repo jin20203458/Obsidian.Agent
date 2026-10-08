@@ -19,12 +19,13 @@ related:
 ### 1단계. 개발 저장소 내 에이전트 행동 강령 (`.agents/AGENTS.md`) 구성
 연동할 개발 프로젝트 저장소 루트에 `.agents/` 디렉토리를 생성하고 `AGENTS.md` 파일을 작성합니다.
 * **작성 규칙**: 시스템 프롬프트의 지시 준수율을 극대화하고 오염을 방지하기 위해 **[AI_Prompt_Engineering_Guidelines.md](./AI_Prompt_Engineering_Guidelines.md)의 핵심 원칙(XML 태그 경계 격리, Junk 토큰 배제, 긍정 프레이밍, 직교성 분리)**을 준수하며 다음 불변식을 적용합니다:
-  - **Style 1 고밀도 화살표 매핑 (`Keywords -> Path`)**: 자연어 상투어(`If modifying...`, `When creating...`, `read ... before coding`)를 전면 배제하고, 핵심 엔티티 키워드 목록과 파일 경로를 `->`로 직결하는 High-SNR 시맨틱 인덱스 구조를 적용합니다. (토큰 바이트 ~20% 절감, 어텐션 헤드의 코사인 유사도 매칭 최적화).
-  - **경로 이식성 (Path Portability)**: 특정 호스트 환경에 종속된 절대 경로(`C:/Users/...`) 하드코딩을 영구 금지하고, 저장소 루트 또는 형제 저장소 기준의 OS/CI 독립적인 **상대 경로(`../Obsidian.Agent/`, `../../../Users/user/...`)**만을 사용합니다.
-  - **CLI 명령어 구조화 (Structured CLI Commands)**: 복합 테스트 스위트의 경우 단일 긴 줄 대신 계층형 서브 불렛을 적용하여 Fast QA 필터와 생략 시의 위험 경고(Warning)를 에이전트가 기계적으로 오인 없이 파싱하도록 구성합니다.
+  - **Style 1 고밀도 화살표 매핑 (`Keywords -> Path`)**: 자연어 상투어를 배제하고, 핵심 엔티티 키워드 목록과 파일 경로를 `->`로 직결하는 High-SNR 시맨틱 인덱스 구조를 적용합니다. (토큰 바이트 ~20% 절감, 어텐션 헤드의 코사인 유사도 매칭 최적화).
+  - **경로 이식성 (Path Portability)**: 모든 파일 및 문서 참조는 저장소 루트 또는 형제 저장소 기준의 OS/CI 독립적인 **상대 경로(`../Obsidian.Agent/`, `../../../Users/user/...`)**로만 구성합니다.
+  - **핑크 엘리펀트 효과 배제 (Positive Actionable Framing)**: 금지어 중심의 부정 지시문(~하지 마라, NEVER, 금지)은 모델의 어텐션을 금지 대상 토큰에 집중시켜 역효과(Pink Elephant Problem)를 초래하므로, 에이전트가 "대신 무엇을 해야 하는지(What to do instead)"를 명확한 **긍정적 실행 지시(Affirmative Instructions)**로 작성합니다.
+  - **CLI 명령어 구조화 (Structured CLI Commands)**: 복합 테스트 스위트의 경우 단일 긴 줄 대신 계층형 서브 불렛을 적용하여 Fast QA 필터와 격리 옵션을 에이전트가 기계적으로 오인 없이 파싱하도록 구성합니다.
 * **표준 구조 및 5대 필수 태그**:
-  1. **`<project_philosophy>`**: 프로젝트 핵심 미션 및 아키텍처 설계 지향점 (`Focus:` 단일 라인으로 압축, 과도한 부등호(`>`) 비교 사다리 지양)
-  2. **`<engineering_rules>`**: 언어별 코딩 규약, 메모리/동시성 모델, 기술적 제약조건 및 안티패턴 방지 (이모지 절대 금지)
+  1. **`<project_philosophy>`**: 프로젝트 핵심 미션 및 아키텍처 설계 지향점 (`Focus:` 단일 라인으로 고밀도 선언)
+  2. **`<engineering_rules>`**: 언어별 코딩 규약, 메모리/동시성 모델, 기술적 제약조건 (순수 텍스트 마크다운 서식 유지)
   3. **`<critical_rules>`**: 빌드 명령어, 계층형 Fast QA 테스트 필터, 실행 권한/자격증명 격리 및 상대 경로 강제
   4. **`<context_triggers>`**: Style 1 화살표 매핑 기반의 High-SNR 온디맨드(JIT) 지식베이스 로딩 게이트웨이 (2~6개 이내)
   5. **`<post_action>`**: 작업 완료 후 수행할 트러블슈팅 로깅, 사양서(SSOT) 동기화 및 링크 무결성 검증 규칙
@@ -38,16 +39,16 @@ related:
   <engineering_rules>
   - **Architecture**: [Core design patterns, modular boundaries, and dependency rules]
   - **Concurrency/Resource**: [Concurrency model, resource lifecycle (RAII/Dispose), anti-pattern prevention]
-  - **Formatting**: Strictly follow target file style and indentation. Zero decorative emojis.
+  - **Formatting**: Strictly follow target file style and indentation. Technical plain-text markdown only.
   </engineering_rules>
 
   <critical_rules>
   - **Build**: `<standard_build_command>`
   - **Test**:
     - Fast QA: `<fast_qa_unit_test_command>` (Enforce category/filter)
-    - Warning: NEVER omit filter during standard QA (triggers heavy integration suites / cloud API calls).
+    - Requirement: Always specify the fast QA filter to isolate local tests from long-running cloud suites.
     - Full-Chain: `<fullchain_test_script_command>`
-  - **Paths**: Use relative paths (`../Obsidian.Agent/`, etc.; zero hardcoded absolute Windows paths).
+  - **Paths**: Use relative paths exclusively (`../Obsidian.Agent/`, etc.).
   </critical_rules>
 
   <context_triggers>

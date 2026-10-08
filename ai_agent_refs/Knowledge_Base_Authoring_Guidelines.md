@@ -12,12 +12,12 @@ related:
 ## 1. 파일 및 디렉토리 명명 규칙 (Naming Conventions)
 에이전트의 터미널 도구, 스크립트 파싱 및 크로스 플랫폼(OS) 호환성을 위해 다음 규칙을 엄격히 적용합니다.
 
-* **영문 및 스네이크/카멜 케이스 사용:** 파일명과 폴더명에 한글이나 공백을 절대 사용하지 않습니다.
-  * [Bad] `잘못된 예시: 기타 메모/엔터티 종류.md`
-  * [Good] `올바른 예시: memo/entity_types.md`
+* **영문 및 스네이크/카멜 케이스 사용:** 모든 파일명과 폴더명은 순수 영문(ASCII) 및 snake_case/PascalCase로만 구성합니다.
+  * [Bad] `기타 메모/엔터티 종류.md` (공백/비ASCII 포함)
+  * [Good] `memo/entity_types.md` (ASCII snake_case)
 
 ## 2. 필수 YAML Frontmatter (AI Metadata Standard)
-모든 마크다운 파일의 최상단에는 반드시 **에이전트 지식 식별 및 탐색(Progressive Disclosure)에 필요한 최소 메타데이터**인 `description`과 `related` 두 가지 속성만을 유지합니다. 이는 불필요한 토큰 소모를 방지하고 H1 제목 중복 버그(DRY 위반)를 근본 차단합니다.
+모든 마크다운 파일의 최상단에는 반드시 **에이전트 지식 식별 및 탐색(Progressive Disclosure)에 필요한 최소 메타데이터**인 `description`과 `related` 두 가지 속성만을 유지합니다. 이는 불필요한 토큰 소모를 방지하고 단일 제목(H1) 원칙을 유지합니다.
 
 ```yaml
 ---
@@ -34,9 +34,9 @@ related:
 * **`related` (필수)**: 에이전트가 무분별한 전체 검색 대신 상대 경로 링킹을 통해 필요한 문서만 단계적으로 탐색(Progressive Disclosure)할 수 있도록 연관 문서의 상대 경로를 적어줍니다.
 
 ## 3. 링크 및 경로 작성 규칙 (Cross-Referencing)
-* **표준 마크다운 상대 경로 사용:** 옵시디언 고유의 위키링크(`[[문서명]]`) 대신, 에이전트와 GitHub 시스템이 모두 정확히 인식할 수 있는 표준 마크다운 링크 문법을 사용합니다.
+* **표준 마크다운 상대 경로 사용:** 모든 문서 간 교차 참조는 에이전트와 GitHub 시스템이 모두 정확히 인식할 수 있는 표준 상대 마크다운 링크(`.md`) 구문만을 일관되게 사용합니다.
   * [Bad] `[[entity_types]]`
-  * [Good] `[Entity Types](./memo/entity_types.md)`
+  * [Good] `[Entity Types](./memo/entity_types.md)` (상대 경로 마크다운 링크 표준)
 
 ## 4. 디렉토리 인덱싱 (Indexing)
 * 새로운 주요 프로젝트나 대형 폴더를 생성할 경우, 해당 폴더 최상단에 반드시 `README.md`를 작성하여 하위 문서들의 지도를 제공해야 합니다. 에이전트는 특정 프로젝트 진입 시 이 인덱스를 가장 먼저 읽도록 설계되었습니다.

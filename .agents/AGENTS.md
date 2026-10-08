@@ -4,9 +4,9 @@ Focus: Human-agent shared SSOT knowledge architecture, minimal context overhead,
 
 <engineering_rules>
 - **SSOT**: Every policy, workflow, and standard lives in exactly one canonical document. Reference via cross-links; never duplicate.
-- **Naming & Style**: ASCII only, zero spaces/non-ASCII. PascalCase for project folders (`Phalanx`, `GRC`) and core guidelines (`Agent_Runtime_Operations_Protocol.md`). Snake_case for docs and troubleshooting (`01_architecture.md`, `phalanx.md`). Technical markdown; zero decorative emojis.
+- **Naming & Style**: ASCII only, zero spaces/non-ASCII. PascalCase for project folders (`Phalanx`, `GRC`) and core guidelines (`Agent_Runtime_Operations_Protocol.md`). Snake_case for docs and troubleshooting (`01_architecture.md`, `phalanx.md`). Technical plain-text markdown formatting.
 - **Frontmatter**: Include YAML frontmatter with concise `description` and relative `related` links for progressive disclosure.
-- **Links & Navigation**: Use standard Markdown syntax (`.md`) exclusively; NEVER use Obsidian wikilinks (`[[...]]`). Traverse projects sequentially via `README.md` and frontmatter `related` links.
+- **Links & Navigation**: Use standard Markdown syntax (`.md`) exclusively with explicit file paths. Traverse projects sequentially via `README.md` and frontmatter `related` links.
 </engineering_rules>
 
 <critical_rules>
