@@ -183,11 +183,11 @@ public class StreamingNarrativeBuffer
             <TextBlock Text="위험 행위 승인 요청" FontWeight="Bold" Foreground="#F2F4F8" FontSize="15" />
         </StackPanel>
 
-        <TextBlock Text="에이전트가 악성 행위 차단을 위해 다음 프로세스의 강제 종료를 요청했습니다:"
+        <TextBlock Text="에이전트가 리소스 안정성 확보 및 제어를 위해 다음 대상의 실행/변경 승인을 요청했습니다:"
                    Foreground="#AAB2C0" TextWrapping="Wrap" Margin="0,0,0,12" />
 
         <Border Background="#13141C" Padding="12" CornerRadius="6" Margin="0,0,0,16">
-            <TextBlock Text="PID: 4920 (powershell.exe)&#x0a;Reason: C2 Reverse Shell Connection Attempt"
+            <TextBlock Text="Target: [Resource_or_Process_Name] (ID: 4920)&#x0a;Operation: Force Terminate / Critical State Modification"
                        FontFamily="Cascadia Code, Consolas" FontSize="12" Foreground="#EF4444" />
         </Border>
 
@@ -198,7 +198,7 @@ public class StreamingNarrativeBuffer
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Button Grid.Column="0" Content="거부 (Skip)" Style="{StaticResource SecondaryButtonStyle}" Command="{Binding RejectActionCommand}" />
-            <Button Grid.Column="2" Content="종료 승인 (Kill)" Style="{StaticResource DangerActionButtonStyle}" Command="{Binding ApproveActionCommand}" />
+            <Button Grid.Column="2" Content="실행 승인 (Execute)" Style="{StaticResource DangerActionButtonStyle}" Command="{Binding ApproveActionCommand}" />
         </Grid>
     </StackPanel>
 </Border>
@@ -231,7 +231,8 @@ public class StreamingNarrativeBuffer
                             UseAeroCaptionButtons="False" />
     </shell:WindowChrome.WindowChrome>
 
-    <!-- 최대화 시 모니터 경계 7px 잘림(Overshoot) 방지 스타일 -->
+    <!-- 최대화 시 모니터 경계 7px 잘림(Overshoot) 방지 스타일 (단일/동일 DPI 환경 기본값) -->
+    <!-- (참고: 서로 다른 DPI의 다중 모니터 환경에서 픽셀 단위 정밀 제어가 필요한 경우 WM_GETMINMAXINFO 윈도우 프로시저 훅을 통해 동적 마진을 산출할 수 있습니다.) -->
     <Window.Style>
         <Style TargetType="Window">
             <Setter Property="Padding" Value="0" />
@@ -260,7 +261,7 @@ public class StreamingNarrativeBuffer
                 </Grid.ColumnDefinitions>
 
                 <!-- 좌측 앱 브랜딩 -->
-                <TextBlock Grid.Column="0" Text="PHALANX EDR COCKPIT"
+                <TextBlock Grid.Column="0" Text="ENTERPRISE PRO WORKBENCH"
                            Foreground="#F2F4F8" FontWeight="Bold" FontSize="13"
                            VerticalAlignment="Center" />
 
@@ -413,8 +414,8 @@ namespace MyWpfApp
 
 클라우드 AI 서비스 장애나 네트워크 두절 시 사용자가 시스템 상태를 즉시 인지할 수 있도록 가시적 피드백을 제공합니다.
 
-### A. 오프라인 로컬 결정론적 폴백 배너 (Phalanx 검증)
-클라우드 LLM 응답 실패 시 23ms 오프라인 규칙 엔진으로 즉각 전환됨을 알리는 고정 상단 배너:
+### A. 오프라인 로컬 결정론적 폴백 배너 (Offline Local Deterministic Fallback)
+클라우드 LLM/AI 서비스 응답 실패 시 지연 없이 즉각 로컬 결정론적 규칙/캐시 엔진으로 안전 전환됨을 알리는 상단 고정 상태 배너:
 
 ```xml
 <Border Background="#7F3B00" BorderBrush="#F59E0B" BorderThickness="0,0,0,1"
@@ -422,7 +423,7 @@ namespace MyWpfApp
     <Grid>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
             <Border Width="8" Height="8" Background="#F59E0B" CornerRadius="4" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <TextBlock Text="LOCAL FALLBACK ACTIVE: 클라우드 LLM 연결 불가로 23ms 오프라인 결정론적 보안 규칙이 동작 중입니다."
+            <TextBlock Text="LOCAL FALLBACK ACTIVE: 클라우드 AI 서비스 연결 불가로 로컬 결정론적 규칙 엔진으로 전환되었습니다."
                        Foreground="#FDE68A" FontWeight="SemiBold" FontSize="12" />
         </StackPanel>
     </Grid>

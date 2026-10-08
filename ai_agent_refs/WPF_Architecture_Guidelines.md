@@ -80,11 +80,12 @@ ProjectRoot/
 
 `Microsoft.Extensions.DependencyInjection`을 표준 컨테이너로 사용하며, 서비스와 뷰모델의 수명주기를 엄격히 구분합니다.
 
-* **필수 NuGet 패키지 의존성**:
-  - `Microsoft.Extensions.Hosting` (Generic Host 및 호스트 수명주기 관리)
-  - `Microsoft.Extensions.DependencyInjection` (의존성 주입 컨테이너)
-  - `Microsoft.Extensions.Http` (`AddHttpClient` 팩토리 패턴 지원)
-  - `CommunityToolkit.Mvvm` (버전 8.3/8.4+ 소스 제너레이터)
+* **필수 및 권장 NuGet 패키지 의존성**:
+  - `Microsoft.Extensions.Hosting` (Generic Host 및 호스트 수명주기 관리 - 필수)
+  - `Microsoft.Extensions.DependencyInjection` (의존성 주입 컨테이너 - 필수)
+  - `Microsoft.Extensions.Http` (`AddHttpClient` 팩토리 패턴 지원 - 필수)
+  - `CommunityToolkit.Mvvm` (버전 8.3/8.4+ 소스 제너레이터 - 필수)
+  - `System.Reactive` (선택: Rx 기반 비동기 반응형 이벤트 스트리밍 파이프라인 구성 시 권장)
 
 ### A. 서비스 수명주기 원칙
 * **Singleton**: 통신 클라이언트(`HttpClient`, `GrpcChannel`), 전역 상태 저장소, 이벤트 중계자(`IMessenger`), 설정 관리자.
