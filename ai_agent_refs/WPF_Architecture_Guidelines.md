@@ -85,6 +85,9 @@ ProjectRoot/
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <ResourceDictionary>
+            <!-- 전역 컨버터 등록 (XamlParseException 원천 차단) -->
+            <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/PrimitiveTokens.xaml" />
                 <ResourceDictionary Source="Themes/DarkTheme.xaml" />
@@ -771,6 +774,14 @@ public partial class ConfirmDialogViewModel : ObservableObject, IDialogAware<boo
 
 대량의 이벤트가 유입될 때 `ObservableCollection`에 이벤트를 건별로 즉시 추가하면 UI 스레드가 락에 걸려 애플리케이션이 멈춥니다. 인메모리 버퍼와 주기적 일괄 플러시를 적용합니다.
 
+> [!CAUTION]
+> **[WPF 런타임 함정: `RangeObservableCollection` 사용 시 `NotSupportedException` 크래시 방어]**  
+> `ObservableCollection<T>`에 다수의 아이템을 한 번에 추가하기 위해 `NotifyCollectionChangedAction.Add`에 복수 아이템(`Count > 1`)을 전달하는 `RangeObservableCollection`을 나이브하게 사용할 경우, WPF 기본 `ListCollectionView`는 내부적으로 **`System.NotSupportedException: "Range actions are not supported."` 예외를 던지며 프로세스가 크래시**됩니다.  
+> 따라서 고성능 스트리밍에서는 다음 원칙을 준수해야 합니다:
+> 1. **배치 크기 튜닝**: 1회 틱당 배치 처리 수(`maxBatchSizePerTick`)를 16ms(60fps) 또는 33ms(30fps) 프레임 예산 내에서 UI 스레드 레이아웃 계산이 완료될 수 있는 적정 수량(예: 30~100건)으로 제한합니다.
+> 2. **슬라이딩 윈도우 트리밍 최적화**: O(N) `Array.Copy`가 반복되는 `RemoveAt(0)` 대신 링 버퍼(Circular Buffer) 구조를 채택하거나 임계값 초과 시 일괄 정리합니다.
+> 3. **대규모 데이터 가상화**: 초당 수만 건 이상의 극한 텔레메트리는 컬렉션 직접 바인딩 대신 인메모리 스토어와 페이징 가상화 뷰를 분리합니다.
+
 ```csharp
 using System;
 using System.Collections.Concurrent;
@@ -987,8 +998,8 @@ public partial class MainWindow : Window
         int cornerPreference = DWMWCP_ROUND;
         DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPreference, sizeof(int));
 
-        // Windows 11 22H2+ Mica 활성화 및 버퍼 투명화
-        if (Environment.OSVersion.Version.Build >= 22621)
+        // Windows 11 22H2+ Mica 활성화 및 버퍼 투명화 (Roslyn CA1416 호환 표준)
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621))
         {
             int backdropType = (int)DWM_SYSTEMBACKDROP_TYPE.DWMSBT_MAINWINDOW;
             DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, ref backdropType, sizeof(int));

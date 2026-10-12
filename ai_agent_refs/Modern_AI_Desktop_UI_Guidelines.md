@@ -163,6 +163,15 @@ public sealed class StreamingNarrativeBuffer : IDisposable
         _tokenChannel.Writer.TryWrite(token);
     }
 
+    /// <summary>
+    /// 사용자 요청 또는 에러 발생 시 버퍼를 즉시 비우고 렌더 루프를 강제 중단합니다.
+    /// </summary>
+    public void Abort()
+    {
+        _cts.Cancel();
+        while (_tokenChannel.Reader.TryRead(out _)) { /* 미출력 잔여 토큰 즉시 드레인 */ }
+    }
+
     private async Task ProcessTokenQueueAsync(CancellationToken cancellationToken)
     {
         var reader = _tokenChannel.Reader;
@@ -190,7 +199,7 @@ public sealed class StreamingNarrativeBuffer : IDisposable
         }
         catch (OperationCanceledException)
         {
-            // 화면 이탈 시 안전하게 루프 종료
+            // 화면 이탈 또는 Abort 호출 시 안전하게 루프 종료
         }
     }
 
@@ -201,6 +210,113 @@ public sealed class StreamingNarrativeBuffer : IDisposable
         _cts.Dispose();
     }
 }
+```
+
+### 생성 중단(Abort/Stop) 인터랙션 오케스트레이션 파이프라인
+사용자가 UI의 "생성 중단(Stop)" 버튼을 클릭했을 때 백엔드 AI 통신 태스크와 프론트엔드 UI 버퍼가 원자적으로 동시에 중단되어야 토큰 비용 낭비와 UI 잔류 출력을 방지할 수 있습니다.
+
+```csharp
+public partial class AiWorkbenchViewModel : ObservableObject
+{
+    private CancellationTokenSource? _generationCts;
+    private StreamingNarrativeBuffer? _narrativeBuffer;
+
+    [ObservableProperty] private bool _isGenerating;
+
+    [RelayCommand]
+    private async Task StartGenerationAsync(string prompt)
+    {
+        IsGenerating = true;
+        _generationCts = new CancellationTokenSource();
+        _narrativeBuffer = new StreamingNarrativeBuffer(chunk => AppendNarrative(chunk));
+
+        try
+        {
+            // 백엔드 AI 스트리밍 호출 (CancellationToken 전달)
+            await foreach (var token in _aiService.StreamGenerateAsync(prompt, _generationCts.Token))
+            {
+                _narrativeBuffer.PushToken(token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 취소 정상 처리
+        }
+        finally
+        {
+            IsGenerating = false;
+            _narrativeBuffer?.Dispose();
+        }
+    }
+
+    [RelayCommand]
+    private void StopGeneration()
+    {
+        // 1. 백엔드 HTTP/gRPC AI 스트리밍 즉각 취소 (토큰 과금 중단)
+        _generationCts?.Cancel();
+
+        // 2. UI 채널 버퍼 대기열 즉각 드레인 및 렌더 루프 중단
+        _narrativeBuffer?.Abort();
+
+        IsGenerating = false;
+    }
+}
+```
+
+### Markdown 증분 렌더링 전략 (Plain Text vs Rich Markdown)
+단순 `TextBlock`은 코드 펜스(```` ```csharp ````), 굵은 글씨(`**`), 인라인 코드(`` ` ``) 등 LLM의 마크다운 서사를 원시 문자열로만 노출하는 한계가 있습니다. 프로덕션 환경에서는 다음 렌더링 전략을 채택합니다:
+
+1. **토큰 단위 재파싱 금지**: 토큰 유입 시마다 전체 마크다운 문서를 통째로 AST 파싱하면 O(N^2) CPU 락이 발생합니다.
+2. **블록 단위 증분 렌더링**: 개행 문자(`\n\n`) 단위로 완성된 문단 및 코드 블록 단위로 마크다운 AST를 구성하고, 작성 중인 최신 블록만 인라인 스트리밍 텍스트로 합성합니다.
+3. **권장 오픈소스 바인딩**: 경량 WPF 마크다운 엔진인 `Markdig.Wpf` 또는 `MdXaml`을 사용하며, 렌더링 쓰로틀링(Throttling)을 결합하여 60fps 렌더 예산을 유지합니다.
+
+### 스트리밍 스마트 오토스크롤 Attached Behavior (`SmartAutoScrollBehavior`)
+텍스트가 늘어날 때 무조건 `ScrollToEnd()`를 호출하면 사용자가 이전 추론 과정을 읽으려고 위로 스크롤했을 때 강제로 바닥으로 끌어내려지는 **스크롤 하이재킹(Scroll Hijacking)**이 발생합니다. 사용자가 하단 부근에 머물러 있을 때만 자동 스크롤을 수행합니다.
+
+```csharp
+namespace MyWpfApp.Views.Controls;
+
+public static class ScrollViewerExtensions
+{
+    public static readonly DependencyProperty AutoScrollToBottomProperty =
+        DependencyProperty.RegisterAttached(
+            "AutoScrollToBottom",
+            typeof(bool),
+            typeof(ScrollViewerExtensions),
+            new PropertyMetadata(false, OnAutoScrollToBottomChanged));
+
+    public static void SetAutoScrollToBottom(DependencyObject obj, bool value) => obj.SetValue(AutoScrollToBottomProperty, value);
+    public static bool GetAutoScrollToBottom(DependencyObject obj) => (bool)obj.GetValue(AutoScrollToBottomProperty);
+
+    private static void OnAutoScrollToBottomChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is ScrollViewer sv && (bool)e.NewValue)
+        {
+            sv.ScrollChanged += (s, args) =>
+            {
+                // 내용 크기(ExtentHeight)가 증가했을 때만 판단
+                if (args.ExtentHeightChange > 0)
+                {
+                    // 사용자가 하단 허용 오차(24px) 이내에 머물러 있는 경우에만 최하단 스크롤 유지
+                    // 위로 스크롤하여 이전 서사를 읽는 중이면 스크롤 하이재킹 방지
+                    bool isAtBottom = sv.VerticalOffset >= (sv.ScrollableHeight - args.ExtentHeightChange - 24);
+                    if (isAtBottom)
+                    {
+                        sv.ScrollToEnd();
+                    }
+                }
+            };
+        }
+    }
+}
+```
+
+```xml
+<!-- XAML 사용처: ScrollViewer에 스마트 오토스크롤 활성화 -->
+<ScrollViewer controls:ScrollViewerExtensions.AutoScrollToBottom="True"
+              VerticalScrollBarVisibility="Auto">
+    <!-- 스트리밍 서사 뷰어 컨텐츠 -->
+</ScrollViewer>
 ```
 
 ---
@@ -255,7 +371,7 @@ public sealed class StreamingNarrativeBuffer : IDisposable
 클라우드 AI 서비스 장애나 네트워크 두절 시 사용자가 시스템 상태를 즉시 인지하고 안전하게 로컬 규칙 엔진으로 전환되도록 가시적 피드백을 제공합니다.
 
 ```xml
-<!-- 상단 고정 오프라인 알림 배너 -->
+<!-- 상단 고정 오프라인 알림 배너 (BoolToVis는 WPF_Architecture_Guidelines.md 규격에 따라 App.xaml에 등록된 전역 컨버터) -->
 <Border Background="#7F3B00" BorderBrush="{DynamicResource AccentWarningBrush}" BorderThickness="0,0,0,1"
         Padding="16,8" Visibility="{Binding IsOfflineFallbackActive, Converter={StaticResource BoolToVis}}">
     <Grid>

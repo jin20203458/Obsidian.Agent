@@ -1,5 +1,5 @@
 ---
-description: 2024-2026 학술 연구 및 빅테크(OpenAI, Anthropic, Google DeepMind) 공식 가이드 기반 AI 프롬프트 엔지니어링 통합 표준 지침서.
+description: 2024-2026 학술 연구 및 최신 프론티어 특화 모델(Gemini 3.8 Flash, Claude 5.5, GPT-6) 공식 가이드 기반 AI 프롬프트 엔지니어링 통합 표준 지침서.
 related:
   - ../README.md
   - ./Knowledge_Base_Authoring_Guidelines.md
@@ -9,11 +9,11 @@ related:
 # AI Prompt Engineering Guidelines
 
 > 
-> **근거**: 2024~2026년 최신 학술 논문 22편 및 Google DeepMind / Anthropic / OpenAI 공식 가이드라인 기반
-> **검증**: 전체 인용 출처 22건 웹 및 기술 문서 전수 검증 완료
-> **적용 범위**: 지식베이스 및 프로젝트 내 모든 AI 프롬프트 (MemoryManager, SessionArchitect, Lorebook, ReplySuggestion, StatusAPI, 에이전트 도구 정의 등 전 영역)
+> **근거**: 2024~2026년 최신 학술 논문 22편 및 Google DeepMind / Anthropic / OpenAI 2026 최신 플래그십 공식 가이드라인 기반
+> **검증**: 전체 인용 출처 22건 및 최신 프론티어 모델(Gemini 3.8 Flash, Claude 5.5, GPT-6) 웹/기술 문서 전수 검증 완료
+> **적용 범위**: 지식베이스 및 프로젝트 내 모든 AI 프롬프트 (MemoryManager, SessionArchitect, Lorebook, ReplySuggestion, StatusAPI, 브라우징/CDP 에이전트 도구 등 전 영역)
 
-본 문서는 AI 프롬프트를 설계, 작성, 검증, 유지보수할 때 준수해야 하는 모든 핵심 원칙, 안티패턴 회피법, 3단계 조립 수명주기 및 언어별 구현 패턴을 일원화한 통합 표준 가이드라인입니다.
+본 문서는 AI 프롬프트를 설계, 작성, 검증, 유지보수할 때 준수해야 하는 모든 핵심 원칙, 안티패턴 회피법, 3단계 조립 수명주기, 언어별 구현 패턴 및 2026 최신 특화 모델별 에이전트 실행 프로파일을 일원화한 통합 표준 가이드라인입니다.
 
 ---
 
@@ -157,17 +157,20 @@ LLM은 텍스트 추론 기반 산술 연산에서 2~15%의 체계적 오류를 
 ### 2.7 원칙 7: Temperature 및 Generation Config 최적화 (2026 표준 튜닝 가이드)
 최신 LLM 환경에서는 모델 아키텍처에 따라 Temperature 접근법을 엄격히 이원화해야 합니다.
 
-* **1. 추론형(Reasoning/Thinking) 모델 (OpenAI o1/o3, Claude 3.7 Thinking, Gemini 3 Thinking)**:
-  * **Temperature 수정 절대 금지**: 추론 모델은 내부 CoT 토큰 탐색이 자체 수렴하도록 설계되어 있어, 임의로 온도를 낮추거나 변경하면 루핑 에러 또는 성능 급락이 발생합니다.
-  * Claude 3.7 Sonnet의 Extended Thinking 활성화 시 API 레벨에서 `temperature: 1.0`이 필수로 강제됩니다.
-  * API 매개변수에서 `temperature`를 생략(`null` 전송)하거나 기본값(`1.0`)으로 고정하는 것이 필수입니다.
+* **1. 최신 추론형(Reasoning/Thinking) 모델 (Gemini 3.8 Flash, Claude 5.5, OpenAI o3/GPT-6)**:
+  * **Google Gemini 3.8 Flash & Gemini 3.8 Flash Cyber**:
+    - 레거시 샘플링 파라미터(`temperature`, `top_p`, `top_k`, `candidate_count`, `frequency_penalty`)가 전면 퇴출되었습니다. 추론 엔진의 자율적 탐색을 방해하므로 API 페이로드에서 해당 필드를 완전히 생략(Omit/null)해야 합니다.
+  * **Anthropic Claude 5.5 패밀리 (Claude Sonnet 5.5, Claude Opus 5.5)**:
+    - 기본 적응형 추론(Adaptive Thinking)이 적용되며, Extended Thinking 활성화 시 API 레벨에서 `temperature: 1.0`이 필수로 강제됩니다. 임의 변경 시 유효성 에러를 반환합니다.
+  * **OpenAI o3 & GPT-6 패밀리**:
+    - `temperature`를 수정하지 않고 기본값(`1.0`)으로 고정하거나 생략하는 것이 필수입니다.
 * **2. 일반/비추론형(Standard) 모델 (클래식 생성용)**:
-  * 2026년 프론티어 모델(GPT-4o, Claude 3.5 Sonnet, Gemini 2.0 Flash)은 기본 온도(1.0)에서도 높은 결정론성을 유지합니다.
+  * 2026년 프론티어 모델은 기본 온도(1.0)에서도 높은 결정론성을 유지합니다.
   * **획일적 저온도(0.0) 지양**: 무조건적인 0.0 설정은 표현 경직과 토큰 루핑(Degenerate loops)을 유발하므로, 정밀 스키마 추출 외에는 0.7~1.0 기본값을 유지합니다.
 
 | 과제 유형 | 권장 Temperature | 권장 Top-P | 비고 |
 | :--- | :--- | :--- | :--- |
-| **JSON / 정밀 코드 추출** | 0.0 ~ 0.2 | 0.1 ~ 0.5 | 스키마 준수율 및 문법 결정론성 극대화 |
+| **JSON / 정밀 코드 추출** | 0.0 ~ 0.2 | 0.1 ~ 0.5 | 스키마 준수율 및 문법 결정론성 극대화 (추론 모델 제외) |
 | **분류 / 상태 판정** | 0.1 ~ 0.3 | 0.8 | 재현 가능성 확보 |
 | **요약 / 문서 분석** | 0.5 ~ 0.7 | 0.9 | 사실 기반 정보 압축 및 문맥 유연성 |
 | **일반 Q&A / 복합 추론** | 0.7 ~ 1.0 (기본값) | 0.95 ~ 1.0 | 자연스러운 논리 전개 및 탐색력 유지 |
@@ -177,20 +180,24 @@ LLM은 텍스트 추론 기반 산술 연산에서 2~15%의 체계적 오류를 
 사고 과정 메커니즘이 내장된 모델에게는 **"어떻게 생각할 것인가(HOW)"를 지시하지 말고, "달성 목표(WHAT)"와 "검증 기준(Verification Criteria)"을 명확히 제시**해야 합니다.
 
 * **학술 및 산업 근거**:
-  * *Google 공식 가이드 (Gemini Thinking, 2026)*: Gemini 2.5/3 시리즈는 자체 Hidden Reasoning 토큰을 생성하므로 수동 CoT("단계별로 생각하라") 지시문은 연산력을 낭비하고 모델의 자연스러운 사고를 방해함.
-  * *OpenAI 공식 가이드 (o1/o3, 2026)*: 장황한 추론 예시나 사고 과정 개입은 모델의 자율적 탐색(Autonomous Search Tree)을 왜곡하는 Over-prompting 성능 저하를 초래함.
-  * *Anthropic 공식 가이드 (Claude 3.7 Sonnet Hybrid Reasoning, 2025-2026)*: "Steer the destination, not the path". 과정이 아닌 문제 정의, 제약 조건, 성공 판정 기준을 제공해야 함.
+  * *Google 공식 가이드 (Gemini 3.8 Flash, 2026)*: Gemini 3.8 시리즈는 자체 Hidden Reasoning 토큰을 생성하므로 수동 CoT("단계별로 생각하라") 지시문은 연산력을 낭비하고 모델의 자연스러운 사고를 방해함.
+  * *Anthropic 공식 가이드 (Claude 5.5 Family, 2026)*: "Steer the destination, not the path". 과정이 아닌 문제 정의, 제약 조건, 성공 판정 기준을 제공해야 함.
+  * *OpenAI 공식 가이드 (o3 / GPT-6, 2026)*: 장황한 추론 예시나 사고 과정 개입은 모델의 자율적 탐색(Autonomous Search Tree)을 왜곡하는 Over-prompting 성능 저하를 초래함.
 * **실전 규칙**:
   * **Zero-shot 우선 원칙**: 추론 모델에게는 장황한 Few-shot 대신, 명확한 목표와 제약 조건(Constraints)만 전달하는 것이 가장 높은 벤치마크 점수를 기록.
   * **수동 CoT 문구 전면 제거**: "단계별로 차근차근 생각하세요" 문구 완전 배제.
   * **검증 기준(Verification Criteria) 제시**: 사고 방식을 규정하는 대신, "최종 출력을 내놓기 전에 제약조건 A, B, C를 만족하는지 자체 검증하십시오"와 같은 검증 지침 부여.
-  * **API 단에서의 사고 예산 제어 (Thinking Budget)**:
-    - **Anthropic (Claude 3.7)**: `budget_tokens` 파라미터로 명시적 제어.
-      * 단순/경량 작업: 1,024 토큰
-      * 코딩/복합 논리: 4,096 ~ 8,192 토큰
-      * 시스템 아키텍처/심층 연구: 16,384+ 토큰
-    - **OpenAI (o1/o3)**: `reasoning_effort` (`low`, `medium`, `high`)
-    - **Google (Gemini 2.5/3)**: `thinking_level` (`minimal`, `low`, `medium`, `high`) 또는 `thinking_config`.
+  * **2026 최신 모델별 사고 예산 제어 (Thinking Budget & Level)**:
+    - **Google (Gemini 3.8 Flash / Cyber)**:
+      * `thinking_level` 파라미터 제어: `"LOW"` (단순 내비게이션/텍스트 추출), `"MEDIUM"` (기본값: 다단계 웹 탐색 및 코딩), `"HIGH"` (복합 트랜잭션/보안/심층 에이전트).
+      * *(주의: 레거시 3.7 시절의 `"MINIMAL"`은 폐기되었으므로 사용 금지).*
+    - **Anthropic (Claude Sonnet 5.5 / Opus 5.5)**:
+      * Adaptive Thinking 기본 지원 및 API 레벨 `budget_tokens` (1,024 ~ 128,000) 바운딩:
+        - 단순/경량 작업: 1,024 토큰
+        - 코딩/복합 논리: 4,096 ~ 8,192 토큰
+        - 시스템 아키텍처/심층 연구: 16,384+ 토큰
+    - **OpenAI (o3 / GPT-6 Astra & Sol)**:
+      * `reasoning_effort` (`"low"`, `"medium"`, `"high"`) 파라미터로 사고 수준 제어.
 
 ### 2.9 원칙 9: 프롬프트 캐싱(Prompt Caching / KV Cache) 아키텍처 및 정적 접두사 설계
 프롬프트의 물리적 배치는 단순한 어텐션 집중뿐 아니라 **API 비용 및 지연시간을 50~90% 절감하는 프롬프트 캐싱(KV Cache)**의 성패를 결정짓는 핵심 아키텍처 요소입니다.
@@ -268,6 +275,9 @@ LLM은 텍스트 추론 기반 산술 연산에서 2~15%의 체계적 오류를 
   * **4. 파라미터 바인딩 제약**: 인자의 유효 포맷(절대 경로, 정규식 등)과 기본값 유무를 엄격히 명시.
 * **도구 에러 피드백 자가 복구 (Tool Error Self-Healing)**:
   * 도구 호출이 실패(에러 코드 또는 예외 발생)했을 때, 에이전트에게 단순 실패 사실뿐 아니라 *"발생한 에러 메시지"*와 *"올바른 인자 재시도 가이드"*를 주입하여 모델이 자체 궤도 수정을 수행하도록 유도.
+* **Interleaved Thinking (`think` Tool) 실행 루프 (2026 표준)**:
+  * Anthropic Claude 5.5 및 최신 에이전틱 런타임에서 공인된 패턴으로, 도구 호출과 관찰(Observation) 사이에 모델이 중간 사고를 거칠 수 있도록 `think(thought: string)` 도구를 배치.
+  * 브라우저 상호작용 중 비동기 로딩 지연, 예상치 못한 모달 창, 요소 UID 변경 등의 이상 상태가 감지되었을 때, 맹목적인 재시도 대신 원인을 먼저 분석하고 회복(Recovery) 경로를 수립한 뒤 다음 액션을 취하도록 강제.
 
 ### 2.15 원칙 15: 대화 맥락 압축 및 상태 체크포인트 (Context Compaction & State Checkpointing)
 장기 멀티턴 에이전트 환경에서 무제한 대화 축적은 Lost-in-the-Middle 유발, 레이턴시 급증, 그리고 프롬프트 비용 폭증을 초래하므로 체계적인 맥락 압축 패턴을 적용합니다.
@@ -694,3 +704,117 @@ user_prompt: |
   위 <context>의 지표 로그를 분석하여 <output_format>의 인터페이스 규격에 완벽히 부합하는 순수 JSON 보고서를 출력하십시오.
   </final_instruction>
 ```
+
+---
+
+## 제5장: 2026 프론티어 특화 모델별 브라우징 & 자율 에이전트 실행 프로파일 (Frontier Agent Execution Profiles)
+
+2026년 하반기 프론티어 AI 환경은 사전 학습 중심에서 **추론 시점 연산 스케일링(Test-Time Compute / Extended Thinking)**으로 완전히 전환되었습니다. 특히 웹 브라우징 및 자율 에이전트 과제에서는 각 사 모델 아키텍처 고유의 인터페이스와 제어 파라미터에 완벽히 부합하는 전용 프로파일을 적용해야 합니다.
+
+### 5.1 패러다임 전환: "단계별로 생각해" 완전 퇴출 및 Definition of Done 중심 설계
+Gemini 3.8 Flash, Claude 5.5, OpenAI o3/GPT-6는 모두 **네이티브 추론 엔진(Thinking Token)**을 내장하고 있습니다.
+* **수동 CoT 배제**: 시스템 프롬프트에 "단계별로 차근차근 생각해", "너의 생각을 먼저 설명해" 같은 문구를 넣으면 모델의 자체 추론 루틴과 충돌하여 **출력 토큰 낭비, 응답 장황화, 루핑 버그**를 유발합니다.
+* **3대 핵심 제공 요소**:
+  1. **명확한 완료 조건 (Definition of Done)**: 어떤 상태에 도달했을 때 목표가 달성된 것인지 명시.
+  2. **조작 제약 조건 (Operational Constraints)**: 인증창, 결제창 출현 시 즉시 제어권 반환 등 안전 불변식.
+  3. **엄격한 행동 계약 (Action Contract)**: 도구 호출 스키마 및 출력 형식.
+
+---
+
+### 5.2 Google Gemini 3.8 Flash 브라우징 에이전트 프로파일
+
+* **아키텍처 강점**:
+  - **200만(2M)+ 토큰 초장문 컨텍스트**: 수십 개 탭의 전체 DOM 히스토리와 장기 브라우징 세션을 압축 없이 유지.
+  - **Chrome DevTools Protocol (CDP) 및 Accessibility Tree (UID) 직결 최적화**.
+  - **$0.75 (입력) / $3.75 (출력)**의 압도적인 토큰 경제성 및 초저지연 응답 속도.
+* **제어 파라미터 표준**:
+  - 레거시 파라미터(`temperature`, `top_p`, `top_k`, `candidate_count`)는 전면 제외(Omit).
+  - `thinking_level` 동적 설정:
+    * `"LOW"`: 단순 페이지 이동, 정적 텍스트 추출, 단일 클릭.
+    * `"MEDIUM"` (기본값): 일반 다단계 폼 입력, 동적 웹 상호작용.
+    * `"HIGH"`: 복합 트랜잭션 오류 분석, 보안 취약점 점검 (`Gemini 3.8 Flash Cyber` 연계).
+* **실전 시스템 프롬프트 템플릿**:
+
+```markdown
+<system_directive>
+You are a deterministic web browsing agent powered by Gemini 3.8 Flash.
+Accomplish the user's objective with minimal round-trips and zero conversational filler.
+</system_directive>
+
+<operational_rules>
+1. Interface: Interact strictly via Chrome DevTools Protocol Accessibility Tree UIDs.
+2. Batching Policy: Use fill_form for multiple inputs; avoid sequential single fill calls.
+3. Mutation Policy: After every DOM mutation (click, navigate), observe the newly rendered state before planning the next action.
+4. Security Guardrails: Never attempt to bypass CAPTCHA, Turnstile, or OAuth authentication; immediately yield control to the human supervisor.
+</operational_rules>
+
+<output_contract>
+Emit valid tool invocations immediately. When the final goal is achieved, report findings concisely.
+</output_contract>
+```
+
+---
+
+### 5.3 Anthropic Claude Sonnet 5.5 / Opus 5.5 브라우징 에이전트 프로파일
+
+* **아키텍처 강점**:
+  - **Computer Use API (픽셀 좌표 직접 제어) + Accessibility Tree 하이브리드 지원**: Canvas, WebGL, 복잡한 비정형 UI 조작 탁월.
+  - **Interleaved Thinking (`think` Tool)**: 도구 호출과 관찰(Observation) 사이에 모델이 중간 사고를 거쳐 비동기 로딩, 모달 팝업, 요소 UID 변경을 자가 진단 및 복구.
+  - **100만(1M) 토큰 컨텍스트 및 프롬프트 캐싱**: 반복되는 DOM 스냅샷 입력 비용 90% 절감.
+* **제어 파라미터 표준**:
+  - Extended Thinking 활성화 시 `temperature: 1.0` 고정 필수.
+  - `budget_tokens`: 4,096 ~ 8,192 토큰 (브라우징 최적 범위. 과도하면 클릭당 레이턴시 증가).
+* **실전 XML 시스템 프롬프트 템플릿**:
+
+```xml
+<system_instructions>
+You are an advanced autonomous browsing agent powered by Claude 5.5.
+
+<browser_rules>
+1. Target elements using accessibility tree UIDs or verified visual landmarks.
+2. Form interactions MUST use batching (fill_form) to reduce round-trips.
+3. If an action produces an unexpected state (e.g., overlay modal, loading spinner, missing button), invoke your native `think` tool to evaluate the anomaly before attempting retry.
+4. Respect prompt cache boundaries: keep system directives and tool schemas strictly static.
+</browser_rules>
+
+<safety_invariants>
+- Halt immediately and alert the operator if a payment gateway, credential prompt, or irreversible action appears.
+</safety_invariants>
+
+<action_format>
+Emit precise tool calls. Keep internal deliberation within the native thinking trace.
+</action_format>
+</system_instructions>
+```
+
+---
+
+### 5.4 OpenAI o3 / GPT-6 심층 리서치 에이전트 프로파일
+
+* **아키텍처 강점**:
+  - **Test-Time Compute RL 기반 심층 자율 리서치 (`o3-deep-research`)**: 수십 개 사이트를 자율 탐색하여 교차 검증된 사실만을 정밀 취합.
+  - **은닉 사고 체인 내 도구 실행 (In-trace Function Calling)**: 추론 과정 중간에 실시간으로 브라우저 스냅샷을 확인하며 논리적 분기 결정.
+* **제어 파라미터 표준**:
+  - `role: "developer"` 메시지를 활용하여 불변 규칙을 모델 CoT에 깊숙이 주입.
+  - `reasoning_effort`:
+    * `"low"`: 단순 검색 및 빠른 링크 탐색.
+    * `"medium"`: 일반 정보 종합 및 사실 확인.
+    * `"high"`: 복합 쿼리 다중 소스 심층 교차 검증 보고서 작성.
+* **실전 Developer 메시지 템플릿**:
+
+```json
+{
+  "role": "developer",
+  "content": "You are the OpenAI browsing executor. Invariants: 1. Strict tool calling based on snapshot UIDs. 2. Do not output manual chain-of-thought in conversational content; use native reasoning tokens. 3. If navigation fails, inspect HTTP status code and console errors before re-executing. 4. Zero conversational padding."
+}
+```
+
+---
+
+### 5.5 2026 프론티어 에이전트 종합 매트릭스 및 라우팅 기준
+
+| 에이전트 과제 유형 | 최적 추천 모델 | 선정 근거 |
+| :--- | :--- | :--- |
+| **대규모 웹 스크래핑 & 장기 세션 브라우징** | **Google Gemini 3.8 Flash** | 200만 토큰 컨텍스트, CDP A11y Tree 직결, 초저지연 및 압도적 비용 효율($0.75/$3.75) |
+| **인터랙티브 웹앱 & 캔버스/비정형 UI 조작** | **Anthropic Claude Sonnet/Opus 5.5** | Computer Use(픽셀 좌표 제어) 및 Interleaved `think` 도구를 통한 런타임 오류 자가 복구 |
+| **다중 웹 소스 심층 리서치 & 팩트체크** | **OpenAI o3-deep-research / GPT-6 Astra** | Test-Time Compute RL 기반의 장시간 자율 탐색 및 교차 검증 논리 완결성 |
