@@ -40,24 +40,22 @@ related:
 
 ```mermaid
 flowchart TD
-    subgraph Stage1["1단계: 시드 셔플링 및 익명화 격리"]
-        A["후보 프롬프트군<br/>(Spec A, Spec B, Spec C)"] --> B["난수 시드 셔플러<br/>(setup_blind_benchmark.py)"]
-        B --> C["익명 레이블 매핑<br/>(Candidate_Alpha, Beta, Gamma)"]
-        B --> D["비밀키 암호 잠금<br/>(secret_key.json)"]
+    subgraph Stage1["1단계: 시드 셔플링 및 슬롯 격리"]
+        A["후보 프롬프트군<br/>(Spec A, Spec B, Spec C)"] --> B["난수 시드 셔플러 & 슬롯 생성기<br/>(setup_blind_benchmark.py)"]
+        B --> C["물리적 작업 슬롯<br/>(runs/slot_1, runs/slot_2)"]
+        B --> D["비밀 매핑 장부 암호 잠금<br/>(secret_key.json)"]
     end
 
-    subgraph Stage2["2단계: 병렬 독립 실행 러너"]
-        C --> E1["러너 Alpha (단독 컨텍스트)<br/>Spec Alpha + 5대 Probes"]
-        C --> E2["러너 Beta (단독 컨텍스트)<br/>Spec Beta + 5대 Probes"]
-        C --> E3["러너 Gamma (단독 컨텍스트)<br/>Spec Gamma + 5대 Probes"]
-        E1 --> F1["response_candidate_alpha.json"]
-        E2 --> F2["response_candidate_beta.json"]
-        E3 --> F3["response_candidate_gamma.json"]
+    subgraph Stage2["2단계: 병렬 독립 실행 러너 (완전 위장)"]
+        C --> E1["일반 어시스턴트 1 (위장)<br/>slot_1 규칙 + 실무 질문"]
+        C --> E2["일반 어시스턴트 2 (위장)<br/>slot_2 규칙 + 실무 질문"]
+        E1 --> F1["runs/slot_1/response.json"]
+        E2 --> F2["runs/slot_2/response.json"]
     end
 
     subgraph Stage3["3단계: 데이터셋 컴파일 및 블라인드 채점"]
-        F1 & F2 & F3 --> G["데이터셋 컴파일러<br/>(compile_dataset.py)"]
-        G --> H["blind_eval_dataset.json"]
+        F1 & F2 --> G["데이터셋 컴파일러 (슬롯 매핑)<br/>(compile_dataset.py)"]
+        G --> H["blind_eval_dataset.json<br/>(Spec_Alpha, Spec_Beta)"]
         H --> I["독립 심사관 (Independent Evaluator)<br/>100점 만점 루브릭 전수 채점"]
         I --> J["eval_results.json (익명 점수표)"]
     end
@@ -68,23 +66,32 @@ flowchart TD
     end
 ```
 
-### 2.1 1단계: 시드 셔플링 및 익명화 격리 (Seed Shuffle & Secret Isolation)
+### 2.1 1단계: 시드 셔플링 및 슬롯 격리 (Seed Shuffle & Slot Isolation)
 1. **후보군 준비**: 비교하려는 $N$개의 시스템 프롬프트(예: 기존 원본, 경량화 제안안, 엄격 강화안)를 확정합니다.
-2. **무작위 셔플**: 고정 난수 시드(`random.seed`)를 사용하여 후보군 순서를 무작위로 섞고, `Candidate_Alpha`, `Candidate_Beta`, `Candidate_Gamma` 등의 비식별 기호 레이블을 부여합니다.
-3. **비밀키 격리 (`secret_key.json`)**: 원래의 후보 이름과 익명 레이블 간의 1:1 매핑 정보를 기록한 비밀키 파일을 생성하고 감사관/러너가 접근할 수 없는 별도 디렉토리에 격리합니다.
-4. **메타데이터 정제**: 프롬프트 본문에서 "수정본", "Before/After", "신규 제안", 라인 수 비교 등 출처를 유추할 수 있는 모든 텍스트 주석을 물리적으로 제거합니다.
+2. **물리 슬롯 생성 및 무작위 매핑**: 고정 난수 시드(`random.seed`)를 사용하여 후보군을 무작위로 섞고, 물리적 격리 디렉터리(`runs/slot_1/`, `runs/slot_2/`, ...)에 배정합니다.
+3. **비밀 매핑 장부 격리 (`secret_key.json`)**:
+   * 슬롯 번호, 중립 사양 레이블(`Spec_Alpha`, `Spec_Beta`), 실제 원본 사양명 간의 3자 매핑 정보를 기록합니다:
+     ```json
+     {
+       "slot_1": { "blind_label": "Spec_Alpha", "true_spec": "정제 제안안" },
+       "slot_2": { "blind_label": "Spec_Beta", "true_spec": "기존 원본" }
+     }
+     ```
+   * 이 장부는 메인 에이전트만 관리하며 감사관/러너가 접근할 수 없는 별도 디렉토리에 잠급니다.
+4. **무정보 슬롯 파일 생성**: 각 슬롯 폴더에는 출처나 비교 목적을 알 수 없도록 순수 프롬프트 텍스트만 담긴 `input_spec.json`만을 배치합니다.
 
-### 2.2 2단계: 병렬 독립 실행 러너 (Parallel Isolated Runners)
-1. **서브에이전트 단독 격리 스폰**: 각 익명 후보군마다 독립된 서브에이전트(`Runner Candidate Alpha`, `Runner Candidate Beta` 등)를 `invoke_subagent`로 각각 별도 생성합니다.
-2. **동일 프로브 주입**: 각 러너에게는 자신이 배정받은 단 하나의 익명 AGENTS.md 설정과 표준 5대 프로브(Probe 1~5) 질문 세트만을 전달합니다.
-3. **무정보 격리 및 컨텍스트 위장 (Zero-Knowledge Camouflage)**:
-   * 각 러너는 다른 후보가 존재하는지조차 알지 못합니다.
+### 2.2 2단계: 병렬 독립 실행 러너 (Slot-based Zero-Knowledge Camouflage)
+1. **서브에이전트 단독 격리 스폰**: 각 슬롯마다 독립된 서브에이전트를 `invoke_subagent`로 각각 별도 생성합니다.
+   * **역할명(Role) 위장**: `Candidate`나 `Runner` 같은 시험 연상 토큰을 일체 금지하고, `Pair Programming Specialist` 등 통상적인 실무 역할명을 부여합니다.
+2. **동일 프로브 주입**: 각 서브에이전트에게는 배정된 슬롯의 시스템 규칙과 표준 5대 프로브(Probe 1~5) 질문 세트만을 전달합니다.
+3. **무정보 격리 및 컨텍스트 위장**:
+   * 러너는 다른 후보나 슬롯의 존재를 전혀 알지 못합니다.
    * 러너에게 "벤치마크 테스트 질문이다"라는 식의 시험 상황을 노출하지 않고, "페어 프로그래밍 도중 사용자가 전달한 실제 작업 요청"으로 질문을 주입하여 시험 인지 편향(Hawthorne Effect)을 원천 차단합니다.
-   * 러너의 시스템 프롬프트에는 다른 후보의 텍스트나 비교 평가 목적이 절대 포함되지 않습니다.
-4. **표준 응답 JSON 수집**: 각 러너는 5대 질문에 대해 실제 작업 환경에서 응답하듯이 기술적인 답변을 생성하고 정형화된 JSON 파일(`response_candidate_<label>.json`)로 디스크에 저장합니다.
+   * 시스템 프롬프트 및 전달 텍스트에 `Candidate`, `Alpha/Beta`, `Benchmark` 등의 단어를 일체 포함하지 않습니다.
+4. **슬롯별 표준 응답 JSON 수집**: 각 서브에이전트는 5대 질문에 대해 실제 작업하듯이 기술적인 답변을 생성하고, 배정된 물리 슬롯(`runs/slot_<N>/response.json`)에 저장합니다.
 
 ### 2.3 3단계: 통합 데이터셋 컴파일 및 독립 심사관 블라인드 채점 (Compile & Blind Audit)
-1. **데이터셋 컴파일**: `compile_dataset.py` 스크립트를 실행하여 각 후보의 프롬프트 원문, 기본 메타데이터(문자/단어/라인 수), 그리고 러너들이 출력한 프로브 응답들을 모아 단일 파일 `blind_eval_dataset.json`을 생성합니다.
+1. **데이터셋 컴파일**: `compile_dataset.py` 스크립트를 실행하여 `secret_key.json`의 슬롯-레이블 매핑에 따라 각 슬롯의 응답을 중립 익명 사양(`Spec_Alpha`, `Spec_Beta`)으로 조립한 단일 파일 `blind_eval_dataset.json`을 생성합니다.
 2. **독립 심사관 소환**: LLM 아키텍처 및 시스템 엔지니어링 전문 독립 심사관 서브에이전트(`Independent Blind Evaluator`)를 호출합니다.
 3. **블라인드 채점 지침**:
    * 심사관에게는 오직 `blind_eval_dataset.json`과 표준 100점 만점 루브릭만을 제공합니다.
@@ -94,7 +101,7 @@ flowchart TD
 1. **채점 완료 선행 검증**: `eval_results.json`이 디스크에 완전 기록되고 Exit Code 0으로 저장이 끝난 것을 확인하기 전에는 결코 비밀키를 열지 않습니다.
 2. **자동 언마스킹**: `analyze_and_unmask.py`를 실행하여 `secret_key.json`과 `eval_results.json`을 결합합니다.
 3. **최종 보고서 산출**:
-   * 익명 기호(`Candidate_Alpha`)를 원본 사양명으로 매핑 복원.
+   * 중립 기호(`Spec_Alpha`)를 슬롯 번호 및 원본 사양명으로 매핑 복원.
    * 토큰 점유율 절감률(%), 축별 점수, 프로브별 강점/약점 매트릭스 도출.
    * 통계적 우위가 입증된 최적의 스펙을 최종 공식 승자(Winner)로 확정.
 
@@ -175,15 +182,23 @@ def setup_benchmark(candidates_dict: dict, output_dir: str, seed: int = 42):
     keys = list(candidates_dict.keys())
     random.shuffle(keys)
     
-    greek_labels = ["Candidate_Alpha", "Candidate_Beta", "Candidate_Gamma", "Candidate_Delta"]
-    
+    spec_labels = ["Spec_Alpha", "Spec_Beta", "Spec_Gamma", "Spec_Delta"]
     secret_key = {}
-    blind_specs = {}
     
     for i, orig_key in enumerate(keys):
-        label = greek_labels[i]
-        secret_key[label] = orig_key
-        blind_specs[label] = {
+        slot_name = f"slot_{i+1}"
+        blind_label = spec_labels[i]
+        slot_dir = os.path.join(output_dir, "runs", slot_name)
+        os.makedirs(slot_dir, exist_ok=True)
+        
+        # 비밀 매핑 장부에 슬롯-라벨-원본 매핑 기록
+        secret_key[slot_name] = {
+            "blind_label": blind_label,
+            "true_spec": orig_key
+        }
+        
+        # 러너용 파일에는 'Candidate'나 'Alpha' 없이 순수 프롬프트 내용만 저장
+        slot_input = {
             "prompt_text": candidates_dict[orig_key],
             "stats": {
                 "chars": len(candidates_dict[orig_key]),
@@ -191,15 +206,16 @@ def setup_benchmark(candidates_dict: dict, output_dir: str, seed: int = 42):
                 "lines": len(candidates_dict[orig_key].splitlines())
             }
         }
+        with open(os.path.join(slot_dir, "input_spec.json"), "w", encoding="utf-8") as sf:
+            json.dump(slot_input, sf, indent=2, ensure_ascii=False)
         
-    # 비밀키는 심사관 접근 경로와 분리된 위치에 저장
-    with open(os.path.join(output_dir, "secret_key.json"), "w", encoding="utf-8") as f:
+    # 비밀 매핑 장부는 메인 에이전트 전용 경로에 보관
+    secret_dir = os.path.join(output_dir, "secret")
+    os.makedirs(secret_dir, exist_ok=True)
+    with open(os.path.join(secret_dir, "secret_key.json"), "w", encoding="utf-8") as f:
         json.dump(secret_key, f, indent=2, ensure_ascii=False)
         
-    with open(os.path.join(output_dir, "blind_specs_input.json"), "w", encoding="utf-8") as f:
-        json.dump(blind_specs, f, indent=2, ensure_ascii=False)
-        
-    print(f"[OK] Blind Benchmark Setup Completed: {len(keys)} candidates shuffled into {output_dir}")
+    print(f"[OK] Slot-based Benchmark Setup Completed: {len(keys)} slots created in {output_dir}/runs/")
 ```
 
 ### 5.2 데이터셋 병합 컴파일러 (`compile_dataset.py`)
@@ -207,35 +223,41 @@ def setup_benchmark(candidates_dict: dict, output_dir: str, seed: int = 42):
 ```python
 import json
 import os
-import glob
 
 def compile_dataset(benchmark_dir: str):
     """
-    러너들의 개별 응답 JSON과 익명 스펙을 통합하여 blind_eval_dataset.json 생성
+    슬롯별 러너 응답을 secret_key.json의 중립 레이블(Spec_Alpha, Spec_Beta)로 매핑하여 blind_eval_dataset.json 생성
     """
-    specs_path = os.path.join(benchmark_dir, "blind_specs_input.json")
-    with open(specs_path, "r", encoding="utf-8") as f:
-        blind_specs = json.load(f)
+    secret_path = os.path.join(benchmark_dir, "secret", "secret_key.json")
+    with open(secret_path, "r", encoding="utf-8") as sf:
+        secret_key = json.load(sf)
         
     dataset = {
         "metadata": {
             "title": "Double-Blind Prompt Benchmark Dataset",
             "benchmark_dir": benchmark_dir
         },
-        "candidates": {}
+        "specifications": {}
     }
     
-    for label, spec_data in blind_specs.items():
-        resp_file = os.path.join(benchmark_dir, f"response_{label.lower()}.json")
+    for slot_name, mapping in secret_key.items():
+        blind_label = mapping["blind_label"]
+        slot_dir = os.path.join(benchmark_dir, "runs", slot_name)
+        
+        input_file = os.path.join(slot_dir, "input_spec.json")
+        resp_file = os.path.join(slot_dir, "response.json")
+        
         if not os.path.exists(resp_file):
             raise FileNotFoundError(f"Missing runner response file: {resp_file}")
             
+        with open(input_file, "r", encoding="utf-8") as inf:
+            input_data = json.load(inf)
         with open(resp_file, "r", encoding="utf-8") as rf:
             resp_data = json.load(rf)
             
-        dataset["candidates"][label] = {
-            "prompt_text": spec_data["prompt_text"],
-            "stats": spec_data["stats"],
+        dataset["specifications"][blind_label] = {
+            "prompt_text": input_data["prompt_text"],
+            "stats": input_data["stats"],
             "responses": resp_data.get("responses", {})
         }
         
@@ -254,9 +276,9 @@ import os
 
 def analyze_and_unmask(benchmark_dir: str):
     """
-    채점 결과(eval_results.json)에 비밀키(secret_key.json)를 매핑하여 최종 승자 도출
+    채점 결과(eval_results.json)에 비밀 장부(secret_key.json)를 매핑하여 최종 승자 도출
     """
-    secret_path = os.path.join(benchmark_dir, "secret_key.json")
+    secret_path = os.path.join(benchmark_dir, "secret", "secret_key.json")
     eval_path = os.path.join(benchmark_dir, "eval_results.json")
     
     with open(secret_path, "r", encoding="utf-8") as sf:
@@ -269,18 +291,22 @@ def analyze_and_unmask(benchmark_dir: str):
     report_lines = [
         "# Benchmark Final Unmasked Evaluation Report",
         "",
-        "| 익명 레이블 | 원래 사양 (True Spec) | 토큰 효율 (50점) | 지시 이행 (50점) | 총점 (100점) |",
-        "| :--- | :--- | :--- | :--- | :--- |"
+        "| 슬롯 | 중립 레이블 | 원래 사양 (True Spec) | 토큰 효율 (50점) | 지시 이행 (50점) | 총점 (100점) |",
+        "| :--- | :--- | :--- | :--- | :--- | :--- |"
     ]
     
     leaderboard = []
-    for label, orig_name in secret_key.items():
+    for slot_name, mapping in secret_key.items():
+        label = mapping["blind_label"]
+        orig_name = mapping["true_spec"]
+        
         score_info = scores.get(label, {})
         t_score = score_info.get("token_efficiency_score", 0.0)
         f_score = score_info.get("instruction_fidelity_score", 0.0)
         total = score_info.get("total_score", t_score + f_score)
         
         leaderboard.append({
+            "slot": slot_name,
             "label": label,
             "orig_name": orig_name,
             "t_score": t_score,
@@ -288,7 +314,7 @@ def analyze_and_unmask(benchmark_dir: str):
             "total": total,
             "rationale": score_info.get("overall_rationale", "")
         })
-        report_lines.append(f"| {label} | **{orig_name}** | {t_score:.1f} | {f_score:.1f} | **{total:.1f}** |")
+        report_lines.append(f"| {slot_name} | {label} | **{orig_name}** | {t_score:.1f} | {f_score:.1f} | **{total:.1f}** |")
         
     leaderboard.sort(key=lambda x: x["total"], reverse=True)
     winner = leaderboard[0]
@@ -315,11 +341,11 @@ def analyze_and_unmask(benchmark_dir: str):
 
 | 범주 | 금지되는 안티패턴 (Strictly Prohibited) | 올바른 표준 동작 (Enforced Standard) |
 | :--- | :--- | :--- |
-| **정보 누설** | 감사관에게 `Candidate A (수정안/After)`와 같은 명칭 노출 | `Candidate_Alpha`, `Candidate_Beta` 등 순수 비식별 그리스 문자 사용 |
-| **러너 시험 인지** | 러너에게 "A/B 벤치마크 테스트 질문에 답하라"고 공지 | "페어 프로그래밍 도중 발생한 사용자 요청"으로 일상 어시스턴트 위장 주입 |
+| **정보 누설** | 감사관에게 `수정안/After` 또는 피험자 뉘앙스의 `Candidate` 노출 | 중립적 아키텍처 사양 표기인 `Spec_Alpha`, `Spec_Beta` 사용 |
+| **러너 시험 인지** | 러너 역할명/파일명에 `Candidate`, `Runner`, `Benchmark` 토큰 노출 | 물리 슬롯(`runs/slot_N/`) 격리 및 일반 실무 어시스턴트로 완전 위장 |
 | **심사관 가설 누설** | 심사관에게 "축약본의 우수성을 증명해달라" 등 가설 암시 | 개발 배경 및 가설 일체 함구, 순수 익명 데이터셋과 루브릭만 전달 |
-| **조기 언마스킹** | 심사관의 JSON 채점 파일이 디스크에 동기화되기 전에 비밀키 열람 | `eval_results.json` 생성 완료 및 Exit Code 0 확인 후 언마스킹 실행 |
-| **러너 컨텍스트 오염** | 단일 세션에서 여러 후보 프롬프트를 번갈아 실행 | 독립 서브에이전트(`invoke_subagent`)를 통해 1 러너 = 1 스펙 엄격 격리 |
+| **조기 언마스킹** | 심사관의 JSON 채점 파일이 디스크에 동기화되기 전에 비밀 장부 열람 | `eval_results.json` 생성 완료 및 Exit Code 0 확인 후 언마스킹 실행 |
+| **러너 컨텍스트 오염** | 단일 세션에서 여러 슬롯 프롬프트를 번갈아 실행 | 독립 서브에이전트(`invoke_subagent`)를 통해 1 러너 = 1 슬롯 엄격 격리 |
 | **감사관 자의적 수정** | 감사관 에이전트가 프롬프트나 코드를 직접 수정하는 행위 | 감사관은 오직 읽기 전용(Read-Only)으로 채점 결과 보고서만 작성 |
 | **주관적 어림짐작** | "코드가 잘 작동할 것 같다"며 정량 루브릭 없이 승자 선언 | 100점 만점 2대 축 7대 세부 지표 전수 채점표 제시 필수 |
 
