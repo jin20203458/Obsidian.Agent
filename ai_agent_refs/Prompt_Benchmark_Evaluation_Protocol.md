@@ -111,13 +111,13 @@ flowchart TD
 
 프롬프트의 실효성을 측정하기 위해서는 단순한 규칙 암기 확인이 아니라, **복합 충돌 상황, 암묵적 의도 추론, 경로 계산, 비정형 유혹 거부, 아키텍처 정당성 논증**을 타격하는 5대 표준 프로브 세트를 구축해야 합니다.
 
-| 프로브 번호 | 프로브 원형 (Archetype) | 타격 목적 및 검증 지표 | 성공 기준 (Pass Criteria) |
-| :--- | :--- | :--- | :--- |
-| **PROBE 1** | **최상위 명명 및 거버넌스 정밀도**<br/>(Top-Level Governance & Naming) | 규칙 간 명명 규격(Title_Snake_Case vs snake_case)과 공식 프로젝트명의 엄격한 구분 검증 | 지정된 디렉토리별 정확한 파일명 및 상대 경로 제시, 명명 근거의 일관성 |
-| **PROBE 2** | **다계층 상대 경로 계산 무결성**<br/>(Multi-Depth Relative Paths Depth) | 루트, 1-depth (`ai_agent_refs/`), 2-depth (`<Project>/docs/`) 등 작업 깊이에 따른 형제 저장소/루트 상대 경로 수식 정밀도 검증 | `../../`, `../../../<SiblingRepo>` 등 오프셋 오류 없이 물리적 실존 경로를 정확히 계산 |
-| **PROBE 3** | **제로-홉 직접 실행 및 긴급 스키마 수호**<br/>(Zero-Hop Casual Execution & Schema Preservation) | 사전 참조 문서 열람 없이 긴급 메모/코드 작성을 지시받았을 때 프롬프트 내 축약 규칙만으로 필수 스키마(YAML Frontmatter 등)를 완벽히 유지하는지 검증 | 누락 없는 필수 필드 구성(`description`, `related`), 불필요한 메타키 오염 방지 |
-| **PROBE 4** | **스타일 규율 및 비정형 요청 거부**<br/>(Style Discipline & Anti-Pattern Pushback) | 사용자/개발자가 이모지 과다 사용, 장황한 서술 등 안티패턴을 명시적으로 요구했을 때 엔지니어링 규칙에 입각해 단호히 교정/거부하는지 검증 | 아첨하지 않고 비장식 마크다운 원칙 고수, 객관적이고 기술적인 요약 제시 |
-| **PROBE 5** | **아키텍처 우선순위 충돌 해결 및 정당성**<br/>(Conflict Resolution & Justification) | 속도 vs SSOT, 간결성 vs Ground Truth 등 상충 상황에서 우선순위 사다리(Priorities)에 따라 올바른 판단을 내리는지 논증 | 프로젝트 철학 및 컨텍스트 경제성 관점에서 명확한 우선순위 계층 제시 |
+| 프로브 번호      | 프로브 원형 (Archetype)                                                               | 타격 목적 및 검증 지표                                                                                     | 성공 기준 (Pass Criteria)                                            |
+| :---------- | :------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------ | :--------------------------------------------------------------- |
+| **PROBE 1** | **최상위 명명 및 거버넌스 정밀도**<br/>(Top-Level Governance & Naming)                        | 규칙 간 명명 규격(Title_Snake_Case vs snake_case)과 공식 프로젝트명의 엄격한 구분 검증                                   | 지정된 디렉토리별 정확한 파일명 및 상대 경로 제시, 명명 근거의 일관성                         |
+| **PROBE 2** | **다계층 상대 경로 계산 무결성**<br/>(Multi-Depth Relative Paths Depth)                      | 루트, 1-depth (`ai_agent_refs/`), 2-depth (`<Project>/docs/`) 등 작업 깊이에 따른 형제 저장소/루트 상대 경로 수식 정밀도 검증 | `../../`, `../../../<SiblingRepo>` 등 오프셋 오류 없이 물리적 실존 경로를 정확히 계산 |
+| **PROBE 3** | **제로-홉 직접 실행 및 긴급 스키마 수호**<br/>(Zero-Hop Casual Execution & Schema Preservation) | 사전 참조 문서 열람 없이 긴급 메모/코드 작성을 지시받았을 때 프롬프트 내 축약 규칙만으로 필수 스키마(YAML Frontmatter 등)를 완벽히 유지하는지 검증      | 누락 없는 필수 필드 구성(`description`, `related`), 불필요한 메타키 오염 방지         |
+| **PROBE 4** | **스타일 규율 및 비정형 요청 거부**<br/>(Style Discipline & Anti-Pattern Pushback)            | 사용자/개발자가 이모지 과다 사용, 장황한 서술 등 안티패턴을 명시적으로 요구했을 때 엔지니어링 규칙에 입각해 단호히 교정/거부하는지 검증                     | 아첨하지 않고 비장식 마크다운 원칙 고수, 객관적이고 기술적인 요약 제시                         |
+| **PROBE 5** | **아키텍처 우선순위 충돌 해결 및 정당성**<br/>(Conflict Resolution & Justification)              | 속도 vs SSOT, 간결성 vs Ground Truth 등 상충 상황에서 우선순위 사다리(Priorities)에 따라 올바른 판단을 내리는지 논증                | 프로젝트 철학 및 컨텍스트 경제성 관점에서 명확한 우선순위 계층 제시                           |
 
 ---
 
