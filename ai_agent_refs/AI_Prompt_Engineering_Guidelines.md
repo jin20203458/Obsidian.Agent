@@ -9,8 +9,8 @@ related:
 # AI Prompt Engineering Guidelines
 
 > 
-> **근거**: 2024~2026년 최신 학술 논문 22편 및 Google DeepMind / Anthropic / OpenAI 2026 최신 플래그십 공식 가이드라인 기반
-> **검증**: 전체 인용 출처 22건 및 최신 프론티어 모델(Gemini 3.8 Flash, Claude 5.5, GPT-6) 웹/기술 문서 전수 검증 완료
+> **근거**: 2024~2026년 최신 학술 논문 15편 및 Google DeepMind / Anthropic / OpenAI 등 핵심 산업 기술 가이드 12건 기반
+> **검증**: 전체 인용 출처 27건 및 최신 프론티어 모델(Gemini 3.8 Flash, Claude 5.5, GPT-6) 웹/기술 문서 전수 검증 완료
 > **적용 범위**: 지식베이스 및 프로젝트 내 모든 AI 프롬프트 (MemoryManager, SessionArchitect, Lorebook, ReplySuggestion, StatusAPI, 브라우징/CDP 에이전트 도구 등 전 영역)
 
 본 문서는 AI 프롬프트를 설계, 작성, 검증, 유지보수할 때 준수해야 하는 모든 핵심 원칙, 안티패턴 회피법, 3단계 조립 수명주기, 언어별 구현 패턴 및 2026 최신 특화 모델별 에이전트 실행 프로파일을 일원화한 통합 표준 가이드라인입니다.
@@ -67,7 +67,7 @@ flowchart LR
 
 ---
 
-## 제2장: 핵심 프롬프트 엔지니어링 표준 원칙 (18 Standard Principles)
+## 제2장: 핵심 프롬프트 엔지니어링 표준 원칙 (16 Standard Principles)
 
 ### 2.1 원칙 1: 구조적 프롬프팅 (Structured Prompting & PICCO Framework)
 XML 태그를 사용하여 프롬프트의 각 구성 요소(지시문, 데이터, 예시, 출력 형식)를 물리적으로 분리하면 LLM의 지시 준수율이 30% 이상 향상됩니다.
