@@ -5,7 +5,6 @@ description: >-
 related:
   - ../README.md
   - ./AI_Prompt_Engineering_Guidelines.md
-  - ./Independent_Audit_Protocol_Guidelines.md
   - ./Agent_Runtime_Operations_Protocol.md
 ---
 # Prompt Benchmark Evaluation Protocol (실측 기반 이중 맹검 프롬프트 벤치마크 및 독립 심사 표준 지침)
@@ -326,5 +325,4 @@ def analyze_and_unmask(benchmark_dir: str):
 ## 7. 관련 지침 및 상호 연계
 
 * [AI_Prompt_Engineering_Guidelines.md](./AI_Prompt_Engineering_Guidelines.md): 프롬프트 라이프사이클의 '3단계 Test & Debug' 시 본 프로토콜을 호출하여 벤치마크 수행.
-* [Independent_Audit_Protocol_Guidelines.md](./Independent_Audit_Protocol_Guidelines.md): 정량 채점 완료 후 기술 사양서의 사실 무결성(Ground Truth) 4단계 심층 계쇄 실사 연계.
 * [Agent_Runtime_Operations_Protocol.md](./Agent_Runtime_Operations_Protocol.md): 벤치마크 파이프라인 스크립트 실행 시 Exit Code 0 및 서킷 브레이커 준수.
