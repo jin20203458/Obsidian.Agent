@@ -11,16 +11,16 @@ related:
 
 - **ai_agent_refs/**: AI 에이전트 작동 및 프롬프트 최적화를 위한 공통 설계 지침
   - [Agent_Runtime_Operations_Protocol.md](ai_agent_refs/Agent_Runtime_Operations_Protocol.md): 의무 QA 검증(Exit Code 0 Ground Truth), 3-Strike 서킷 브레이커, 롤백 및 트러블슈팅 통합 런타임 프로토콜 (SSOT)
-  - [AI_Prompt_Engineering_Guidelines.md](ai_agent_refs/AI_Prompt_Engineering_Guidelines.md): 프롬프트 3단계 수명주기(Build-Audit-Test), 13대 핵심 원칙 및 5대 안티패턴을 집대성한 통합 표준 지침서 (SSOT)
+  - [AI_Prompt_Engineering_Guidelines.md](ai_agent_refs/AI_Prompt_Engineering_Guidelines.md): 2025~2026 최신 LLM 패러다임(하이브리드 추론, MCP, KV Cache) 기반 18대 핵심 원칙 및 7대 안티패턴 통합 표준 지침서 (SSOT)
   - [Prompt_Benchmark_Evaluation_Protocol.md](ai_agent_refs/Prompt_Benchmark_Evaluation_Protocol.md): 프롬프트 품질 및 지시 이행성을 실측 검증하는 4단계 이중 맹검(Double-Blind) 벤치마크 및 독립 심사 표준 지침 (SSOT)
   - [Mermaid_Diagram_Guidelines.md](ai_agent_refs/Mermaid_Diagram_Guidelines.md): 지식베이스 내 Mermaid 다이어그램 작성 표준 및 파싱 에러 방지 규칙 (SSOT)
-  - [WPF_Architecture_Guidelines.md](ai_agent_refs/WPF_Architecture_Guidelines.md): WPF 현대적 MVVM 아키텍처, 3대 원형(Phalanx/ARQA/GRC), DI 수명주기, CQRS 고성능 스트리밍 및 가상화 종합 지침서 (SSOT)
+  - [WPF_Architecture_Guidelines.md](ai_agent_refs/WPF_Architecture_Guidelines.md): WPF 현대적 MVVM 아키텍처, Generic Host DI, 수명주기, Form Validation, 제네릭 모달, 고성능 스트리밍 및 Windows 11 DWM 통합 마스터 지침서 (SSOT)
   - [AI_Project_Integration_Guidelines.md](ai_agent_refs/AI_Project_Integration_Guidelines.md): 신규 개발 프로젝트를 에이전트 지식베이스 및 협업 환경과 연계하는 표준 절차
   - [Knowledge_Base_Authoring_Guidelines.md](ai_agent_refs/Knowledge_Base_Authoring_Guidelines.md): 에이전트와 인간 개발자가 공통으로 준수해야 할 문서 작성/메타데이터 표준 지침
   - [Independent_Audit_Protocol_Guidelines.md](ai_agent_refs/Independent_Audit_Protocol_Guidelines.md): 고신뢰성 기술 문서 및 분석 사양서의 무결성을 보증하는 순차적 4단계 계쇄 독립감사 표준 지침
   - [AI_Agent_Architecture_Paradigms_Guidelines.md](ai_agent_refs/AI_Agent_Architecture_Paradigms_Guidelines.md): 글로벌 빅테크 및 최신 연구에 기반한 AI 에이전트 아키텍처 및 멀티 에이전트 협동(Teaming) 패러다임 종합 가이드
   - [Agent_Collaboration_Workflow_Guidelines.md](ai_agent_refs/Agent_Collaboration_Workflow_Guidelines.md): 2025~2026 최신 Agentic SE 연구 기반 일상 개발용 에이전트 협동 및 이중 계쇄(Dual-Gated) 오케스트레이션 표준 지침
-  - [Modern_AI_Desktop_UI_Guidelines.md](ai_agent_refs/Modern_AI_Desktop_UI_Guidelines.md): 2025~2026 프로 도구(Pro-Tool) 및 관제(SOC) 대시보드와 AI 추론 스트리밍 UI 디자인 시스템 표준 지침
+  - [Modern_AI_Desktop_UI_Guidelines.md](ai_agent_refs/Modern_AI_Desktop_UI_Guidelines.md): WPF 기반 차세대 데스크톱 AI 도구 UI/UX 확장 지침서 (3단 워크벤치, AI 사고 서사, 무프리징 토큰 스트리밍 버퍼 및 ReAct 루프)
   - [Troubleshooting_Pruning_Guidelines.md](ai_agent_refs/Troubleshooting_Pruning_Guidelines.md): AI 에이전트 트러블슈팅 런북 압축, 의미론적 증류 및 온디맨드 가지치기 표준 지침
 
 
