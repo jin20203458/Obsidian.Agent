@@ -12,6 +12,7 @@ related:
 - **ai_agent_refs/**: AI 에이전트 작동 및 프롬프트 최적화를 위한 공통 설계 지침
   - [Agent_Runtime_Operations_Protocol.md](ai_agent_refs/Agent_Runtime_Operations_Protocol.md): 의무 QA 검증(Exit Code 0 Ground Truth), 3-Strike 서킷 브레이커, 롤백 및 트러블슈팅 통합 런타임 프로토콜 (SSOT)
   - [AI_Prompt_Engineering_Guidelines.md](ai_agent_refs/AI_Prompt_Engineering_Guidelines.md): 프롬프트 3단계 수명주기(Build-Audit-Test), 13대 핵심 원칙 및 5대 안티패턴을 집대성한 통합 표준 지침서 (SSOT)
+  - [Prompt_Benchmark_Evaluation_Protocol.md](ai_agent_refs/Prompt_Benchmark_Evaluation_Protocol.md): 프롬프트 품질 및 지시 이행성을 실측 검증하는 4단계 이중 맹검(Double-Blind) 벤치마크 및 독립 심사 표준 지침 (SSOT)
   - [Mermaid_Diagram_Guidelines.md](ai_agent_refs/Mermaid_Diagram_Guidelines.md): 지식베이스 내 Mermaid 다이어그램 작성 표준 및 파싱 에러 방지 규칙 (SSOT)
   - [WPF_Architecture_Guidelines.md](ai_agent_refs/WPF_Architecture_Guidelines.md): WPF 현대적 MVVM 아키텍처, 3대 원형(Phalanx/ARQA/GRC), DI 수명주기, CQRS 고성능 스트리밍 및 가상화 종합 지침서 (SSOT)
   - [AI_Project_Integration_Guidelines.md](ai_agent_refs/AI_Project_Integration_Guidelines.md): 신규 개발 프로젝트를 에이전트 지식베이스 및 협업 환경과 연계하는 표준 절차
