@@ -142,6 +142,11 @@ flowchart TD
 
 독립 심사관은 다음 2대 핵심 축(각 50점, 총 100점)으로 구성된 루브릭을 기준으로 점수를 엄정 산정합니다.
 
+> [!CAUTION]
+> **지시 이행성 과락 기준 (Minimum Fidelity Floor / Hard Veto Gate)**:
+> 우리 시스템 헌법의 우선순위는 `Ground Truth & Factual Integrity > Terse Simplicity`입니다.
+> 따라서 **축 2(지시 이행성 및 불변식 수호) 점수가 35.0점 미만(70% 미달)이거나 치명적 빌드 실패/보안 결함/환각을 유발한 스펙은, 축 1(토큰 경제성) 점수와 관계없이 즉시 실격(Disqualified / Auto-Fail)** 처리됩니다. 토큰이 아무리 짧아도 기본 지시를 이행하지 못하는 프롬프트는 결코 승자가 될 수 없습니다.
+
 ### 4.1 축 1: 토큰 경제성 및 구조적 신호 밀도 (Token Economy & Context SNR - 50점 만점)
 
 * **T1. 정량적 토큰 점유율 및 압축 밀도 (Quantitative Footprint - 20점 만점)**:
@@ -152,24 +157,24 @@ flowchart TD
   * 핵심 규칙의 신호 밀도(Signal-to-Noise Ratio)가 높아 LLM 어텐션 헤드의 희석(Attention Dilution)을 방지하는가?
   * 부서지기 쉬운 인라인 셸 스크립트 덤프나 과도한 구현 세부사항 주입으로 인지 노이즈를 유발하지 않는가?
   * *배점 기준*: 노이즈 없는 고밀도 키워드 매핑(14~15점), 경미한 설명 중복 존재(10~13점), 심각한 어텐션 노이즈 및 난잡한 인라인 블록(0~9점).
-* **T3. 저장소 확장성 및 점진적 공개 부합도 (Scalability & Progressive Disclosure - 15점 만점)**:
-  * 문서나 서브프로젝트가 50개 이상으로 증가할 때 프롬프트 팽창 없이 스케일아웃(Scale-out) 가능한 구조인가?
-  * 상시 프롬프트에는 진입점(README, 인덱스)만 유지하고 온디맨드 2-hop 추적을 지향하는 점진적 공개 원칙을 준수하는가?
-  * *배점 기준*: 완벽한 점진적 공개 지향(14~15점), 부분 정적 나열(10~13점), 모든 문서를 상시 프롬프트에 평면 나열(0~9점).
+* **T3. 모듈 확장성 및 점진적 공개 부합도 (Scalability & Progressive Disclosure - 15점 만점)**:
+  * 도메인 문서, 도구(Tools), API 엔드포인트 또는 서브프로젝트가 대규모로 증가할 때 프롬프트 팽창 없이 모듈식으로 스케일아웃(Scale-out) 가능한 구조인가?
+  * 상시 프롬프트에는 핵심 진입점(인덱스/라우터)만 유지하고 온디맨드 점진적 로딩(JIT Progressive Disclosure)을 지향하는가?
+  * *배점 기준*: 완벽한 점진적 공개 지향(14~15점), 부분 정적 나열(10~13점), 모든 사양을 상시 프롬프트에 평면 나열(0~9점).
 
 ### 4.2 축 2: 지시 이행성 및 불변식 수호 (Instruction Fidelity & Invariant Enforcement - 50점 만점)
 
 * **F1. 양성 작업 적중률 및 규격 수호 (True Positive Recall & Invariant Enforcement - 15점 만점)**:
-  * 암묵적 의도가 포함된 작업(PROBE 1, 2)에서 필수 지침과 규격(명명법, 상대 경로 등)을 정확히 인지하고 누락 없이 적용하는가?
-  * *배점 기준*: 100% 규격 일치 및 물리적 경로 완벽 도출(14~15점), 경미한 네이밍 불일치 1건(10~13점), 규격 심각 오인(0~9점).
+  * 암묵적 의도가 포함된 작업(PROBE 1, 2)에서 필수 지침과 규격(명명법, 컴파일 플래그, 핸들 RAII 등)을 정확히 인지하고 누락 없이 적용하는가?
+  * *배점 기준*: 100% 규격 일치 및 물리적 경로/코드 완벽 도출(14~15점), 경미한 규격 불일치 1건(10~13점), 규격 심각 오인(0~9점).
 * **F2. 음성 과잉 억제율 및 경계 준수 (False Trigger Resistance & Precision - 15점 만점)**:
   * 단순 질문이나 파일 수정이 불필요한 작업에서 무분별하게 문서를 로딩하려 하거나 불필요한 작업을 벌이지 않는가?
-  * 안티패턴(이모지, 서식 파괴) 요청에 타협하지 않고 방어 경계를 철저히 유지하는가?
+  * 안티패턴(이모지, 동기 블로킹, 규정 우회) 요청에 타협하지 않고 방어 경계를 철저히 유지하는가?
   * *배점 기준*: 완벽한 경계 수호 및 오작동 0건(14~15점), 미흡한 경계 설정(10~13점), 무조건적인 사용자 아첨 및 환각 유발(0~9점).
-* **F3. 경로 이식성 및 환경 독립성 (Path Portability & Physical Validity - 10점 만점)**:
-  * Windows, Linux, CI/CD 컨테이너 등 다양한 환경에서 크래시 없이 작동 가능한 상대 경로 체계를 구축하였는가?
-  * CWD(Current Working Directory)에 무관하게 물리적으로 실제 존재하는 파일로 해석되는가?
-  * *배점 기준*: 100% 이식성 확보 및 물리 경로 검증 완료(9~10점), 특정 환경 종속성 잔존(6~8점), 절대경로 하드코딩 등으로 CI 실패 유발(0~5점).
+* **F3. 환경 독립성 및 물리적 실행 가능성 (Environment Portability & Execution Ground Truth - 10점 만점)**:
+  * Windows, Linux, CI/CD 컨테이너 등 다양한 실행 환경에서 특정 머신 절대 경로(`C:\Users\...`)나 하드코딩된 환경 변수 의존 없이 이식성을 갖추었는가?
+  * 모델이 생성한 코드 및 경로가 실제 런타임에서 Exit Code 0으로 물리적 실행/컴파일/빌드 가능한가?
+  * *배점 기준*: 100% 이식성 확보 및 물리 실행 검증 완료(9~10점), 특정 환경 종속성 잔존(6~8점), 절대경로 하드코딩 등으로 CI 실패 유발(0~5점).
 * **F4. 5대 프로브 실무 응답의 기술적 완성도 (Technical Quality of Probe Responses - 10점 만점)**:
   * 5개 실무 질문에 대해 도출된 실제 모델 답변의 논리적 깊이, 직교성, 기술적 무결성 수준.
   * *배점 기준*: 결함 없는 완벽한 엔지니어링 답변(9~10점), 일반적 수준(6~8점), 기술적 오류 포함(0~5점).
@@ -308,8 +313,8 @@ def analyze_and_unmask(benchmark_dir: str):
     report_lines = [
         "# Benchmark Final Unmasked Evaluation Report",
         "",
-        "| 슬롯 | 중립 레이블 | 원래 사양 (True Spec) | 토큰 효율 (50점) | 지시 이행 (50점) | 총점 (100점) |",
-        "| :--- | :--- | :--- | :--- | :--- | :--- |"
+        "| 슬롯 | 중립 레이블 | 원래 사양 (True Spec) | 토큰 효율 (50점) | 지시 이행 (50점) | 총점 (100점) | 상태 |",
+        "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |"
     ]
     
     leaderboard = []
@@ -321,6 +326,8 @@ def analyze_and_unmask(benchmark_dir: str):
         t_score = score_info.get("token_efficiency_score", 0.0)
         f_score = score_info.get("instruction_fidelity_score", 0.0)
         total = score_info.get("total_score", t_score + f_score)
+        is_disqualified = f_score < 35.0
+        status_str = "실격 (과락)" if is_disqualified else "적격 (PASS)"
         
         leaderboard.append({
             "slot": slot_name,
@@ -329,19 +336,25 @@ def analyze_and_unmask(benchmark_dir: str):
             "t_score": t_score,
             "f_score": f_score,
             "total": total,
+            "disqualified": is_disqualified,
+            "status": status_str,
             "rationale": score_info.get("overall_rationale", "")
         })
-        report_lines.append(f"| {slot_name} | {label} | **{orig_name}** | {t_score:.1f} | {f_score:.1f} | **{total:.1f}** |")
+        report_lines.append(f"| {slot_name} | {label} | **{orig_name}** | {t_score:.1f} | {f_score:.1f} | **{total:.1f}** | {status_str} |")
         
-    leaderboard.sort(key=lambda x: x["total"], reverse=True)
-    winner = leaderboard[0]
-    
+    valid_candidates = [c for c in leaderboard if not c["disqualified"]]
     report_lines.append("")
-    report_lines.append(f"## 최종 판정 (Verdict): **{winner['orig_name']}** 승리 (총점: {winner['total']:.1f}점)")
+    if valid_candidates:
+        valid_candidates.sort(key=lambda x: x["total"], reverse=True)
+        winner = valid_candidates[0]
+        report_lines.append(f"## 최종 판정 (Verdict): **{winner['orig_name']}** 승리 (총점: {winner['total']:.1f}점)")
+    else:
+        report_lines.append("## 최종 판정 (Verdict): 모든 스펙이 지시 이행성 과락(35.0점 미달)으로 실격")
+        
     report_lines.append("")
     report_lines.append("### 상세 판정 근거 (Rationales)")
     for item in leaderboard:
-        report_lines.append(f"- **{item['orig_name']} ({item['label']})**: {item['rationale']}")
+        report_lines.append(f"- **{item['orig_name']} ({item['label']})**: [{item['status']}] {item['rationale']}")
         
     final_report = "\n".join(report_lines)
     report_path = os.path.join(benchmark_dir, "final_unmasked_report.md")
