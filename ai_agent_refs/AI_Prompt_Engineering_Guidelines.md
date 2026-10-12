@@ -9,9 +9,9 @@ related:
 # AI Prompt Engineering Guidelines
 
 > 
-> **근거**: 2024~2026년 최신 학술 논문 15편 및 Google DeepMind / Anthropic / OpenAI 등 핵심 산업 기술 가이드 12건 기반
-> **검증**: 전체 인용 출처 27건 및 최신 프론티어 모델(Gemini 3.8 Flash, Claude 5.5, GPT-6) 웹/기술 문서 전수 검증 완료
-> **적용 범위**: 지식베이스 및 프로젝트 내 모든 AI 프롬프트 (MemoryManager, SessionArchitect, Lorebook, ReplySuggestion, StatusAPI, 브라우징/CDP 에이전트 도구 등 전 영역)
+> **근거**: 2024~2026년 최신 학술 논문 18편 및 Google DeepMind / Anthropic / OpenAI 등 핵심 산업 기술 가이드 12건 기반
+> **검증**: 전체 인용 출처 30건 및 최신 프론티어 모델(Gemini 3.8 Flash, Claude 5.5, GPT-6) 웹/기술 문서 전수 검증 완료
+> **적용 범위**: 모든 LLM 기반 애플리케이션 및 에이전트 파이프라인 (대화형 시스템, 장기 기억 서사 요약기, 정적 코드 분석기, 호스트 보안 위협 수사, CDP 브라우징 에이전트 도구 등 전 영역)
 
 본 문서는 AI 프롬프트를 설계, 작성, 검증, 유지보수할 때 준수해야 하는 모든 핵심 원칙, 안티패턴 회피법, 3단계 조립 수명주기, 언어별 구현 패턴 및 2026 최신 특화 모델별 에이전트 실행 프로파일을 일원화한 통합 표준 가이드라인입니다.
 
@@ -77,8 +77,9 @@ XML 태그를 사용하여 프롬프트의 각 구성 요소(지시문, 데이�
   * *"XML Prompting as Grammar-Constrained Interaction" (arXiv:2509.08182, 2025.09)*: XML 태그 기반 프롬프팅이 문법 제약 상호작용임을 증명하며 수렴성을 수학적으로 보장.
   * *Anthropic 공식 문서 (2024-2026)*: "XML tags help Claude parse complex prompts unambiguously".
   * *"The PICCO Framework" (arXiv:2604.14197, 2026)*: Persona, Instructions, Context, Constraints, Output 명시적 5대 영역 분리 프레임워크 제안.
+  * *"Cognitive Enhancement: Rethinking the Necessity of Role-Playing for Large Language Models" (arXiv:2603.18507, 2026)*: 코딩, 수학, 정형 데이터 추출 등 기술적/논리적 추론 태스크에서 장황한 페르소나 설정은 모델을 불필요한 '인격 연기 모드'로 진입시켜 연산 어텐션을 분산(Attention Dilution)시키고 '지시 준수 세금(Instruction-Following Tax)'을 유발하여 제약조건 및 스키마 준수율을 10~30% 저하시킴을 실증.
 * **실전 규칙**:
-  * `<system_directive>` / `<persona>`: 역할(Role)과 페르소나 정의
+  * `<system_directive>` / `<persona>`: 역할(Role)과 도메인 실행 경계 정의
   * `<instructions>`: 핵심 작업 목표(Task Objective) 기술
   * `<rules>` / `<constraints>`: 행동 제약 및 절대 준수 규칙 (Negative & Affirmative guards)
   * `<context>`: 참고 데이터 (세계관 설정, RAG 검색 데이터, 상태 로그)
@@ -86,6 +87,14 @@ XML 태그를 사용하여 프롬프트의 각 구성 요소(지시문, 데이�
   * `<example>`: Few-shot 입출력 예시
   * `<final_instruction>`: 프롬프트 최하단 최종 실행 지시
   * 한 프롬프트 내에서는 XML 태그 체계를 일관되게 유지할 것.
+* **현대적 Role/Persona 재정의 및 태스크별 존폐 기준 (Role Minimization & Task-based Pruning)**:
+  * **1. 결정론적 추론 / 도구 실행 / 코딩 에이전트 (Deterministic / Tool / Coding Agents - 예: Cursor, Claude Code, SWE-agent, 엔터프라이즈 보안 EDR 수사 에이전트)**:
+    - **미사여구형 2인칭 인격화("당신은 ~입니다") 전면 폐기**: "너는 20년 경력의 시니어 보안 아키텍트..."와 같은 감성적 수식어는 추론 모델의 Chain-of-Thought 경로를 왜곡하고 아첨(Sycophancy)을 유발하므로 완전 배제.
+    - **무인격 기능 명세(`Domain & Task`)로 전환 또는 완전 생략**: Role을 부여해야 한다면 단 1줄의 실행 주체/도메인(`Domain: Enterprise Host Security & Forensic Engine`, `Task: ...`)으로 선언하고, 프롬프트 토큰의 95% 이상을 제약 조건(Invariants) 및 도구 스키마(Tool Spec)에 집중시킬 것.
+    - **개발자 환경 지침 파일(`AGENTS.md`)의 무인격 원칙**: 이미 에이전트 런타임 하네스 위에서 구동되는 코딩 지침 파일에서는 Role을 0줄로 완전 폐기하고 아키텍처 철학과 불변 엔지니어링 룰만 직결하는 것이 업계 표준임.
+  * **2. 시점 격리 / 서사 보존 / 롤플레잉 (Perspective / Behavioral Alignment - 예: 대화형 게임 마스터, 가상 서사 연대기 요약 엔진, 면접 시뮬레이터)**:
+    - **1줄 압축 관찰자 앵커(`Role: 가상 소설의 연대기 기록자 / 3rd-person Omniscient Chronicler`) 필수 유지**: 사용자와 캐릭터 간의 감정선 및 대화 데이터가 유입되는 도메인에서는 Role이 제거될 경우 모델이 대화 화자에 동화되거나 1인칭 대사를 생성하는 오염이 발생함.
+    - 제3자 전지적 관찰자 시점 및 대과거 시제 유지를 위한 인지적 경계선(Cognitive Boundary)으로서 1줄 압축 Role을 견고하게 유지해야 함.
 
 ### 2.2 원칙 2: 데이터-지시문 격리 및 Spotlighting 기법 (Data-Instruction Separation & Spotlighting)
 프롬프트 내에서 데이터(사용자 입력, 외부 검색 텍스트)와 지시문(규칙, 명령)을 분리하지 않으면 데이터가 명령으로 오해석되어 환각이나 간접 프롬프트 인젝션(Indirect Prompt Injection)이 발생합니다.
@@ -236,8 +245,14 @@ LLM은 텍스트 추론 기반 산술 연산에서 2~15%의 체계적 오류를 
 * **학술 및 산업 근거**:
   * *"Is Sanskrit the most token-efficient language?" (arXiv:2601.06142, 2026)*: CJK 언어가 토큰을 낭비한다는 과거의 통념과 달리, 최신 토크나이저(GPT-4o, Claude 3.5/3.7, Gemini 2/3)는 대규모 CJK 어휘 사전(Vocabulary) 확장을 통해 표의문자 및 음절 결합의 높은 정보 밀도를 효과적으로 인코딩함.
   * *"Towards harnessing the most of ChatGPT for Korean grammatical error correction" (Applied Sciences, 2024)*: 한국어(SOV) 프롬프팅 시 조사와 격 표지를 명확히 제어할 때 모델의 문법적 의도 파악력이 상승함.
+  * *"Language Drift in Multilingual Retrieval-Augmented Generation: Characterization and Decoding-Time Mitigation" (arXiv:2511.09984, 2025)*: 영문 시스템 디렉티브 및 다국어 입력 환경에서 디코더 레벨의 '영어 어트랙터(English Semantic Attractor)' 편향으로 인해 중간 추론(`thought`) 및 메타 필드가 영어로 회귀하는 언어 드리프트(Language Drift) 위험 실증.
+  * *"Aligning LLMs for Multilingual Consistency in Enterprise Applications" (arXiv:2509.23659, 2025)*: 엔터프라이즈 환경에서 영문 시스템 프롬프트 운용 시 출력 언어 일관성 보장을 위한 명시적 출력 언어 계약(Explicit Output Language Contract)의 필요성 입증.
 * **실전 규칙**:
   * **바이링구얼 전략 (Bilingual System-Output Strategy)**: 복잡한 논리 제약과 XML 태그는 명확성이 검증된 영어(`<rules>`, `<constraints>`, `<output_format>`)로 기술하되, 최종 출력 언어는 한국어로 강제("모든 서사와 응답은 전문적인 한국어로 작성하십시오")할 때 교차 언어 지시 준수율이 가장 높음.
+  * **영문 시스템 디렉티브 사용 시 출력 언어 계약(Explicit Language Contract) 의무화**:
+    - 시스템 디렉티브를 영어(`Domain: ...`, `Task: ...`)로 작성할 경우, 언어 드리프트(약 5~10% 확률로 `thought`나 `summary_title`이 영어로 누출되는 현상)를 차단하기 위해 디렉티브 내부 또는 `<output_format>` 메타데이터에 반드시 1줄 언어 계약을 명시:
+      `Output Language: Korean (모든 thought, summary_title, narrative 필드는 한국어로 작성)`
+    - 만약 다국어 혼용으로 인한 미세 드리프트 위험조차 0%로 통제해야 하는 고신뢰성 파이프라인이라면, 2인칭 인격화만 배제한 **순수 한국어 기능 규격(`[도메인] ... [과제] ...`)**으로 단일 언어 순도를 유지할 것.
   * 토큰 절약을 위한 인위적 단어 축약보다는 완전한 조사('~을/를', '~에 의해')를 갖춘 명확한 문장 구사.
   * 감성적 대화나 롤플레잉 프롬프트는 한국어 고유의 어미 및 뉘앙스를 위해 처음부터 고품질 한국어로 페르소나를 구성.
 
@@ -417,13 +432,13 @@ LLM은 텍스트 추론 기반 산술 연산에서 2~15%의 체계적 오류를 
 - <system_directive>
 - Current Time: 2026-10-12T11:45:00Z (매 턴마다 변경)
 - Session ID: 9f82a1b4-4e2b-48c9 (매 요청마다 변경)
-- 당신은 수석 시스템 설계자입니다...
+- Domain: Enterprise Architecture Engine...
 - </system_directive>
 - ... (수만 토큰의 정적 로어북 및 규칙이 뒤따름 -> 전부 캐시 무효화)
 
 + [Good]
 + <system_directive>
-+ 당신은 수석 시스템 설계자입니다... (완전 불변 정적 접두사 유지 -> 캐시 100% 적중)
++ Domain: Enterprise Architecture Engine (완전 불변 정적 접두사 유지 -> 캐시 100% 적중)
 + </system_directive>
 + ... (수만 토큰의 정적 로어북 및 규칙) ...
 + <runtime_metadata>
@@ -475,16 +490,16 @@ LLM은 텍스트 추론 기반 산술 연산에서 2~15%의 체계적 오류를 
 ### 4.1 C# 11 Raw String Literal (`$$"""..."""`) 캐시 최적화 시스템 프롬프트 표준 템플릿
 
 ```csharp
-// SessionArchitectPromptBuilder.cs
-public static class SessionArchitectPromptBuilder
+// GameMasterPromptBuilder.cs
+public static class GameMasterPromptBuilder
 {
     /// <summary>
     /// 세션 간 100% 불변으로 유지되는 정적 접두사 (KV Cache 적중 대상)
     /// </summary>
     public static readonly string StaticSystemPrefix = $$"""
     <system_directive>
-    당신은 세계관 내의 모든 환경과 사건을 주관하는 게임 마스터(Game Master)입니다.
-    플레이어의 몰입감을 극대화하기 위해 원칙과 제약조건을 엄격히 준수하여 응답하십시오.
+    Role: 세계관 내의 모든 환경과 사건을 주관하는 게임 마스터(Game Master)
+    Task: 플레이어의 몰입감을 극대화하기 위해 원칙과 제약조건을 엄격히 준수하여 3인칭 서사 및 환경 변화를 생성
     </system_directive>
 
     <rules>
@@ -555,7 +570,9 @@ public static class SessionArchitectPromptBuilder
 
 inline std::string GetEntityAnalysisPrompt(const std::string& entityData) {
     std::string prompt = R"(<system_directive>
-당신은 게임 엔진의 엔티티 ECS 컴포넌트 유효성을 검증하는 정적 분석기입니다.
+Domain: Game Engine ECS Component Static Analyzer
+Task: Validate entity component dependencies and verify memory safety without circular dependencies.
+Output Language: Korean (분석 요약 및 이슈 설명은 한국어로 작성)
 </system_directive>
 
 <rules>
@@ -662,7 +679,8 @@ export const UpdateStatusMcpTool = {
 # 1. Developer / System Instruction (세션 영속 정적 캐시 영역: 90% 비용 절감)
 developer_instruction: |
   <persona>
-  당신은 실시간 분산 서버 아키텍처를 전문적으로 리뷰하는 수석 인프라 설계자(Principal Architect)입니다.
+  Domain: Real-Time Distributed Server Infrastructure Architecture
+  Role: Principal Architecture Auditor
   </persona>
 
   <instructions>
