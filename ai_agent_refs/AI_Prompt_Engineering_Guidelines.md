@@ -59,11 +59,6 @@ flowchart LR
   * *진단 2*: 유사한 기능을 가진 도구 간의 명확한 차별화(Disambiguation) 기준이 누락되었는가?
   * *진단 3*: 도구 에러 발생 시 백엔드 피드백을 전달받아 자가 복구(Self-Healing)할 수 있는 재시도 프롬프트 경로가 마련되어 있는가?
 
-### 1.3.1 실측 기반 이중 맹검 프롬프트 벤치마크 (Double-Blind Benchmark & Audit Harness)
-복수의 프롬프트 후보군(Before vs After, 경량화 스펙 vs 강화 스펙) 간의 우열을 가리거나 시스템 규칙(`AGENTS.md`)의 회귀 테스트(Regression Test)를 수행할 때는 인간이나 메인 에이전트의 주관적 추론을 배제하고 [Prompt_Benchmark_Evaluation_Protocol.md](./Prompt_Benchmark_Evaluation_Protocol.md)를 단일 진실 공급원(SSOT)으로 호출합니다.
-* **4단계 순차 파이프라인**: 1단계(시드 셔플 및 익명화 격리) -> 2단계(병렬 독립 실행 러너) -> 3단계(데이터셋 컴파일 및 독립 심사관 블라인드 채점) -> 4단계(비밀키 언마스킹 및 성적표 산출).
-* **100점 만점 2대 평가 축**: 토큰 경제성(50점) vs 지시 이행성(50점)의 파레토 최적점(Sweet Spot) 실측 도출.
-
 ---
 
 ## 제2장: 핵심 프롬프트 엔지니어링 표준 원칙 (16 Standard Principles)
