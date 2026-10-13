@@ -11,7 +11,8 @@ related:
 
 - **ai_agent_refs/**: AI 에이전트 작동 및 프롬프트 최적화를 위한 공통 설계 지침
   - [Agent_Runtime_Operations_Protocol.md](ai_agent_refs/Agent_Runtime_Operations_Protocol.md): 의무 QA 검증(Exit Code 0 Ground Truth), 3-Strike 서킷 브레이커, 롤백 및 트러블슈팅 통합 런타임 프로토콜 (SSOT)
-  - [AI_Prompt_Engineering_Guidelines.md](ai_agent_refs/AI_Prompt_Engineering_Guidelines.md): 2025~2026 최신 LLM 패러다임(하이브리드 추론, MCP, KV Cache) 기반 16대 핵심 원칙, 7대 안티패턴 및 최신 특화 모델(Gemini 3.8 Flash, Claude 5.5, GPT-6) 에이전트 실행 프로파일 통합 표준 지침서 (SSOT)
+  - [AI_Prompt_Engineering_Guidelines.md](ai_agent_refs/AI_Prompt_Engineering_Guidelines.md): 2025~2026 최신 LLM 패러다임(하이브리드 추론, MCP, KV Cache) 기반 16대 핵심 원칙, 7대 안티패턴 및 최신 특화 모델(Gemini 3.8 Flash, Claude 5.5) 에이전트 실행 프로파일 통합 표준 지침서 (SSOT)
+  - [AI_Prompt_Engineering_References.md](ai_agent_refs/AI_Prompt_Engineering_References.md): AI 프롬프트 엔지니어링 표준 지침서의 학술 연구 18편, 주요 산업체 기술 가이드 12건 및 벤치마크 검증 출처 단일 원본 (SSOT)
   - [Prompt_Benchmark_Evaluation_Protocol.md](ai_agent_refs/Prompt_Benchmark_Evaluation_Protocol.md): 프롬프트 품질 및 지시 이행성을 실측 검증하는 4단계 이중 맹검(Double-Blind) 벤치마크 및 독립 심사 표준 지침 (SSOT)
   - [Mermaid_Diagram_Guidelines.md](ai_agent_refs/Mermaid_Diagram_Guidelines.md): 지식베이스 내 Mermaid 다이어그램 작성 표준 및 파싱 에러 방지 규칙 (SSOT)
   - [WPF_Architecture_Guidelines.md](ai_agent_refs/WPF_Architecture_Guidelines.md): WPF 현대적 MVVM 아키텍처, Generic Host DI, 수명주기, Form Validation, 제네릭 모달, 고성능 스트리밍 및 Windows 11 DWM 통합 마스터 지침서 (SSOT)
