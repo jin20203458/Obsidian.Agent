@@ -12,7 +12,7 @@ related:
 > **근거 및 출처 (SSOT)**: 본 지침서의 학술 논문 18편 및 Google DeepMind / Anthropic / OpenAI 등 핵심 산업 기술 가이드 12건(총 30건)의 상세 서지정보와 실증 근거는 [AI_Prompt_Engineering_References.md](./AI_Prompt_Engineering_References.md)에서 일원화 관리합니다.
 > **적용 범위**: 모든 LLM 기반 애플리케이션 및 에이전트 파이프라인 (대화형 시스템, 장기 기억 서사 요약기, 정적 코드 분석기, 호스트 보안 위협 수사, CDP 브라우징 에이전트 도구 등 전 영역)
 
-본 문서는 AI 프롬프트를 설계, 작성, 검증, 유지보수할 때 준수해야 하는 3단계 조립 수명주기, 16대 핵심 원칙, 7대 안티패턴 회피법, 실전 보일러플레이트 템플릿 및 자율 에이전트 실행 프로파일을 일원화한 통합 표준 가이드라인입니다.
+본 문서는 AI 프롬프트를 설계, 작성, 검증, 유지보수할 때 준수해야 하는 3단계 조립 수명주기, 16대 핵심 원칙, 7대 안티패턴 회피법 및 실전 보일러플레이트 템플릿을 일원화한 통합 표준 가이드라인입니다.
 
 ---
 
@@ -460,8 +460,7 @@ interface CharacterStatusUpdate {
 
 // 2. Few-shot 예시 템플릿 (정상 케이스 및 클램핑 엣지 케이스 포함)
 export const STATUS_API_FEW_SHOT = `
-<example>
-// Case 1: 일반 피격 및 상태 이상 부여
+<example case="normal_damage">
 {
   "hpDelta": -15,
   "mpDelta": 0,
@@ -472,10 +471,9 @@ export const STATUS_API_FEW_SHOT = `
   "summary": "독가시 함정에 피격되어 체력이 감소하고 중독 상태가 되었습니다."
 }
 </example>
-<example>
-// Case 2: 치명타 피격 시 0 HP 하한선 클램핑 엣지 케이스
+<example case="hp_clamping_edge_case">
 {
-  "hpDelta": -120,
+  "hpDelta": -100,
   "mpDelta": 0,
   "currentHp": 0,
   "currentMp": 50,
@@ -496,10 +494,11 @@ export const MCP_TOOLS_PROMPT_BLOCK = `
  * @diff 인벤토리 전용 변경은 'sync_inventory' 도구를 별도로 사용.
  */
 declare function update_character_status(args: {
-  characterId: string; // 고유 캐릭터 ID (예: 'char_player_01')
-  hpDelta: number;     // HP 증감량 (-100 ~ +100)
-  mpDelta: number;     // MP 증감량 (-100 ~ +100)
-  reason: string;      // 상태 변경 사유 요약 (1줄 한국어 평서문)
+  characterId: string;           // 고유 캐릭터 ID (예: 'char_player_01')
+  hpDelta: number;               // HP 증감량 (-100 ~ +100)
+  mpDelta: number;               // MP 증감량 (-100 ~ +100)
+  statusEffectsAdded?: string[]; // 신규 부여된 상태 이상 목록 (선택)
+  reason: string;                // 상태 변경 사유 요약 (1줄 한국어 평서문)
 }): void;
 </mcp_tools>
 `;
@@ -517,6 +516,7 @@ export const UpdateStatusMcpTool = {
       characterId: { type: "string", description: "고유 캐릭터 ID (예: 'char_player_01')" },
       hpDelta: { type: "number", description: "HP 증감량 (-100 ~ +100)" },
       mpDelta: { type: "number", description: "MP 증감량 (-100 ~ +100)" },
+      statusEffectsAdded: { type: "array", items: { type: "string" }, description: "신규 부여된 상태 이상 목록" },
       reason: { type: "string", description: "상태 변경 사유 요약 (1줄 한국어 평서문)" }
     },
     required: ["characterId", "hpDelta", "mpDelta", "reason"]
@@ -530,7 +530,7 @@ export const UpdateStatusMcpTool = {
 # 1. Developer / System Instruction (세션 영속 정적 캐시 영역: 90% 비용 절감)
 developer_instruction: |
   <system_directive>
-  Focus: Real-Time Distributed Server Infrastructure Architecture & SPOF Forensics
+  Domain: Real-Time Distributed Server Infrastructure Architecture & SPOF Forensics
   Task: Diagnose single points of failure (SPOF) and bottlenecks from network topology and traffic metrics.
   Output Language: Korean
   </system_directive>
@@ -573,64 +573,4 @@ user_prompt: |
   <final_instruction>
   위 <context>의 지표 로그를 분석하여 <output_format>의 인터페이스 규격에 완벽히 부합하는 순수 JSON 보고서를 출력하십시오.
   </final_instruction>
-```
-
----
-
-## 제5장: 자율 에이전트 및 브라우징 프롬프트 실행 프로파일 (Autonomous & Browsing Agent Profiles)
-
-추론 시점 연산(Extended Thinking / Native Reasoning)을 수행하는 최신 에이전트 환경에서는 수동 추론 지시를 배제하고 완료 조건과 안전 불변식 중심으로 시스템 프롬프트를 설계합니다.
-
-### 5.1 핵심 설계 원칙: 수동 CoT 퇴출 및 3대 실행 계약
-네이티브 추론 엔진이 내장된 모델에게 "단계별로 차근차근 생각해", "너의 생각을 먼저 설명해" 같은 문구를 주입하면 내부 추론 루틴과 충돌하여 출력 토큰 낭비와 루핑을 유발합니다. 대신 다음 3대 요소만 명시합니다:
-1. **명확한 완료 조건 (Definition of Done)**: 어떤 상태에 도달했을 때 목표가 달성된 것인지 명시.
-2. **조작 제약 조건 (Operational Constraints)**: 인증창(OAuth/CAPTCHA), 결제창, 비가역적 삭제/변경 출현 시 즉시 중단 및 제어권 반환 등 안전 불변식.
-3. **엄격한 행동 계약 (Action Contract)**: 불필요한 대화형 인사말을 배제하고 정형화된 도구 호출 및 출력 형식만 방출.
-
----
-
-### 5.2 CDP Accessibility Tree 기반 웹 브라우징 에이전트 템플릿
-
-```markdown
-<system_directive>
-Domain: Deterministic Web Browsing Agent
-Task: Accomplish the user's objective with minimal round-trips and zero conversational filler.
-</system_directive>
-
-<operational_rules>
-1. Interface: Interact strictly via Chrome DevTools Protocol Accessibility Tree UIDs.
-2. Batching Policy: Use fill_form for multiple inputs; avoid sequential single fill calls.
-3. Mutation Policy: After every DOM mutation (click, navigate), observe the newly rendered state before planning the next action.
-4. Security Guardrails: Never attempt to bypass CAPTCHA, Turnstile, or OAuth authentication; immediately yield control to the human supervisor.
-</operational_rules>
-
-<output_format>
-Emit valid tool invocations immediately. When the final goal is achieved, report findings concisely.
-</output_format>
-```
-
----
-
-### 5.3 Interleaved Thinking (`think` 도구) 결합형 UI 조작 에이전트 템플릿
-
-```xml
-<system_directive>
-Domain: Autonomous UI & Browser Interaction Agent
-Task: Execute browser automation tasks while respecting safety boundaries and maintaining static cache prefixes.
-
-<browser_rules>
-1. Target elements using accessibility tree UIDs or verified visual landmarks.
-2. Form interactions MUST use batching (fill_form) to reduce round-trips.
-3. If an action produces an unexpected state (e.g., overlay modal, loading spinner, missing button), invoke your native `think` tool to evaluate the anomaly before attempting retry.
-4. Respect prompt cache boundaries: keep system directives and tool schemas strictly static.
-</browser_rules>
-
-<safety_invariants>
-- Halt immediately and alert the operator if a payment gateway, credential prompt, or irreversible action appears.
-</safety_invariants>
-
-<output_format>
-Emit precise tool calls. Keep internal deliberation within the native thinking trace.
-</output_format>
-</system_directive>
 ```
