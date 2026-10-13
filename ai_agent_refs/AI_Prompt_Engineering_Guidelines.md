@@ -10,16 +10,11 @@ related:
 
 # AI Prompt Engineering Guidelines
 
-> **연구 및 산업 근거**: 30건의 학술 논문 및 벤치마크 출처는 [AI_Prompt_Engineering_References.md](./AI_Prompt_Engineering_References.md) 참조.  
-> **적용 범위**: 모든 LLM 기반 애플리케이션 및 에이전트 파이프라인 (대화형 시스템, 장기 기억 서사 요약기, 정적 코드 분석기, 호스트 보안 위협 수사, CDP 브라우징 에이전트 도구 등 전 영역).
-
-본 문서는 AI 프롬프트를 설계, 작성, 검증, 유지보수할 때 준수해야 하는 모든 핵심 불변식, 안티패턴 방어법, 3단계 조립 수명주기, 언어별 구현 패턴 및 2026 프론티어 특화 모델별 에이전트 실행 프로파일을 일원화한 상시 참조(Always-Referenced) 표준 가이드라인입니다.
+> **참조 출처**: 30건의 학술 논문 및 벤치마크 출처는 [AI_Prompt_Engineering_References.md](./AI_Prompt_Engineering_References.md) 참조.
 
 ---
 
 ## 제1장: 프롬프트 라이프사이클 및 조립 수명 주기 (Prompt Lifecycle & Workflow)
-
-모든 프롬프트 개발 및 수정 작업은 **3단계 프롬프트 조립법 (Build - Audit - Test)** 라이프사이클을 준수합니다.
 
 ```mermaid
 flowchart LR
@@ -52,9 +47,6 @@ flowchart LR
   * *조치 1*: 도구 설명(Docstring)에 "트리거 조건"과 "부정 가드(호출 금지 조건)" 명시.
   * *조치 2*: 유사 도구 간 명확한 차별화(Disambiguation) 기준 추가.
   * *조치 3*: 도구 에러 시 피드백 루프를 수신하는 자가 복구(Self-Healing) 경로 제공.
-
-### 1.3.1 실측 기반 이중 맹검 프롬프트 벤치마크 (Double-Blind Benchmark Harness)
-프롬프트 개정 우열 검증이나 회귀 테스트(Regression Test) 수행 시 주관적 판단을 배제하고 [Prompt_Benchmark_Evaluation_Protocol.md](./Prompt_Benchmark_Evaluation_Protocol.md)에 따라 4단계 파이프라인(시드 셔플 $\rightarrow$ 병렬 독립 러너 $\rightarrow$ 블라인드 심사관 채점 $\rightarrow$ 언마스킹)과 100점 만점 2대 평가 축(토큰 경제성 50점 + 지시 이행성 50점)을 적용합니다.
 
 ---
 
@@ -168,9 +160,7 @@ LLM의 취약점인 복잡 산술 연산, 확률 계산, 상태 수치 누적을
 
 ---
 
-## 제3장: 실전 안티패턴 및 위험 회피 가이드 (Anti-Patterns & Traps)
-
-### 3.1 종합 안티패턴 진단 체크리스트 (7대 매트릭스)
+## 제3장: 7대 안티패턴 진단 체크리스트 (Anti-Pattern Matrix)
 
 | 안티패턴 항목 | 발생 증상 | 리팩토링 처방 |
 | :--- | :--- | :--- |
@@ -405,8 +395,8 @@ user_prompt: |
 
 ## 제5장: 2026 프론티어 특화 모델별 브라우징 & 자율 에이전트 실행 프로파일
 
-### 5.1 패러다임 전환: Definition of Done 중심 설계
-2026 프론티어 모델은 네이티브 추론 엔진(Thinking Token)을 내장하고 있으므로 수동 CoT를 전면 배제하고 다음 3대 요소를 제공합니다:
+### 5.1 브라우징 에이전트 실행 불변식 (Invariants & Definition of Done)
+수동 CoT를 전면 배제하고 에이전트 런타임에 다음 3대 불변식을 선언합니다:
 1. **명확한 완료 조건 (Definition of Done)**: 어떤 상태에 도달했을 때 목표가 달성된 것인지 명시.
 2. **조작 제약 조건 (Operational Constraints)**: 인증창, 결제창, 파괴적 명령(Drop, Failover) 차단 등 안전 불변식.
 3. **엄격한 행동 계약 (Action Contract)**: 도구 호출 스키마 및 순수 정형 데이터 출력 형식.
