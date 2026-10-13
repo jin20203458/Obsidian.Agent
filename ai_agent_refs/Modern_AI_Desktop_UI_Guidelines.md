@@ -23,7 +23,7 @@ related:
 
 | 구분 | 패러다임 A: 대화형 코파일럿 워크벤치 | 패러다임 B: 자율형 에이전트 관제 루프 |
 | :--- | :--- | :--- |
-| **주요 목적** | 다회차 질의응답, 문서/코드 생성, 분석 보조 | 자율적 이상 탐지, 포렌식 조사 연쇄 호출, 시스템 능동 제어 |
+| **주요 목적** | 다회차 질의응답, 문서/코드 생성, 분석 보조 | 자율적 이상 진단, 배치 분석 연쇄 호출, 시스템 능동 제어 |
 | **상호작용 주체** | 인간 중심 (Human-in-the-Loop 요청에 AI가 응답) | 에이전트 중심 (에이전트가 자율 조사 후 인간에게 승인 요청) |
 | **핵심 UI 구성** | 멀티턴 대화 버블, 코드 블록, 프롬프트 입력창, 멀티모달 첨부 | ReAct 루프 타임라인, 도구 호출 피드, 터미널 스트림, 상태 뱃지 |
 | **실시간성 요구** | LLM 토큰 단위 점진적 스트리밍 텍스트 렌더링 | 초당 수천 건 원시 텔레메트리 배치 버퍼링 및 프로젝션 |
@@ -48,9 +48,9 @@ related:
 | `TextMutedBrush` | `#6B7280` | 타임스탬프, 비활성 텍스트, 보조 메타데이터 |
 | `TextThoughtBrush` | `#A2B9D8` | AI 에이전트 내면 사고(Thought) 전용 슬레이트 블루 |
 | `AccentPrimaryBrush` | `#4F46E5` (Indigo) | 주요 분석 실행 버튼, 활성 탭 인디케이터 |
-| `AccentDangerBrush` | `#EF4444` (Crimson) | 치명적 위협, 중단/격리 액션 뱃지 |
-| `AccentWarningBrush` | `#F59E0B` (Amber) | 조사 진행 중, 의심 행동, 로컬 폴백 모드 알림 |
-| `AccentSuccessBrush` | `#10B981` (Emerald) | 안전 검증 완료, 서명 일치, 정상 상태 뱃지 |
+| `AccentDangerBrush` | `#EF4444` (Crimson) | 치명적 오류, 삭제/파괴적 액션 뱃지 |
+| `AccentWarningBrush` | `#F59E0B` (Amber) | 주의 필요, 진행 중인 작업, 오프라인 폴백 모드 알림 |
+| `AccentSuccessBrush` | `#10B981` (Emerald) | 작업 성공 완료, 데이터 검증 완료, 정상 상태 뱃지 |
 
 ### B. 루미넌스 스태킹 (Luminance Stacking)
 다크 UI에서 성능을 저하시키는 큰 반경의 블러 그림자(Drop Shadow)를 배제하고, 계층(Z-Index)이 높아질수록 미세하게 명도를 높여 물리적 깊이감을 부여합니다.
@@ -122,14 +122,14 @@ private void OnSplitterDragCompleted(object sender, DragCompletedEventArgs e)
 ```text
 ┌──────────────────────────────────────────────────────────────┐
 │ ▾  AI 사고 과정 (Thinking Process - 1.8s, 420 tokens)        │  <- Expander
-│   ├─ 프로세스 CommandLine 문자열에서 Base64 패턴 감지...     │  <- TextThoughtBrush
-│   ├─ 리소스 격리 규칙 및 안전성 검토...                      │
-│   └─ 신뢰 서명 불일치 확인. 위험도 85 산출.                   │
+│   ├─ 요청 파라미터 유효성 및 원격 데이터 정합성 검증...      │  <- TextThoughtBrush
+│   ├─ 이상 변동치 및 정책 임계값 비교 분석...                 │
+│   └─ 기준치 초과 변동 확인. 위험도 지표 85 산출.              │
 └──────────────────────────────────────────────────────────────┘
 │
 [최종 분석 서사]
-대상 리소스는 정상 상태를 벗어나 메모리 누수를 일으키고 있습니다.
-격리 조치를 위해 승인 인터락을 요청합니다.
+대상 메트릭에서 기준치를 초과하는 변동 패턴이 감지되었습니다.
+자동 보정 및 동기화 조치를 위해 승인 인터락을 요청합니다.
 ```
 
 ### 무프리징 토큰 증분 렌더링 파이프라인 (`StreamingNarrativeBuffer.cs`)
@@ -337,7 +337,7 @@ public static class ScrollViewerExtensions
                 <Border Background="{DynamicResource AccentPrimaryBrush}" CornerRadius="4" Padding="6,2" Margin="0,0,8,0">
                     <TextBlock Text="TOOL CALL" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" />
                 </Border>
-                <TextBlock Text="InspectResourceMemory" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold" FontSize="13" />
+                <TextBlock Text="ExecuteAnalysisTool" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold" FontSize="13" />
             </StackPanel>
             
             <Border HorizontalAlignment="Right" Background="{DynamicResource AccentSuccessBrush}" CornerRadius="10" Padding="8,2">
@@ -348,7 +348,7 @@ public static class ScrollViewerExtensions
         <!-- 파라미터 JSON 아코디언 -->
         <Expander Header="전달 파라미터" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" Margin="0,0,0,8">
             <Border Background="{DynamicResource SurfaceBackgroundBrush}" CornerRadius="4" Padding="8" Margin="0,4,0,0">
-                <TextBlock Text="{}{ &quot;targetId&quot;: 4920, &quot;depth&quot;: &quot;deep&quot; }"
+                <TextBlock Text="{}{ &quot;targetId&quot;: 4920, &quot;scope&quot;: &quot;detailed&quot; }"
                            FontFamily="Cascadia Code, Consolas" FontSize="11" Foreground="{DynamicResource TextThoughtBrush}" />
             </Border>
         </Expander>
@@ -356,7 +356,7 @@ public static class ScrollViewerExtensions
         <!-- 터미널 표준 출력 (stdout) 뷰어 -->
         <Border Background="{DynamicResource AppBackgroundBrush}" BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="4" Padding="10">
             <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto">
-                <TextBlock Text="[INFO] Reading virtual memory pages...&#x0a;[WARN] Suspicious unbacked executable memory detected"
+                <TextBlock Text="[INFO] Querying remote telemetry endpoint...&#x0a;[WARN] Latency spike detected on secondary channel"
                            FontFamily="Cascadia Code, Consolas" FontSize="11" Foreground="{DynamicResource AccentSuccessBrush}" TextWrapping="Wrap" />
             </ScrollViewer>
         </Border>

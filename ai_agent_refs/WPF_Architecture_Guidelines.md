@@ -2,7 +2,6 @@
 description: WPF 현대적 MVVM 아키텍처, Generic Host DI, 수명주기, 유효성 검사, 제네릭 모달, 고성능 스트리밍 및 Windows 11 DWM 통합 마스터 지침서.
 related:
   - ../README.md
-  - ./Modern_AI_Desktop_UI_Guidelines.md
 ---
 # WPF Architecture Guidelines
 
@@ -18,11 +17,11 @@ WPF 애플리케이션은 시스템의 목적과 데이터 처리량에 따라 �
 
 | 분류 항목 | 원형 1: 순수 ViewModel-First 단일 셸 | 원형 2: 모듈형 셸 + 레일 + CQRS 리드 모델 | 원형 3: 멀티 도구 분석 워크벤치 |
 | :--- | :--- | :--- | :--- |
-| **적합한 앱 유형** | 대화형 AI 클라이언트, 설정 마법사, 단일 워크플로 생산성 도구 | 실시간 보안 관제, 텔레메트리 대시보드, 클라우드 플릿 모니터링 | 정적 코드 분석기, 진단 도구, 복합 데이터그리드 IDE |
+| **적합한 앱 유형** | 단일 워크플로 생산성 도구, 설정 마법사, 경량 비즈니스 클라이언트 | 실시간 텔레메트리 관제, 고빈도 이벤트 모니터링, 플릿 대시보드 | 멀티 패널 분석 도구, 복합 데이터그리드 IDE, 엔터프라이즈 워크벤치 |
 | **창/네비게이션 구조** | 초경량 `MainWindow` + `<ContentControl Content="{Binding CurrentPage}" />` | 52px 슬림 좌측 레일 + 모듈별 `UserControl` 교체 | 다중 분할 도킹 패널(`GridSplitter`), 탭 기반 워크스페이스 |
 | **뷰-뷰모델 결합** | 암시적 `DataTemplate` 자동 맵핑 (View 코드-비하인드 제로) | 명시적 레일 커맨드 기반 모듈 활성화 | 영역별 독립 서브 뷰모델 분할 및 중앙 오케스트레이터 |
 | **수명주기 모델** | `Transient` 등록 + 화면 전환 시 `ICleanup`을 통한 메모리 회수 | `Singleton` 코어 엔진 + 장기 실행 텔레메트리 수신 파이프라인 | 세션별 도구 워크스페이스 수명주기 |
-| **데이터 처리 특성** | 실시간 LLM 토큰 증분 수신, 음성/오디오 스트리밍 파이프라인 | 초당 수천 건 이벤트 버퍼링, 30~60Hz 배치 플러시 프로젝션 | 대용량 구문 분석 트리, 수만 건 진단 로그 가상화 렌더링 |
+| **데이터 처리 특성** | 실시간 토큰/텍스트 증분 수신, 스트리밍 파이프라인 | 초당 수천 건 이벤트 버퍼링, 30~60Hz 배치 플러시 프로젝션 | 대용량 데이터 트리, 수만 건 진단 로그 가상화 렌더링 |
 
 ---
 
@@ -207,7 +206,10 @@ public partial class App : Application
     {
         try
         {
-            var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "crash.log");
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var logDir = Path.Combine(appData, "MyWpfApp", "Logs");
+            Directory.CreateDirectory(logDir);
+            var logPath = Path.Combine(logDir, "crash.log");
             File.AppendAllText(logPath, $"[{DateTime.Now:O}] [{source}] {ex}\n\n");
         }
         catch { /* 로깅 실패 무시 */ }
