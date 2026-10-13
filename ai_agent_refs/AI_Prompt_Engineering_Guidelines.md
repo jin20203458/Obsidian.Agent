@@ -63,8 +63,6 @@ flowchart LR
 
 ## 제2장: 핵심 프롬프트 엔지니어링 표준 원칙 (15 Standard Principles)
 
-> 각 원칙의 학술 연구 및 산업 벤치마크 실증 근거는 [AI_Prompt_Engineering_References.md](./AI_Prompt_Engineering_References.md)를 참조하십시오.
-
 ### 2.1 원칙 1: 구조적 프롬프팅 (Structured Prompting & PICCO Framework)
 XML 태그를 사용하여 프롬프트의 각 구성 요소(지시문, 데이터, 예시, 출력 형식)를 물리적으로 분리하면 마크다운 구분자(`#`, `---`) 대비 인젝션 방어율과 지시 준수율이 극대화됩니다.
 
