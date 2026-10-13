@@ -123,7 +123,7 @@ flowchart TD
 수사 세션이 종결되면, LLM이 구조화된 판결/서사 DTO(`AiInvestigationDecision`)를 확정하고, C# 에이전트([AutonomousHunterAgent.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs))가 OS 텔레메트리 컨텍스트와 결합하여 최종 침해사고 레코드([IncidentRecord](../../../phalanx-edr/src/Phalanx.Cockpit/Storage/ForensicModels.cs))로 영속화합니다.
 
 ### A. LLM ReAct 최종 판결 DTO 규격 (`AiInvestigationDecision`)
-Gemini 3.7 Flash가 JSON Mode로 반환하는 최종 턴 구조화 결정 페이로드 규격입니다:
+Gemini 3.8 Flash가 JSON Mode로 반환하는 최종 턴 구조화 결정 페이로드 규격입니다:
 
 ```json
 {

@@ -23,7 +23,7 @@ related:
 |     **Phase 2**     | **초고속 로컬 룰 엔진**<br>(`LocalRuleEngine`)                          | • 50,000회 연속 룰 평가 평균 지연<br>• 상위 99% 지연 (P99)<br>• 초당 룰 평가 처리량 (Throughput)                           |                      **`0.354 μs` (354 ns)**<br>**`0.7 μs`**<br>**`2,578,183` evals/sec**                       |           `< 100 μs`<br>`< 100 μs`<br>-           |               **280배 고속**<br>142배 여유<br>**초당 257만 건**               |
 |    **Phase 2.5**    | **E2E 반사신경 차단**<br>(공격 윈도우 누수 실측)                               | • 스크립트 카나리 파일 생성 누수<br>• 네이티브 카나리 생성 누수<br>• 스크립트 선제 방어 마진<br>• 네이티브 선제 방어 마진                        |        **`0.0% (0 / 1, 0 Bytes)`**<br>**`0.0% (0 / 1, 0 Bytes)`**<br>**`+646.36 ms`**<br>**`+88.52 ms`**        |    Zero Leak<br>Zero Leak<br>> 0 ms<br>> 0 ms     | **100% 방어 달성**<br>**Zero Leak 공인**<br>12,150배 안전 마진<br>924배 골든타임 사살 |
 |     **Phase 3**     | **AI 자율 헌터 수사**<br>(`AutonomousHunterAgent`)                    | • 오프라인 결정론적 엔진 지연<br>• Google Vertex AI 라이브 ReAct<br>• ReAct 도구 선택/파싱 성공률<br>• 사고 과정(Thought) 평균 길이  |  **`23.1 ms`**<br>**`9,960.8 ms (~9.9 s)`**<br>**`100.0% (정상 수신 7/7, 429 포함 70%)`**<br>**`202 자 (침해 맥락 소명)`**   | `< 50 ms`<br>`< 10.0 s`<br>`> 90.0%`<br>`> 200 자` |        2.1배 고속<br>워치독 안전 통과<br>**무결점 100% 달성**<br>설명 가능성 완비         |
-|    **Phase 3.5**    | **10대 실무 시나리오 전수 검증**<br>(Gemini 3.7 Flash Live)                | • 10대 시나리오 판결 정확도<br>• 평균 소요 턴 수 (Turns)<br>• 평균 종단간 수사 시간<br>• 오탐/미탐률 (FP/FN Rate)                  | **`100.0% (10 / 10)`**<br>**`2.40 턴`** (최대 5턴 대비 -52%)<br>**`12.64 초`** (SLA 50초 대비 여유)<br>**`0.0% (0 / 10)`**  |  `> 95.0%`<br>`< 4.0 턴`<br>`< 50.0 s`<br>`0.0%`   |      **100% 일치 달성**<br>52% 턴 수 절감<br>74.7% 안전 마진<br>오탐 0건 무결점       |
+|    **Phase 3.5**    | **10대 실무 시나리오 전수 검증**<br>(Gemini 3.8 Flash Live)                | • 10대 시나리오 판결 정확도<br>• 평균 소요 턴 수 (Turns)<br>• 평균 종단간 수사 시간<br>• 오탐/미탐률 (FP/FN Rate)                  | **`100.0% (10 / 10)`**<br>**`2.40 턴`** (최대 5턴 대비 -52%)<br>**`12.64 초`** (SLA 50초 대비 여유)<br>**`0.0% (0 / 10)`**  |  `> 95.0%`<br>`< 4.0 턴`<br>`< 50.0 s`<br>`0.0%`   |      **100% 일치 달성**<br>52% 턴 수 절감<br>74.7% 안전 마진<br>오탐 0건 무결점       |
 |    **Phase 3.5**    | **복합 회피 공격 5턴 심층 수사**<br>(T1036 Masquerading Live)              | • 미등록 IP + 위장 드롭 수사 턴<br>• 심층 수사 완주 총 소요 시간<br>• 최종 악성 사살(`ACTION_KILL`)<br>• 도구 결핍 지점 실증 (Tool Gap) |          **`5 턴 전소 (Turn 1~5)`**<br>**`36.5 초`**<br>**`96% 확신도 사살`**<br>**`FileInspectionTool 부재 실증`**          |      `<= 5 턴`<br>`< 50.0 s`<br>`> 90%`<br>-       |    **5턴 필요성 입증**<br>50초 SLA 한계 도달<br>위장 공격 사살 성공<br>신규 도구 시급성 입증    |
 | **Phase 3.5 Final** | **중립적 10대 엔터프라이즈 스트레스**<br>(`NeutralEnterpriseStressBenchmark`) | • 정상 5종 / 회피 공격 5종 판결<br>• 탐지 사각지대 (False Negative)<br>• F1-Score 및 무조작 정확도<br>• 7대 도구 연동 평균 완결 시간   | **`100.0% (10 / 10 All-Green)`**<br>**`0 건 (미탐 완전 박멸)`**<br>**`1.0000 (Precision/Recall 100%)`**<br>**`38 ms`** |  `> 90.0%`<br>`0 건`<br>`> 0.9000`<br>`< 100 ms`   |   **100% 무결점 수호**<br>오탐 0% / 미탐 0%<br>단일 책임 원칙 완비<br>초고속 38ms 완결    |
 
@@ -183,7 +183,7 @@ gantt
 ### A. 실험 목적 및 통제 조건
 * **실험 목적**: C# [`AutonomousHunterAgent.cs`](../../../phalanx-edr/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs)가 의심 프로세스 동결 상태에서 Gemini LLM 및 로컬 포렌식 도구를 연동하여 침해 조사를 수행하고 최종 처분(`ACTION_KILL`)을 집행하는 과정에서, 3대 LLM 통신 아키텍처 패러다임의 실시간 성능 및 신뢰성을 비교 검증.
 * **실험 환경**:
-  * **타깃 모델**: Google Cloud Vertex AI `gemini-3.7-flash` (`global` 엔드포인트)
+  * **타깃 모델**: Google Cloud Vertex AI `gemini-3.8-flash` (`global` 엔드포인트, 실측 기준 버전: `gemini-3.7-flash` / `gemini-3.8-flash` 호환)
   * **인증 인프라**: Google Cloud Service Account (`grc0-494913`), OAuth 2.0 Bearer Token 통신
   * **타깃 침해 시나리오**: `winword.exe`(PID: 3104) ➔ `powershell.exe -NoProfile -ExecutionPolicy Bypass -enc <Base64>`(PID: 8492) 난독화 다운로더 C2 인입 및 `LifecycleSuspended` 상태
   * **실행 규모**: 3대 아키텍처 각 10회 연속 실행 (총 30회 세션, 40여 회 클라우드 호출 실측)
@@ -243,12 +243,12 @@ gantt
 
 ---
 
-## 8. [Phase 3.5] 10대 엔터프라이즈 실무 시나리오 실시간 벤치마크 (Gemini 3.7 Flash Live)
+## 8. [Phase 3.5] 10대 엔터프라이즈 실무 시나리오 실시간 벤치마크 (Gemini 3.8 Flash Live)
 
 ### A. 실험 목적 및 조건
-* **실험 목적**: 실제 클라우드 인프라(Google Cloud Vertex AI, Gemini 3.7 Flash)와 연동하여, 엔터프라이즈 실무 환경에서 발생하는 악성 침해 공격 6종 및 정상 관리자 스크립트 4종(총 10종)을 대상으로 자율 ReAct 수사의 소요 턴 수, 종단간 지연시간, 오탐/미탐 여부 및 판결 정확도를 실측 검증.
+* **실험 목적**: 실제 클라우드 인프라(Google Cloud Vertex AI, Gemini 3.8 Flash)와 연동하여, 엔터프라이즈 실무 환경에서 발생하는 악성 침해 공격 6종 및 정상 관리자 스크립트 4종(총 10종)을 대상으로 자율 ReAct 수사의 소요 턴 수, 종단간 지연시간, 오탐/미탐 여부 및 판결 정확도를 실측 검증.
 * **실험 환경**:
-  * 타깃 모델: Google Cloud Vertex AI `gemini-3.7-flash` (`global` 엔드포인트)
+  * 타깃 모델: Google Cloud Vertex AI `gemini-3.8-flash` (`global` 엔드포인트)
   * 인증 인프라: Google Cloud Service Account OAuth 2.0 Bearer Token (로컬 클린룸 Config 연동)
   * 실행 단위 테스트: [`AutonomousHunterAgentTests.cs`](../../../phalanx-edr/tests/Phalanx.Agent.Tests/AutonomousHunterAgentTests.cs) (`TestLive_MultiScenario_AverageTurnAndLatencyBenchmark`)
 

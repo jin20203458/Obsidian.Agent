@@ -100,7 +100,7 @@ Phalanx Root
 | **C# 런타임** | .NET 10.0 SDK (.NET 9.0 / 10.0 호환) | 관제 콘솔 및 AI 에이전트 스튜디오 |
 | **C# 패키지** | `Grpc.Net.Client`, `LiteDB 5.0.21`, `QuestPDF` | 통신, 포렌식 아카이브, 리포팅 |
 | **WPF UI** | `CommunityToolkit.Mvvm`, `EnterpriseTheme` | MVVM 다크 테마 4-View 관제 인터페이스 |
-| **AI LLM** | `Google.Apis.Auth` / Gemini 3.7 Flash / Ollama | 구조화 JSON 모드 및 Tool Calling |
+| **AI LLM** | `Google.Apis.Auth` / Gemini 3.8 Flash / Ollama | 구조화 JSON 모드 및 Tool Calling |
 
 
 ---
@@ -113,7 +113,7 @@ Phalanx Root
 
 1. **설정 파일 단일 공급원(SSOT)**: 유료 API 오남용 방지를 위해 환경 변수나 임의 경로의 자동 탐색을 배제하며, 오직 `AppSettings.json` 및 UI 설정 창에 명시된 파일 경로와 파라미터만을 사용합니다.
 2. **Gemini 3.x 글로벌 엔드포인트 필수 원칙 (임의 다운그레이드 금지)**:
-   * **글로벌 엔드포인트 강제**: Vertex AI에서 **Gemini 3 이상(`gemini-3.7-flash` 등)** 버전을 연동하려면 리전 엔드포인트(`us-central1` 등)가 아닌 **반드시 `global` 엔드포인트(`aiplatform.googleapis.com` / `locations/global`)**를 사용해야 합니다.
+   * **글로벌 엔드포인트 강제**: Vertex AI에서 **Gemini 3 이상(`gemini-3.8-flash` 등)** 버전을 연동하려면 리전 엔드포인트(`us-central1` 등)가 아닌 **반드시 `global` 엔드포인트(`aiplatform.googleapis.com` / `locations/global`)**를 사용해야 합니다.
    * **추론 레벨(`ThinkingConfig`) 오류 방지**: 리전 엔드포인트 지정 시 3.x 모델 라우팅 실패 및 추론 레벨(`thinkingLevel`)이 정상 동작하지 않는 오류가 발생합니다.
    * **임의 2.x 다운그레이드 금지**: 엔드포인트 오류 발생 시 모델을 `gemini-2.x`로 임의 변경(다운그레이드)하는 행위를 엄격히 금지하며, 엔드포인트 위치(`Location`)를 `global`로 정상화하여 Gemini 3.x 최신 모델 정합성을 유지해야 합니다.
 

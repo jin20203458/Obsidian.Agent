@@ -75,7 +75,7 @@ flowchart TD
 | **Layer 2** | **gRPC 수신 서비스** | [PhalanxGrpcService.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Services/PhalanxGrpcService.cs) | Kestrel HTTP/2 기반 텔레메트리 배치 수신 및 양방향 대응 명령 스트림 |
 | **Layer 2** | **CQRS 트리 프로젝션** | [ProcessTreeProjectionManager.cs](../../../phalanx-edr/src/Phalanx.Cockpit/CQRS/ProcessTreeProjectionManager.cs) | C++ 덤프 및 델타 이벤트 기반 C# 로컬 RAM `FlatNodeList` 가상화 트리 유지 (O(K) 슬라이스 갱신, 0초 족보 조회) |
 | **Layer 2** | **엔터프라이즈 4-View 관제 콕핏** | [Views/](../../../phalanx-edr/src/Phalanx.Cockpit/Views/) | IncidentsView, ProcessGraphView, InvestigationView, AttackLabWindow 4분할 MVVM 관제 UI |
-| **Layer 2** | **자율 AI 위협 헌터** | [AutonomousHunterAgent.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs) | Gemini 3.7 Flash ReAct 루프 기반 7대 OS 도구 자율 호출 및 최종 판결 |
+| **Layer 2** | **자율 AI 위협 헌터** | [AutonomousHunterAgent.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs) | Gemini 3.8 Flash ReAct 루프 기반 7대 OS 도구 자율 호출 및 최종 판결 |
 | **Layer 2** | **포렌식 아카이브 매니저** | [ForensicArchiveManager.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Storage/ForensicArchiveManager.cs) | 임베디드 `LiteDB 5.0.21` 기반 침해사고 영구 보존 및 서사 관리 |
 
 ---
@@ -149,7 +149,7 @@ sequenceDiagram
     participant Watchdog as "SafetyWatchdog (기본 10s/50s)"
     participant Grpc as "gRPC 스트림 (HTTP/2)"
     participant Cockpit as "C# Cockpit (ProcessTree CQRS)"
-    participant AI as "Autonomous Hunter (Gemini 3.7 Flash)"
+    participant AI as "Autonomous Hunter (Gemini 3.8 Flash)"
 
     Kernel->>Sensor: ProcessStart 이벤트 (winword.exe ➔ powershell.exe)
     Note over Sensor: 로컬 룰 엔진 평가 (0.354μs) ➔ 회색지대 위협 판정
@@ -317,7 +317,7 @@ service PhalanxService {
 ### B. 자율 AI 위협 헌터 ([AutonomousHunterAgent.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Agent/AutonomousHunterAgent.cs))
 * **ReAct 추론 루프**:
   * C++ 엔진에서 회색지대 위협(`is_suspended = true`)이 인입되는 순간에만 활성화됩니다 (평상시 API 비용 0원).
-  * **Gemini 3.7 Flash** (`gemini-3.7-flash`) 기반의 ReAct(Thought ➔ Action ➔ Observation) 루프를 통해 7대 OS 도구를 직접 호출합니다.
+  * **Gemini 3.8 Flash** (`gemini-3.8-flash`) 기반의 ReAct(Thought ➔ Action ➔ Observation) 루프를 통해 7대 OS 도구를 직접 호출합니다.
 * **상용 1티어 7대 OS 심층 포렌식 도구 (Tools)**:
   1. `DecodePayloadTool`: [DecodePayloadTool.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Tools/DecodePayloadTool.cs) - Base64, Hex, Gzip 압축 다단계 난독화 인자 재귀적 디코딩.
   2. `ProcessMemoryScanTool`: [ProcessMemoryScanTool.cs](../../../phalanx-edr/src/Phalanx.Cockpit/Tools/ProcessMemoryScanTool.cs) - 동결된 타깃 RAM 가상 메모리(`ReadProcessMemory`) 정규식/C2 도메인 및 VAD 스캔.
