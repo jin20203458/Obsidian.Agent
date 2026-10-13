@@ -1,5 +1,5 @@
 ---
-description: WPF 기반 차세대 데스크톱 AI 및 엔터프라이즈 도구 UI/UX 확장 지침서. 다크 테마 디자인 토큰, 3단 워크벤치, AI 추론 서사, 토큰 스트리밍 버퍼 및 ReAct 루프.
+description: WPF 기반 차세대 데스크톱 AI 및 엔터프라이즈 도구 UI/UX 확장 지침서. 3계층 디자인 토큰, 절제된 엔터프라이즈 팔레트, 벡터 아이콘, 마이크로 타이포그래피, 3단 워크벤치, AI 추론 서사, 무프리징 토큰 스트리밍 버퍼 및 ReAct 루프.
 related:
   - ../README.md
   - ./WPF_Architecture_Guidelines.md
@@ -8,7 +8,7 @@ related:
 
 본 문서는 고성능 데스크톱 환경(WPF/.NET 8.0/9.0/10.0)에서 **엔터프라이즈 프로 도구(Enterprise Pro-Tool)**와 **추론형 AI 에이전트의 실시간 서사(Agentic Narrative)**를 결합할 때 준수해야 하는 공식 UI/UX 디자인 시스템 및 특화 컴포넌트 구현 지침서입니다.
 
-기본 애플리케이션 셸, Generic Host DI, 수명주기, 유효성 검사, In-App 모달 및 WindowChrome/DWM 시스템 통합에 관한 핵심 아키텍처는 단일 진실 공급원(SSOT)인 [WPF_Architecture_Guidelines.md](./WPF_Architecture_Guidelines.md)를 따르며, 본 문서는 **AI 사고 과정(Thinking), 무프리징 토큰 스트리밍, ReAct 도구 호출 시각화, 고밀도 3단 워크벤치 및 로컬 폴백 인터페이스**에 집중합니다.
+기본 애플리케이션 셸, Generic Host DI, 수명주기, 유효성 검사, In-App 모달 및 WindowChrome/DWM 시스템 통합에 관한 핵심 아키텍처는 단일 진실 공급원(SSOT)인 [WPF_Architecture_Guidelines.md](./WPF_Architecture_Guidelines.md)를 따르며, 본 문서는 **3계층 디자인 토큰 불변성, 절제된 엔터프라이즈 팔레트, 순수 벡터 아이콘 시스템, 마이크로 타이포그래피, AI 사고 과정(Thinking), 무프리징 토큰 스트리밍, ReAct 도구 호출 시각화, 고밀도 3단 워크벤치 및 로컬 폴백 인터페이스**에 집중합니다.
 
 ---
 
@@ -18,6 +18,7 @@ related:
 
 * **네이티브 하드웨어 가속 우위**: 웹 브라우저 엔진(Electron)의 300MB~1GB 메모리 풋프린트를 배제하고, DirectX 하드웨어 가속 기반의 가벼운 30~80MB 풋프린트와 60fps 무프리징 렌더링을 보장합니다.
 * **설명 가능성과 서사의 조화**: AI가 내린 판단의 과정(Thought), 호출한 도구(Action), 수집한 관측 데이터(Observation), 최종 판단(Verdict)을 시각적으로 체계화하여 사용자에게 완전한 투명성을 제공합니다.
+* **절제된 미학 (Restrained Polish)**: 채도가 높은 원색 블록을 남용하지 않고, 미세한 명도 단차(Luminance Stacking), 마이크로 인디케이터(Micro-Dot), 섬세한 행간(LineHeight)을 통해 장시간 작업에도 시각적 피로가 없는 상용급 전문 소프트웨어 룩을 구현합니다.
 
 ### 2대 핵심 상호작용 패러다임
 
@@ -30,41 +31,226 @@ related:
 
 ---
 
-## 2. Dark-First AI 디자인 토큰 시스템
+## 2. 3계층 AI 디자인 토큰 시스템 (Zero Hardcoding)
 
-순수 블랙(`black/#000000`)의 과도한 대비로 인한 눈의 피로를 방지하고, 딥 징크/슬레이트 계열의 무채색을 기본 캔버스로 사용합니다.
+XAML 컨트롤 내 원시 헥사(Hex) 코드의 직접 하드코딩(`Foreground="#FFFFFF"`, `Background="#7F3B00"` 등)은 테마 전환을 파괴하고 시각적 일관성을 해치는 중대 결함입니다. 모든 UI는 3계층(Tier) 분리 모델을 엄격히 준수합니다.
 
-### A. AI 시맨틱 컬러 토큰 규격 (`Themes/DarkTheme.xaml`)
+```text
+[Tier 1: PrimitiveTokens.xaml] (불변 Color, 치수 Double, FontFamily 선언)
+       ↓ StaticResource 바인딩
+[Tier 2: DarkTheme.xaml] (시맨틱 SolidColorBrush 선언 + po:Freeze="True" 동결)
+       ↓ DynamicResource 바인딩
+[Tier 3: ControlStyles.xaml & Views] (컨트롤 템플릿, 사용자 화면 XAML)
+```
 
-| 토큰 키 (ResourceKey) | 헥사 코드 (Hex) | 용도 및 설명 |
-| :--- | :--- | :--- |
-| `AppBackgroundBrush` | `#0B0C10` | 최하단 윈도우 기본 캔버스 배경색 |
-| `SurfaceBackgroundBrush` | `#13141C` | 사이드바, 좌측 네비게이션 레일, 상단 헤더 배경색 |
-| `CardBackgroundBrush` | `#1A1D27` | 개별 카드, 분석 노드 블록, 대화 버블 배경색 |
-| `CardBackgroundElevatedBrush`| `#232736` | 팝오버, 드롭다운 메뉴, 인앱 모달 컨테이너 배경색 |
-| `BorderSubtleBrush` | `#22FFFFFF` (13% White) | 주요 컨테이너 및 컨트롤의 1px 외곽선 |
-| `TextPrimaryBrush` | `#F2F4F8` | 메인 헤더, 수치 데이터, 강조 제목 (고대비) |
-| `TextSecondaryBrush` | `#AAB2C0` | 본문 서사 텍스트, 설명 레이블 |
-| `TextMutedBrush` | `#6B7280` | 타임스탬프, 비활성 텍스트, 보조 메타데이터 |
-| `TextThoughtBrush` | `#A2B9D8` | AI 에이전트 내면 사고(Thought) 전용 슬레이트 블루 |
-| `AccentPrimaryBrush` | `#4F46E5` (Indigo) | 주요 분석 실행 버튼, 활성 탭 인디케이터 |
-| `AccentDangerBrush` | `#EF4444` (Crimson) | 치명적 오류, 삭제/파괴적 액션 뱃지 |
-| `AccentWarningBrush` | `#F59E0B` (Amber) | 주의 필요, 진행 중인 작업, 오프라인 폴백 모드 알림 |
-| `AccentSuccessBrush` | `#10B981` (Emerald) | 작업 성공 완료, 데이터 검증 완료, 정상 상태 뱃지 |
+### A. Tier 1: 불변 토큰 규격 (`Themes/PrimitiveTokens.xaml`)
 
-### B. 루미넌스 스태킹 (Luminance Stacking)
+```xml
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <!-- 1. 불변 캔버스 & 서피스 컬러 (Zinc Scale) -->
+    <Color x:Key="ColorZinc950">#0B0C10</Color>
+    <Color x:Key="ColorZinc900">#13141C</Color>
+    <Color x:Key="ColorZinc800">#1A1D27</Color>
+    <Color x:Key="ColorZinc750">#232736</Color>
+    <Color x:Key="ColorZinc700">#2E3446</Color>
+    <Color x:Key="ColorBorderSubtle">#22FFFFFF</Color>
+    <Color x:Key="ColorBorderStrong">#33FFFFFF</Color>
+
+    <!-- 2. 불변 타이포그래피 컬러 -->
+    <Color x:Key="ColorTextPrimary">#F2F4F8</Color>
+    <Color x:Key="ColorTextSecondary">#AAB2C0</Color>
+    <Color x:Key="ColorTextMuted">#6B7280</Color>
+    <Color x:Key="ColorTextThought">#A2B9D8</Color>
+    <Color x:Key="ColorTextOnAccent">#FFFFFF</Color>
+
+    <!-- 3. 절제된 엔터프라이즈 상태 팔레트 (Restrained Enterprise Palette: Bg-Border-Text 3단 페어링) -->
+    <!-- 정상 / 완료 (Success) -->
+    <Color x:Key="ColorStatusSuccessBg">#112017</Color>
+    <Color x:Key="ColorStatusSuccessBorder">#166534</Color>
+    <Color x:Key="ColorStatusSuccessText">#4ADE80</Color>
+    <Color x:Key="ColorDotLive">#10B981</Color>
+
+    <!-- 오류 / 치명 (Danger) -->
+    <Color x:Key="ColorStatusErrorBg">#261315</Color>
+    <Color x:Key="ColorStatusErrorBorder">#7F1D1D</Color>
+    <Color x:Key="ColorStatusErrorText">#F87171</Color>
+    <Color x:Key="ColorDotCritical">#E11D48</Color>
+
+    <!-- 경고 / 대기 (Warning) -->
+    <Color x:Key="ColorStatusWarningBg">#241C10</Color>
+    <Color x:Key="ColorStatusWarningBorder">#92400E</Color>
+    <Color x:Key="ColorStatusWarningText">#FBBF24</Color>
+    <Color x:Key="ColorDotWarning">#D97706</Color>
+
+    <!-- 주요 강조 / 액션 (Brand Accent) -->
+    <Color x:Key="ColorAccentPrimary">#4F46E5</Color>
+    <Color x:Key="ColorAccentPrimaryHover">#6366F1</Color>
+
+    <!-- 반투명 오버레이 -->
+    <Color x:Key="ColorOverlayDim">#80000000</Color>
+
+    <!-- 4. 치수 및 폰트 규격 -->
+    <CornerRadius x:Key="CornerRadiusCard">8</CornerRadius>
+    <CornerRadius x:Key="CornerRadiusBubble">4,16,16,16</CornerRadius>
+    <CornerRadius x:Key="CornerRadiusBadge">10</CornerRadius>
+    <FontFamily x:Key="SansFontFamily">Segoe UI Variable Text, Segoe UI, -apple-system, sans-serif</FontFamily>
+    <FontFamily x:Key="CodeFontFamily">Cascadia Code, Consolas, Courier New, monospace</FontFamily>
+
+</ResourceDictionary>
+```
+
+### B. Tier 2: 시맨틱 동결 브러시 규격 (`Themes/DarkTheme.xaml`)
+
+모든 `SolidColorBrush`는 UI 스레드 렌더 오버헤드를 제로화하기 위해 `po:Freeze="True"`로 고정합니다.
+
+```xml
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:po="http://schemas.microsoft.com/winfx/2006/xaml/presentation/options">
+
+    <!-- 캔버스 및 레이어 브러시 -->
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="{StaticResource ColorZinc950}" po:Freeze="True" />
+    <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="{StaticResource ColorZinc900}" po:Freeze="True" />
+    <SolidColorBrush x:Key="CardBackgroundBrush" Color="{StaticResource ColorZinc800}" po:Freeze="True" />
+    <SolidColorBrush x:Key="CardBackgroundElevatedBrush" Color="{StaticResource ColorZinc750}" po:Freeze="True" />
+    <SolidColorBrush x:Key="BorderSubtleBrush" Color="{StaticResource ColorBorderSubtle}" po:Freeze="True" />
+    <SolidColorBrush x:Key="BorderStrongBrush" Color="{StaticResource ColorBorderStrong}" po:Freeze="True" />
+
+    <!-- 타이포그래피 브러시 -->
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource ColorTextPrimary}" po:Freeze="True" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource ColorTextSecondary}" po:Freeze="True" />
+    <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource ColorTextMuted}" po:Freeze="True" />
+    <SolidColorBrush x:Key="TextThoughtBrush" Color="{StaticResource ColorTextThought}" po:Freeze="True" />
+    <SolidColorBrush x:Key="TextOnAccentBrush" Color="{StaticResource ColorTextOnAccent}" po:Freeze="True" />
+
+    <!-- 엔터프라이즈 상태 브러시 페어링 -->
+    <SolidColorBrush x:Key="StatusSuccessBgBrush" Color="{StaticResource ColorStatusSuccessBg}" po:Freeze="True" />
+    <SolidColorBrush x:Key="StatusSuccessBorderBrush" Color="{StaticResource ColorStatusSuccessBorder}" po:Freeze="True" />
+    <SolidColorBrush x:Key="StatusSuccessTextBrush" Color="{StaticResource ColorStatusSuccessText}" po:Freeze="True" />
+    <SolidColorBrush x:Key="DotLiveBrush" Color="{StaticResource ColorDotLive}" po:Freeze="True" />
+
+    <SolidColorBrush x:Key="StatusErrorBgBrush" Color="{StaticResource ColorStatusErrorBg}" po:Freeze="True" />
+    <SolidColorBrush x:Key="StatusErrorBorderBrush" Color="{StaticResource ColorStatusErrorBorder}" po:Freeze="True" />
+    <SolidColorBrush x:Key="StatusErrorTextBrush" Color="{StaticResource ColorStatusErrorText}" po:Freeze="True" />
+    <SolidColorBrush x:Key="DotCriticalBrush" Color="{StaticResource ColorDotCritical}" po:Freeze="True" />
+
+    <SolidColorBrush x:Key="StatusWarningBgBrush" Color="{StaticResource ColorStatusWarningBg}" po:Freeze="True" />
+    <SolidColorBrush x:Key="StatusWarningBorderBrush" Color="{StaticResource ColorStatusWarningBorder}" po:Freeze="True" />
+    <SolidColorBrush x:Key="StatusWarningTextBrush" Color="{StaticResource ColorStatusWarningText}" po:Freeze="True" />
+    <SolidColorBrush x:Key="DotWarningBrush" Color="{StaticResource ColorDotWarning}" po:Freeze="True" />
+
+    <SolidColorBrush x:Key="AccentPrimaryBrush" Color="{StaticResource ColorAccentPrimary}" po:Freeze="True" />
+    <SolidColorBrush x:Key="AccentPrimaryHoverBrush" Color="{StaticResource ColorAccentPrimaryHover}" po:Freeze="True" />
+    <SolidColorBrush x:Key="OverlayDimBrush" Color="{StaticResource ColorOverlayDim}" po:Freeze="True" />
+
+</ResourceDictionary>
+```
+
+### C. 루미넌스 스태킹 (Luminance Stacking)
 다크 UI에서 성능을 저하시키는 큰 반경의 블러 그림자(Drop Shadow)를 배제하고, 계층(Z-Index)이 높아질수록 미세하게 명도를 높여 물리적 깊이감을 부여합니다.
 
 ```text
-[Layer 0: Window Background]  ➔  #0B0C10
-    └── [Layer 1: Surface Rail]   ➔  #13141C (Border: 1px #22FFFFFF)
-            └── [Layer 2: Content Card]  ➔  #1A1D27 (Border: 1px #22FFFFFF)
-                    └── [Layer 3: Popover/Modal] ➔  #232736 (Border: 1px #33FFFFFF)
+[Layer 0: Window Background]  ➔  #0B0C10 (AppBackgroundBrush)
+    └── [Layer 1: Surface Rail]   ➔  #13141C (SurfaceBackgroundBrush, Border: 1px #22FFFFFF)
+            └── [Layer 2: Content Card]  ➔  #1A1D27 (CardBackgroundBrush, Border: 1px #22FFFFFF)
+                    └── [Layer 3: Popover/Modal] ➔  #232736 (CardBackgroundElevatedBrush, Border: 1px #33FFFFFF)
 ```
 
 ---
 
-## 3. 고밀도 3단 분할 워크벤치 레이아웃
+## 3. 마이크로 타이포그래피 및 서사 텍스트 스타일 규격
+
+장시간 텍스트를 읽는 에이전트 대화 및 분석 인터페이스에서는 **명시적 행간(`LineHeight`), 폰트 패밀리 분리, 비대칭 라운딩**이 시각적 고급스러움을 결정합니다.
+
+```xml
+<!-- Themes/ControlStyles.xaml 내 서사/대화 전용 텍스트 스타일 -->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- 1. AI 코파일럿 대화 버블 컨테이너 (비대칭 라운딩: 좌상단 앵커링) -->
+    <Style x:Key="DialogueBubbleBorderStyle" TargetType="Border">
+        <Setter Property="MaxWidth" Value="760" />
+        <Setter Property="Padding" Value="18,14" />
+        <Setter Property="Margin" Value="0,4,0,8" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource CornerRadiusBubble}" />
+    </Style>
+
+    <!-- 2. 대화 본문 텍스트 (명시적 행간 24px) -->
+    <Style x:Key="DialogueBodyTextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource SansFontFamily}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="LineHeight" Value="24" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <!-- 3. AI 내면 사고(Thought) 서사 (슬레이트 블루 이탤릭 + 행간 22px) -->
+    <Style x:Key="ThoughtNarrativeTextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource SansFontFamily}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="LineHeight" Value="22" />
+        <Setter Property="Foreground" Value="{DynamicResource TextThoughtBrush}" />
+        <Setter Property="FontStyle" Value="Italic" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <!-- 4. 고밀도 메트릭 및 코드 텍스트 (모노스페이스) -->
+    <Style x:Key="MonospaceDataTextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource CodeFontFamily}" />
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+    </Style>
+
+</ResourceDictionary>
+```
+
+---
+
+## 4. 순수 XAML 벡터 아이콘 지오메트리 (`Themes/VectorIcons.xaml`)
+
+외부 이미지 파일(PNG)이나 글꼴(Font Awesome) 의존성을 배제하고, 장식용 이모지를 사용하지 않으며, 고해상도(HiDPI)에서도 면도날처럼 날카로운 렌더링을 보장하는 **순수 XAML `<Geometry>` 벡터 리소스 사전**을 사용합니다.
+
+```xml
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- 12대 엔터프라이즈 범용 벡터 아이콘 패스 -->
+    <Geometry x:Key="IconPlay">M8 5v14l11-7z</Geometry>
+    <Geometry x:Key="IconStop">M6 6h12v12H6z</Geometry>
+    <Geometry x:Key="IconTerminal">M4 17l6-6-6-6m8 14h8</Geometry>
+    <Geometry x:Key="IconCheck">M20 6L9 17l-5-5</Geometry>
+    <Geometry x:Key="IconClose">M18 6L6 18M6 6l12 12</Geometry>
+    <Geometry x:Key="IconAlertTriangle">M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4m0 4h.01</Geometry>
+    <Geometry x:Key="IconCopy">M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z</Geometry>
+    <Geometry x:Key="IconRefresh">M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15</Geometry>
+    <Geometry x:Key="IconSearch">M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z</Geometry>
+    <Geometry x:Key="IconChevronDown">M6 9l6 6 6-6</Geometry>
+    <Geometry x:Key="IconTool">M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z</Geometry>
+    <Geometry x:Key="IconSparkles">M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z</Geometry>
+
+</ResourceDictionary>
+```
+
+#### XAML 인라인 아이콘 렌더링 표준 패턴
+```xml
+<!-- 14x14 벡터 아이콘 렌더링 예시 (색상은 DynamicResource로 상속) -->
+<Viewbox Width="14" Height="14" Margin="0,0,6,0">
+    <Path Data="{StaticResource IconTerminal}"
+          Fill="{DynamicResource TextSecondaryBrush}"
+          Stretch="Uniform" />
+</Viewbox>
+```
+
+---
+
+## 5. 고밀도 3단 분할 워크벤치 레이아웃
 
 VS Code, Linear, Obsidian 스타일의 **고밀도 프로페셔널 정보 구조**를 구축하기 위해 `GridSplitter` 기반의 3단 분할 레이아웃을 표준화합니다.
 
@@ -115,9 +301,9 @@ private void OnSplitterDragCompleted(object sender, DragCompletedEventArgs e)
 
 ---
 
-## 4. 실시간 AI 사고(Thinking) 및 스트리밍 서사(Narrative) UI
+## 6. 실시간 AI 사고(Thinking) 및 스트리밍 서사(Narrative) UI
 
-현대 추론형 AI 모델(DeepSeek-R1, OpenAI o1/o3, Gemini 2.0 Flash Thinking)의 확장 사고 패러다임에 맞추어, **내부 추론 과정(`<think>`)과 최종 분석 서사(Narrative)를 시각적으로 엄격히 분리**합니다.
+현대 추론형 AI 모델의 확장 사고 패러다임에 맞추어, **내부 추론 과정(`<think>`)과 최종 분석 서사(Narrative)를 시각적으로 엄격히 분리**합니다.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
@@ -264,7 +450,7 @@ public partial class AiWorkbenchViewModel : ObservableObject
 ```
 
 ### Markdown 증분 렌더링 전략 (Plain Text vs Rich Markdown)
-단순 `TextBlock`은 코드 펜스(```` ```csharp ````), 굵은 글씨(`**`), 인라인 코드(`` ` ``) 등 LLM의 마크다운 서사를 원시 문자열로만 노출하는 한계가 있습니다. 프로덕션 환경에서는 다음 렌더링 전략을 채택합니다:
+단순 `TextBlock`은 코드 펜스, 굵은 글씨, 인라인 코드 등 LLM의 마크다운 서사를 원시 문자열로만 노출하는 한계가 있습니다. 프로덕션 환경에서는 다음 렌더링 전략을 채택합니다:
 
 1. **토큰 단위 재파싱 금지**: 토큰 유입 시마다 전체 마크다운 문서를 통째로 AST 파싱하면 O(N^2) CPU 락이 발생합니다.
 2. **블록 단위 증분 렌더링**: 개행 문자(`\n\n`) 단위로 완성된 문단 및 코드 블록 단위로 마크다운 AST를 구성하고, 작성 중인 최신 블록만 인라인 스트리밍 텍스트로 합성합니다.
@@ -321,43 +507,114 @@ public static class ScrollViewerExtensions
 
 ---
 
-## 5. 자율형 에이전트 ReAct 루프 및 도구 호출 카드 XAML 스타일
+## 7. 자율형 에이전트 ReAct 루프 및 도구 호출 카드 XAML 스타일
 
-자율 에이전트가 판단(Thought)하고 도구를 호출(Action)하며 결과(Observation)를 확인하는 전 과정을 타임라인 카드 형태로 시각화합니다.
+자율 에이전트가 판단(Thought)하고 도구를 호출(Action)하며 결과(Observation)를 확인하는 전 과정을 절제된 엔터프라이즈 팔레트와 벡터 아이콘 기반의 타임라인 카드로 시각화합니다. 원시 헥사 하드코딩이 100% 제거되어 있습니다.
 
 ```xml
 <!-- ReAct 도구 호출 타임라인 카드 -->
 <Border Background="{DynamicResource CardBackgroundBrush}"
         BorderBrush="{DynamicResource BorderSubtleBrush}"
-        BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,0,12">
+        BorderThickness="1"
+        CornerRadius="{StaticResource CornerRadiusCard}"
+        Padding="14"
+        Margin="0,0,0,12">
     <StackPanel>
-        <!-- 도구 헤더 (이름 뱃지 + 실행 상태 인디케이터) -->
+        <!-- 도구 헤더 (벡터 아이콘 + 도구 이름 + 절제된 마이크로 인디케이터 뱃지) -->
         <Grid Margin="0,0,0,10">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Border Background="{DynamicResource AccentPrimaryBrush}" CornerRadius="4" Padding="6,2" Margin="0,0,8,0">
-                    <TextBlock Text="TOOL CALL" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" />
+                <Border Background="{DynamicResource SurfaceBackgroundBrush}"
+                        BorderBrush="{DynamicResource BorderSubtleBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="6,3"
+                        Margin="0,0,8,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Viewbox Width="12" Height="12" Margin="0,0,4,0">
+                            <Path Data="{StaticResource IconTool}"
+                                  Fill="{DynamicResource AccentPrimaryBrush}"
+                                  Stretch="Uniform" />
+                        </Viewbox>
+                        <TextBlock Text="TOOL CALL"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   FontFamily="{StaticResource SansFontFamily}"
+                                   FontWeight="Bold"
+                                   FontSize="10" />
+                    </StackPanel>
                 </Border>
-                <TextBlock Text="ExecuteAnalysisTool" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold" FontSize="13" />
+                <TextBlock Text="ExecuteAnalysisTool"
+                           Foreground="{DynamicResource TextPrimaryBrush}"
+                           FontFamily="{StaticResource CodeFontFamily}"
+                           FontWeight="SemiBold"
+                           FontSize="12.5"
+                           VerticalAlignment="Center" />
             </StackPanel>
             
-            <Border HorizontalAlignment="Right" Background="{DynamicResource AccentSuccessBrush}" CornerRadius="10" Padding="8,2">
-                <TextBlock Text="COMPLETED" Foreground="#FFFFFF" FontWeight="Bold" FontSize="10" />
+            <!-- 상태 인디케이터: 6px 마이크로 닷 + 절제된 배경 틴트 페어링 -->
+            <Border HorizontalAlignment="Right"
+                    Background="{DynamicResource StatusSuccessBgBrush}"
+                    BorderBrush="{DynamicResource StatusSuccessBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource CornerRadiusBadge}"
+                    Padding="8,2">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse Width="6" Height="6"
+                             Fill="{DynamicResource DotLiveBrush}"
+                             Margin="0,0,5,0" />
+                    <TextBlock Text="COMPLETED"
+                               Foreground="{DynamicResource StatusSuccessTextBrush}"
+                               FontFamily="{StaticResource SansFontFamily}"
+                               FontWeight="SemiBold"
+                               FontSize="10" />
+                </StackPanel>
             </Border>
         </Grid>
 
         <!-- 파라미터 JSON 아코디언 -->
-        <Expander Header="전달 파라미터" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" Margin="0,0,0,8">
-            <Border Background="{DynamicResource SurfaceBackgroundBrush}" CornerRadius="4" Padding="8" Margin="0,4,0,0">
+        <Expander Header="전달 파라미터"
+                  Foreground="{DynamicResource TextSecondaryBrush}"
+                  FontFamily="{StaticResource SansFontFamily}"
+                  FontSize="11"
+                  Margin="0,0,0,8">
+            <Border Background="{DynamicResource SurfaceBackgroundBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="10,8"
+                    Margin="0,4,0,0">
                 <TextBlock Text="{}{ &quot;targetId&quot;: 4920, &quot;scope&quot;: &quot;detailed&quot; }"
-                           FontFamily="Cascadia Code, Consolas" FontSize="11" Foreground="{DynamicResource TextThoughtBrush}" />
+                           FontFamily="{StaticResource CodeFontFamily}"
+                           FontSize="11.5"
+                           Foreground="{DynamicResource TextThoughtBrush}" />
             </Border>
         </Expander>
 
         <!-- 터미널 표준 출력 (stdout) 뷰어 -->
-        <Border Background="{DynamicResource AppBackgroundBrush}" BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="4" Padding="10">
+        <Border Background="{DynamicResource AppBackgroundBrush}"
+                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Padding="10">
             <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto">
-                <TextBlock Text="[INFO] Querying remote telemetry endpoint...&#x0a;[WARN] Latency spike detected on secondary channel"
-                           FontFamily="Cascadia Code, Consolas" FontSize="11" Foreground="{DynamicResource AccentSuccessBrush}" TextWrapping="Wrap" />
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <Viewbox Width="11" Height="11" Margin="0,0,4,0">
+                            <Path Data="{StaticResource IconTerminal}"
+                                  Fill="{DynamicResource TextMutedBrush}"
+                                  Stretch="Uniform" />
+                        </Viewbox>
+                        <TextBlock Text="Console Output"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontFamily="{StaticResource SansFontFamily}"
+                                   FontSize="10"
+                                   FontWeight="SemiBold" />
+                    </StackPanel>
+                    <TextBlock Text="[INFO] Querying remote telemetry endpoint...&#x0a;[WARN] Latency spike detected on secondary channel"
+                               FontFamily="{StaticResource CodeFontFamily}"
+                               FontSize="11"
+                               Foreground="{DynamicResource StatusSuccessTextBrush}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
             </ScrollViewer>
         </Border>
     </StackPanel>
@@ -366,19 +623,31 @@ public static class ScrollViewerExtensions
 
 ---
 
-## 6. 신뢰성 및 오프라인 로컬 결정론적 폴백(Fallback) UI 패턴
+## 8. 신뢰성 및 오프라인 로컬 결정론적 폴백(Fallback) UI 패턴
 
-클라우드 AI 서비스 장애나 네트워크 두절 시 사용자가 시스템 상태를 즉시 인지하고 안전하게 로컬 규칙 엔진으로 전환되도록 가시적 피드백을 제공합니다.
+클라우드 AI 서비스 장애나 네트워크 두절 시 사용자가 시스템 상태를 즉시 인지하고 안전하게 로컬 규칙 엔진으로 전환되도록 가시적 피드백을 제공합니다. 원시 하드코딩 없이 `StatusWarning` 브러시 3단 페어링과 벡터 경고 아이콘을 결합합니다.
 
 ```xml
 <!-- 상단 고정 오프라인 알림 배너 (BoolToVis는 WPF_Architecture_Guidelines.md 규격에 따라 App.xaml에 등록된 전역 컨버터) -->
-<Border Background="#7F3B00" BorderBrush="{DynamicResource AccentWarningBrush}" BorderThickness="0,0,0,1"
-        Padding="16,8" Visibility="{Binding IsOfflineFallbackActive, Converter={StaticResource BoolToVis}}">
+<Border Background="{DynamicResource StatusWarningBgBrush}"
+        BorderBrush="{DynamicResource StatusWarningBorderBrush}"
+        BorderThickness="0,0,0,1"
+        Padding="16,8"
+        Visibility="{Binding IsOfflineFallbackActive, Converter={StaticResource BoolToVis}}">
     <Grid>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-            <Border Width="8" Height="8" Background="{DynamicResource AccentWarningBrush}" CornerRadius="4" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <TextBlock Text="LOCAL FALLBACK ACTIVE: 클라우드 AI 연결 불가로 로컬 결정론적 규칙 엔진으로 전환되었습니다."
-                       Foreground="#FDE68A" FontWeight="SemiBold" FontSize="12" />
+            <!-- 14x14 벡터 경고 삼각 아이콘 -->
+            <Viewbox Width="14" Height="14" Margin="0,0,8,0" VerticalAlignment="Center">
+                <Path Data="{StaticResource IconAlertTriangle}"
+                      Fill="{DynamicResource DotWarningBrush}"
+                      Stretch="Uniform" />
+            </Viewbox>
+            <TextBlock Text="LOCAL FALLBACK ACTIVE: 원격 AI 서비스 응답 지연으로 로컬 결정론적 규칙 엔진으로 전환되었습니다."
+                       Foreground="{DynamicResource StatusWarningTextBrush}"
+                       FontFamily="{StaticResource SansFontFamily}"
+                       FontWeight="SemiBold"
+                       FontSize="11.5"
+                       VerticalAlignment="Center" />
         </StackPanel>
     </Grid>
 </Border>
@@ -386,7 +655,7 @@ public static class ScrollViewerExtensions
 
 ---
 
-## 7. AI 특화 XAML 컨트롤 스타일 사전
+## 9. AI 특화 XAML 컨트롤 스타일 사전
 
 AI 에이전트 인터페이스에서 사용되는 특화 컨트롤 템플릿입니다.
 
@@ -408,7 +677,7 @@ AI 에이전트 인터페이스에서 사용되는 특화 컨트롤 템플릿입
                     <Border Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="8">
+                            CornerRadius="{StaticResource CornerRadiusCard}">
                         <StackPanel>
                             <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
                                           Background="Transparent" BorderThickness="0" Padding="12,8" Cursor="Hand">
@@ -436,27 +705,28 @@ AI 에이전트 인터페이스에서 사용되는 특화 컨트롤 템플릿입
         </Setter>
     </Style>
 
-    <!-- 2. 캡슐형 주 액션 버튼 -->
+    <!-- 2. 캡슐형 주 액션 버튼 (토큰화 완료) -->
     <Style x:Key="CapsulePrimaryButtonStyle" TargetType="Button">
-        <Setter Property="Height" Value="36" />
+        <Setter Property="Height" Value="34" />
         <Setter Property="Padding" Value="18,0" />
         <Setter Property="Background" Value="{DynamicResource AccentPrimaryBrush}" />
-        <Setter Property="Foreground" Value="#FFFFFF" />
+        <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource SansFontFamily}" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontSize" Value="12.5" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="border"
                             Background="{TemplateBinding Background}"
-                            CornerRadius="18"
+                            CornerRadius="17"
                             SnapsToDevicePixels="True">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="border" Property="Opacity" Value="0.9" />
+                            <Setter Property="Background" Value="{DynamicResource AccentPrimaryHoverBrush}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="border" Property="Opacity" Value="0.4" />
