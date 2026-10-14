@@ -35,7 +35,29 @@ related:
 ### 4. 검증 (Verification)
 * `ssl_msg.c:1970`: 오탐 0건 완전 소멸 확인.
 * `cipher.c:780`, `ssl_srv.c:3848`: 기존 정탐 100% 정상 방출 확인 (회귀 미탐 0건 입증).
+---
+
+## 2026-10-14: [Resolved] cfg-nonzero-divisor-guard 체커의 관계 연산자 대칭 평가로 인한 상태 오염 오탐 (bignum.c:1886)
+
+### 1. 현상 (Symptom)
+* MbedTLS `bignum.c:1886`의 `z = y / b;` 구문에서, 함수 진입부에 `if (b == 0) return MBEDTLS_ERR_MPI_DIVISION_BY_ZERO;` 선행 가드가 존재하고 `b`가 함수 및 루프 내에서 변경되지 않음에도, 0 가드 누락 허위 경고 방출.
+
+### 2. 원인 (Root Cause)
+* `NonzeroDivisorGuardCheck.cpp`의 `edgeImpliesGuardState`가 모든 조건문을 대칭적 불리언(`ImplicationOnThen`)으로 단순 반전 평가하여, 후속 `if (b < 0) return ...;`의 거짓 분기(함수 본문 정상 흐름)를 `GuardState::GuardedZero`로 오판.
+* 이로 인해 선행 `if (b == 0)`이 수립한 `GuardedNonZero` 상태가 `GuardedZero`로 오염되고, 후속 `for` 루프 헤더 병합 시 `mergeGuardState`에 의해 `GuardState::Unchecked`로 전락하여 허위 경고 방출.
+
+### 3. 해결책 (Resolution)
+* `deduceGuardStateFromCond` 헬퍼 함수를 구현하여 비대칭 관계 연산자 분기 의미론 구축:
+  1. 관계 연산자($<, >, \le, \ge$)는 참/거짓 분기가 대칭적이지 않으므로, 분기 방향(`BranchTaken`)을 인자로 받아 각각 독립적으로 추론.
+  2. 정보가 불충분한 분기(예: $b < 0$의 거짓 분기 $b \ge 0$)는 `std::nullopt`를 반환하여, 상위 지배 블록에서 수립된 `GuardedNonZero` 상태를 안전하게 상속/보존.
+  3. 피연산자 방향 정규화(`b < 0` $\leftrightarrow$ `0 > b`) 및 `APSInt` 상수 경계 판정을 통해 `b <= 0` 거짓 분기, `b >= 1` 참 분기 등 다양한 가드 관용구 지원.
+
+### 4. 검증 (Verification)
+* `bignum.c:1886`: 오탐 0건 완전 소멸 확인.
+* `ecp.c:1908`: 진성 정탐(TP) 1건 100% 정상 방출 보존 (회귀 미탐 0건 입증).
+* 합성 회귀 테스트 6종(가드 5패턴 통과, 미가드 1건 방출) 전수 통과.
 * LLVM `clang-tidy` 및 ArqaStatic 솔루션 빌드: **Exit Code 0** 확인.
+* Gate 1(패치 계획) 및 Gate 2(QA 실측) 독립감사 **[공식 공인 (Certified)]** 획득.
 
 ---
 
