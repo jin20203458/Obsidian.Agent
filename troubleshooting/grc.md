@@ -131,4 +131,38 @@ related:
   - `LoadSettingsAsync_LoadsVoiceOptionCorrectly`: 설정 파일 로드 시 저장된 보이스(`Sulafat`)가 ViewModel 옵션 객체로 정확히 매핑되는지 검증.
 * 솔루션 전체 빌드(`dotnet build GRC.sln`) 및 테스트 스위트 33/33 전량 통과 (**Exit Code 0**).
 
+---
+
+## 2026-10-14: [Resolved] XAML 버튼 호버(MouseOver) 시 Windows Aero 테마 점등 및 시맨틱 색상 변색 결함 해결
+
+### 1. 현상 (Symptom)
+* 다크 테마 기반 데스크톱 클라이언트의 다수 버튼(`SettingsView.xaml`, `CustomMessageBoxWindow.xaml`, `EditInitialScenarioWindow.xaml`, `EditWorldviewWindow.xaml`, `NewSessionSetupWindow.xaml`, `SessionListView.xaml`)에 마우스를 올릴 때, 지정된 배경색이 무시되고 Windows OS 기본 테마(`PresentationFramework.Aero2`)의 밝은 하늘색(#BEE6FD) 유리 질감 그라데이션이 점등되는 UI 파손 발생.
+* `SessionArchitectWindow.xaml`의 '승인, 다음 단계'(에메랄드 그린 `#142F24`) 및 '중단'(크림슨 레드 `#421A1A`) 버튼에 마우스를 올리면 `HeaderActionButton` 템플릿의 하드코딩된 트리거로 인해 고유 색상이 지워지고 칙칙한 진회색(`#353535`)으로 강제 변색되는 결함 발생.
+* 버튼 비활성화(`IsEnabled="False"`) 시 투명도 감쇄 등의 시각 피드백이 부재하고 `Cursor="Hand"` 설정이 누락된 버튼 다수 존재.
+
+### 2. 원인 (Root Cause)
+1. `Themes/ModernStyles.xaml`에 전역 기본 암시적 스타일(`<Style TargetType="Button">`)이 누락되어 있어, 인라인으로 배경색만 준 버튼들이 WPF 시스템 테마 템플릿으로 fallback됨.
+2. `HeaderActionButton`의 `ControlTemplate.Triggers`가 `TargetName="border"`의 `Background`를 `#353535` 단일 상수로 강제 치환하여, 상속받은 버튼의 고유 색상(녹색/적색)을 파괴함.
+3. 시맨틱 버튼 스타일 계층(Primary, Success, Danger, Secondary)이 체계화되지 않아 각 뷰마다 인라인 하드코딩이 파편화됨.
+
+### 3. 해결책 (Resolution)
+1. **버튼 디자인 시스템 3계층 아키텍처 정립 (`ModernStyles.xaml`)**:
+   * **BaseButtonStyle**: 통합 ControlTemplate, `CornerRadius="4"`, `Cursor="Hand"`, `IsPressed`(Opacity 0.75), `IsEnabled`(Opacity 0.40) 상태 머신 내장.
+   * **글로벌 암시적 스타일 (`<Style TargetType="Button" BasedOn="{StaticResource BaseButtonStyle}" />`)**: 앱 전체에 암시적 적용하여 향후 추가되는 모든 버튼의 Windows Aero fallback 원천 차단.
+   * **시맨틱 변형 스타일 확립**:
+     - `PrimaryActionButton`: 청록색 포인트 (`#008B99` -> `#00A5B5` 호버, `#33E1F5` 보더)
+     - `SuccessActionButton`: 에메랄드 그린 (`#142F24` -> `#1D4333` 호버, `#3EBA8F` 보더)
+     - `DangerActionButton`: 크림슨 레드 (`#421A1A` -> `#5A2323` 호버, `#C24848` 보더)
+     - `SecondaryActionButton`: 뉴트럴 다크 그레이 (`#252528` -> `#35353A` 호버, `#525258` 보더)
+     - `AccentBlueActionButton`: 온보딩 블루 (`#2563EB` -> `#3B82F6` 호버)
+     - `HeaderActionButton`: `SecondaryActionButton` 상속 기반 콤팩트 패딩(`8,4`) 하위 호환성 유지.
+     - `GhostButton`: 투명 버튼 전용 `Cursor="Hand"` 및 `IsEnabled` 상태 피드백 보강.
+2. **뷰 전수조사 및 17개 인라인 버튼 일괄 리팩터링**:
+   * `SettingsView.xaml`, `CustomMessageBoxWindow.xaml`, `EditInitialScenarioWindow.xaml`, `EditWorldviewWindow.xaml`, `NewSessionSetupWindow.xaml`, `SessionArchitectWindow.xaml`, `SessionListView.xaml`의 인라인 하드코딩 속성을 제거하고 시맨틱 스타일로 표준화.
+
+### 4. 검증 (Verification)
+* 전수조사 스크립트 실행으로 13개 XAML 내 총 33개 버튼 전량의 스타일 바인딩 상태 확인 (미스타일 0건, 인라인 배경 충돌 0건).
+* 단위 테스트 스위트 전량 통과 (`dotnet test tests/GRC.Tests/GRC.Tests.csproj` - 33/33 Pass, **Exit Code 0**).
+* 솔루션 전체 빌드 검증 (`dotnet build GRC.sln` - 0 Warning, 0 Error, **Exit Code 0**).
+
 
