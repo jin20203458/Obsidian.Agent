@@ -18,6 +18,27 @@ related:
 
 ---
 
+## 2026-10-14: [Resolved] ast-no-out-of-range-assignment 체커의 가변 로컬 변수 초기값 상수 평가 오탐 (ssl_msg.c:1970)
+
+### 1. 현상 (Symptom)
+* MbedTLS `ssl_msg.c:1970`의 `ssl->in_left = ret;` 구문에서, 직전 행에 `if (ret < 0) return ret;` 방어 가드가 존재하고 `ret`이 `ssl->f_recv` 반환값으로 재대입되었음에도, 선언부의 초기값 `-110`을 `size_t` 범위 초과로 오판하여 허위 경고 방출.
+
+### 2. 원인 (Root Cause)
+* `NoOutOfRangeAssignmentCheck.cpp`의 `evalIntWithLocals`가 `DeclRefExpr`를 평가할 때, 해당 변수가 `const`인지 또는 함수 내에서 재할당(Mutation)되는지 여부를 검사하지 않고 무차별적으로 `VD->getInit()`을 상수 평가하여 발생.
+
+### 3. 해결책 (Resolution)
+* `RecursiveASTVisitor` 기반의 `isVarMutatedInDeclContext` 헬퍼 함수를 도입하여 변수의 Soundness Guard 구축:
+  1. `const` 또는 `constexpr` 한정 변수는 불변성이 보장되므로 안전하게 초기값 평가 허용.
+  2. 비-const 변수는 소속 함수 본체(`FD->hasBody(Def)`) 내에서 대입 연산자(`BO->isAssignmentOp()`), 증감 연산자(`isIncrementDecrementOp()`), 주소 전달(`UO_AddrOf`)이 단 1회라도 발생할 경우 초기값 평가를 즉시 스킵(`return false`).
+* LLVM AST 표준에 따라 `Target->getCanonicalDecl()` 매칭을 적용하여 포인터 탈출 및 간접 쓰기까지 완벽히 차단.
+
+### 4. 검증 (Verification)
+* `ssl_msg.c:1970`: 오탐 0건 완전 소멸 확인.
+* `cipher.c:780`, `ssl_srv.c:3848`: 기존 정탐 100% 정상 방출 확인 (회귀 미탐 0건 입증).
+* LLVM `clang-tidy` 및 ArqaStatic 솔루션 빌드: **Exit Code 0** 확인.
+
+---
+
 ## 2026-07-07: [Resolved] checkBranchCondition 콜백 내의 오탐지 (동일 조건식에 대한 참/거짓 경고 동시 발생)
 
 ### 1. 현상 (Symptom)
