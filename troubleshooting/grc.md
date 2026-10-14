@@ -98,3 +98,37 @@ related:
   - Mock HTTP 403 응답 시 구글 에러 JSON 본문 메시지(`API key not valid`) 추출 검증.
 * 솔루션 전체 빌드(`dotnet build GRC.sln`) 및 테스트 스위트 29/29 통과 (**Exit Code 0**).
 
+---
+
+## 2026-10-14: [Resolved] Google Cloud TTS 음성 캐릭터 하드코딩 해제, 동적 보이스 선택 및 오디오 미리듣기(Preview) 기능 구현
+
+### 1. 현상 (Symptom)
+* Google Cloud TTS 음성 합성이 `GeminiTtsService.cs` 내부의 `"Zephyr"` 단일 보이스로 하드코딩되어 있어 사용자가 원하는 캐릭터 목소리(성별, 톤, 음색)를 선택할 수 없음.
+* 설정 화면(`SettingsView.xaml`)에 TTS 음성을 사전에 테스트하고 청취할 수 있는 미리듣기(Preview) 기능이 부재하여, 실제 인게임 대사 발화 전까지 음성 정상 동작 여부나 음색을 확인할 수 없는 문제 발생.
+
+### 2. 원인 (Root Cause)
+1. `GeminiTtsService.GenerateVoiceAsync` 호출 시 요청 바디의 `voiceName` 필드가 상수로 고정되어 있었고, `AppSettings` 모델에 음성 선택 저장 프로퍼티(`SelectedTtsVoice`)가 정의되지 않았음.
+2. `IGoogleTtsService` 인터페이스에 개별 보이스 오버라이드 및 테스트용 음성 미리듣기 비동기 메서드가 결여되어 있었음.
+3. `SettingsViewModel`에 사용 가능한 14대 구글 표준 TTS 보이스 메타데이터 목록 및 미리듣기 실행 커맨드(`TestTtsCommand`), 상태 통지 프로퍼티가 구현되지 않았음.
+
+### 3. 해결책 (Resolution)
+1. **TTS 보이스 모델 신설 및 영속화**:
+   * `GRC/Models/TtsVoiceOption.cs` 레코드를 신설하여 보이스 고유 ID, 한글 표시명 및 음색/성별 상세 설명(`Description`)을 캡슐화.
+   * `AppSettings.cs`에 `SelectedTtsVoice = "Zephyr"` 필드를 추가하여 선택된 보이스를 설정 파일에 영속화.
+2. **동적 보이스 오버라이드 및 미리듣기 파이프라인 구현**:
+   * `IGoogleTtsService.cs` 및 `GeminiTtsService.cs`에 `voiceOverride` 및 `languageOverride` 매개변수를 지원하도록 확장.
+   * `PreviewSpeechAsync(text, voiceOverride, languageOverride, ct)` 메서드를 신설하여 단문 샘플 음성을 생성하고 임시 파일 경로를 반환하도록 구현.
+3. **설정 UI 연동 및 실시간 재생 피드백**:
+   * `SettingsViewModel.cs`에 `AvailableTtsVoices`(Zephyr, Achernar, Aoede, Autonoe, Callirrhoe, Despina, Erinome, Gacrux, Kore, Laomedeia, Leda, Pulcherrima, Sulafat, Vindemiatrix 등 14종) 컬렉션 및 `SelectedTtsVoiceOption` 바인딩 속성 구성.
+   * `TestTtsCommand`를 통해 `PreviewSpeechAsync` 호출 -> `IAudioService.PlayVoiceSoundAsync`로 비동기 오디오 재생 -> 상태 메시지 및 성공/실패 색상 피드백 파이프라인 탑재.
+   * `SettingsView.xaml`에 2줄 형태(보이스명 + 음색 설명)의 ComboBox 및 "음성 미리듣기" 버튼/상태 패널 배치.
+
+### 4. 검증 (Verification)
+* `tests/GRC.Tests/SettingsViewModelTests.cs`에 신규 TTS 테스트 케이스 4종 추가 검증 통과:
+  - `TestTtsAsync_Success_PlaysVoiceSoundAndSetsStatusMessage`: 선택한 보이스(`Aoede`) 및 언어로 미리듣기 생성, 오디오 플레이어 호출, 초록색 완료 메시지 검증.
+  - `TestTtsAsync_WhenTtsDisabled_CanTestTtsReturnsFalse`: TTS 비활성화 시 커맨드 실행 가드(`CanExecute = false`) 검증.
+  - `TestTtsAsync_Failure_SetsErrorMessage`: TTS 실패 시 빨간색 에러 메시지 갱신 검증.
+  - `LoadSettingsAsync_LoadsVoiceOptionCorrectly`: 설정 파일 로드 시 저장된 보이스(`Sulafat`)가 ViewModel 옵션 객체로 정확히 매핑되는지 검증.
+* 솔루션 전체 빌드(`dotnet build GRC.sln`) 및 테스트 스위트 33/33 전량 통과 (**Exit Code 0**).
+
+
