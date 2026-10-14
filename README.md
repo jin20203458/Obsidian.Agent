@@ -39,6 +39,7 @@ related:
 
 
 - **troubleshooting/**: 중앙 집중형 트러블슈팅 및 런북 보관 폴더
+  - [grc.md](troubleshooting/grc.md): GRC C# WPF 클라이언트 장애 조치 로그
   - [phalanx.md](troubleshooting/phalanx.md): Phalanx C++ 센서 & C# 코어 장애 조치 로그
   - [llvm_clang.md](troubleshooting/llvm_clang.md): LLVM/Clang 커스텀 체커 및 Static Analyzer 장애 조치 로그
   - [mundus_vivens.md](troubleshooting/mundus_vivens.md): C# AI Server & C++ Game Server 장애 조치 로그

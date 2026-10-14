@@ -2,6 +2,7 @@
 description: GRC(GenAI Roleplay Chat) C# WPF 클라이언트 프로젝트의 지식베이스 인덱스.
 related:
   - ../README.md
+  - ../troubleshooting/grc.md
 ---
 # GRC Knowledge Base Index
 
@@ -13,3 +14,6 @@ related:
 - [01_grc_architecture.md](./docs/01_grc_architecture.md): GRC 클라이언트의 동시성 제어 및 메모리 관리 기술 아키텍처
 - [02_user_quickstart_guide.md](./docs/02_user_quickstart_guide.md): 초보자/비개발자 포터블 실행, SmartScreen 우회 및 API 키 가이드
 - [03_grc_user_guide.md](./docs/03_grc_user_guide.md): GRC 7대 핵심 기능 사용자 사용설명서 및 활용 가이드
+
+## `troubleshooting/` (런북)
+- [grc.md](../troubleshooting/grc.md): GRC 클라이언트 장애 조치 및 기술 런북
