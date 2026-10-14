@@ -87,7 +87,7 @@ related:
    * **Vertex AI**: Project ID 및 키 파일 존재 여부 검사 -> OAuth2 Bearer 토큰 획득 -> `global` 엔드포인트 호출.
    * **AI Studio**: API 키 유효성 검사 -> `generativelanguage.googleapis.com` 엔드포인트 호출.
 3. **지연시간 및 구글 API 에러 메시지 상세 추출**: `Stopwatch` 기반 왕복 시간(ms) 측정 및 비정상 응답 시 Google API 에러 JSON에서 `error.message`를 추출하여 사용자에게 구체적 조치 방안 노출.
-4. **UI 바인딩 및 상태 피드백**: [SettingsView.xaml](file:///c:/Users/user/Documents/GitHub/GRC/GRC/Views/SettingsView.xaml)에 진행 상태, 비활성화 가드(`CanExecute`), 상태별 전용 색상 피드백(성공 녹색, 실패 적색, 진행 황색) 패널 배치.
+4. **UI 바인딩 및 상태 피드백**: [SettingsView.xaml](../../GRC/GRC/Views/SettingsView.xaml)에 진행 상태, 비활성화 가드(`CanExecute`), 상태별 전용 색상 피드백(성공 녹색, 실패 적색, 진행 황색) 패널 배치.
 
 ### 4. 검증 (Verification)
 * `tests/GRC.Tests/SettingsViewModelTests.cs` 전용 5개 테스트 작성 및 검증 통과:
@@ -276,6 +276,153 @@ related:
 * 일상 로컬 유닛 테스트 29/29 통과 (소요 시간: **42ms**, Exit Code 0).
 * 외부 API 통합 테스트 4/4 통과 (소요 시간: **5s**, Exit Code 0).
 * 솔루션 빌드 검증 (`dotnet build GRC.sln` - 0 Warning, 0 Error, **Exit Code 0**).
+
+---
+
+## 2026-10-14: [Resolved] 백그라운드 스레드 및 단위 테스트 환경 내 WPF STA 스레드 위반 방지를 위한 AudioService / DialogService Dispatcher 사전 캡처
+
+### 1. 현상 (Symptom)
+* `AudioService`의 `MediaPlayer` 또는 `DialogService`의 윈도우 생성/표시 로직이 비동기 작업(`Task.Run` 또는 스레드 풀 스레드)에서 호출될 때 `System.InvalidOperationException: 다른 스레드가 이 개체를 소유하고 있어 호출한 스레드가 해당 개체에 액세스할 수 없습니다.`(STA 스레드 선점 위반)가 발생하거나 UI 스레드가 블로킹되는 현상 발생.
+* 단위 테스트 러너(xUnit)와 같이 메시지 펌프가 없는 환경에서 `Application.Current`가 `null`이거나 `Dispatcher.Invoke()` 호출 시 데드락이 발생할 위험 상존.
+
+### 2. 원인 (Root Cause)
+1. WPF의 `MediaPlayer` 및 `Window` 파생 컨트롤은 생성된 STA 스레드에 엄격한 스레드 친화성(Thread Affinity)을 지님.
+2. 서비스 인스턴스가 생성되는 시점에 UI 디스패처를 포착하지 않고, 런타임에 임의의 스레드에서 직접 `Application.Current.Dispatcher`를 조회하거나 직접 접근할 경우 null 참조 또는 스레드 액세스 위반 발생.
+
+### 3. 해결책 (Resolution)
+1. **생성자 내 Dispatcher 사전 캡처**:
+   * `AudioService` 및 `DialogService` 생성자에서 `_dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;`를 캡처하여 보관.
+2. **`RunOnUIThread` 스레드 스위칭 캡슐화**:
+   * UI 조작 전 `_dispatcher.CheckAccess()`를 검사하여 이미 UI 스레드인 경우 즉시 동기 실행하고, 백그라운드 스레드인 경우에만 `_dispatcher.Invoke(action)` 또는 `_dispatcher.InvokeAsync(action)`로 전환하는 헬퍼 메서드로 감쌈.
+   * `DialogService`의 `SetOwner(Window window)` 역시 UI 스레드 상에서 `owner.IsLoaded` 상태를 확인한 후 `dialog.Owner`를 안전하게 바인딩하도록 보호.
+
+### 4. 검증 (Verification)
+* `tests/GRC.Tests/AudioServiceTests.cs` (STA 및 MTA 스레드 안전성 2종 테스트): MTA 스레드 풀에서 재생 메서드 호출 시 예외 없이 통과 검증.
+* `tests/GRC.Tests/DialogServiceTests.cs` (스레드 안전성 및 다이얼로그 서비스 동작 2종 테스트) 검증 통과.
+* 테스트 스위트 전량 통과 (**Exit Code 0**).
+
+---
+
+## 2026-10-14: [Resolved] xUnit 테스트 러너 환경에서 WPF Application 인스턴스 중복 생성(AppDomain Singleton Trap) 해결
+
+### 1. 현상 (Symptom)
+* WPF 리소스 딕셔너리 또는 뷰를 검증하는 단위 테스트(`ThemeResourceTests`, `IconResourceTests`)를 xUnit 병렬 러너로 동시 실행할 때, `System.InvalidOperationException: 동일한 AppDomain에서 둘 이상의 Application 개체를 만들 수 없습니다.` 오류가 발생하며 테스트 실패.
+
+### 2. 원인 (Root Cause)
+1. WPF `System.Windows.Application` 클래스는 단일 `AppDomain` 내에서 단 하나의 인스턴스만 허용하는 싱글톤 불변식을 지님.
+2. 여러 테스트 클래스에서 독립적으로 `new Application()`을 호출하거나, 테스트 순서에 따라 이미 생성된 `Application.Current`가 존재하는 상태에서 재할당을 시도함.
+
+### 3. 해결책 (Resolution)
+1. **`EnsureApplication` 정적 가드 패턴 도입**:
+   ```csharp
+   private static void EnsureApplication()
+   {
+       if (Application.Current != null) return;
+       try
+       {
+           _ = new Application();
+       }
+       catch (InvalidOperationException)
+       {
+           // 타 테스트 스레드에 의한 경쟁 인스턴스 생성 예외 안전 흡수
+       }
+   }
+   ```
+2. **리소스 테마 사전 동기화**:
+   * 애플리케이션 초기화 시 리소스 딕셔너리가 비어있는 경우에만 `PrimitiveTokens.xaml`, `DarkTheme.xaml`을 순차적으로 병합하도록 방어.
+
+### 4. 검증 (Verification)
+* `tests/GRC.Tests/ThemeResourceTests.cs` 및 `tests/GRC.Tests/IconResourceTests.cs` 동시/반복 실행 시 싱글톤 충돌 없이 100% 통과 검증.
+* 테스트 스위트 전량 통과 (**Exit Code 0**).
+
+---
+
+## 2026-10-14: [Resolved] SmartAutoScroll의 컨텐츠 축소 및 LLM 토큰 스트리밍 시 상단 스크롤 하이재킹(Scroll Hijacking) 방어 수학식 교정
+
+### 1. 현상 (Symptom)
+* LLM 텍스트가 빠르게 실시간 스트리밍되거나, 접기/펼치기 및 메시지 삭제 등으로 스크롤 뷰어의 내용물 높이(`ExtentHeight`)가 줄어들 때(`extentHeightChange < 0`), 과거 대화를 읽기 위해 스크롤을 올려둔 사용자의 화면이 강제로 최하단으로 끌려 내려가는 스크롤 하이재킹(Scroll Hijacking) 현상 발생.
+* `ScrollViewer.Tag` 속성에 불리언 값을 임의 저장하여 스크롤 상태를 추적하던 기존 레거시 코드가 레이스 컨디션 및 뷰 가상화 재활용 시 상태 불일치를 유발함.
+
+### 2. 원인 (Root Cause)
+1. 기존 하단 도달 판정식에서 높이 변화량(`extentHeightChange`)의 절댓값(`Math.Abs`)을 차감할 경우, 컨텐츠가 축소(`extentHeightChange < 0`)될 때 기준 높이가 비정상적으로 왜곡되어 유저가 최하단에 있지 않음에도 하단에 머무르고 있는 것으로 오판단함.
+2. `Tag` 프로퍼티 기반의 상태 저장은 순수 렌더링 파이프라인의 수학적 뷰포트 위치와 비동기 이벤트 사이의 불일치를 유발함.
+
+### 3. 해결책 (Resolution)
+1. **`ScrollViewer.Tag` 제거 및 순수 수학적 위치 판정 함수로 전환 (`AutoScrollHelper.cs`)**:
+   ```csharp
+   public static bool CalculateIsAtBottom(double verticalOffset, double scrollableHeight, double extentHeightChange, double tolerance = 24.0)
+   {
+       if (scrollableHeight <= 0) return true;
+       // 컨텐츠 확장 시에는 확장 직전의 기준 높이와 비교, 축소 또는 변화 없을 시 현재 최대 스크롤 가능 높이와 직접 비교
+       double referenceHeight = extentHeightChange > 0 ? scrollableHeight - extentHeightChange : scrollableHeight;
+       return verticalOffset >= (referenceHeight - tolerance);
+   }
+   ```
+2. **24px 허용오차(Tolerance) 및 컨텐츠 축소 분기 완벽 분리**:
+   * 토큰 단위 스트리밍 팽창 시에만 직전 프레임 오프셋을 역산하여 바닥 추적 여부를 판정하고, 축소 시에는 절댓값 왜곡 없이 현재 스크롤 위치를 절대 비교하여 상단 탐색 중인 사용자의 뷰포트를 절대 침범하지 않도록 보장.
+
+### 4. 검증 (Verification)
+* `tests/GRC.Tests/SmartAutoScrollTests.cs` 6개 경계값 단위 테스트 전량 통과:
+  - 최하단 위치 판정, 24px 허용오차 경계 판정.
+  - 상단 스크롤 유저 대상 토큰 스트리밍 팽창 시 하이재킹 차단(`false`).
+  - 접기/삭제 등 컨텐츠 축소(`extentHeightChange < 0`) 시 상단 스크롤 뷰포트 보존(`false`).
+* 테스트 스위트 전량 통과 (**Exit Code 0**).
+
+---
+
+## 2026-10-14: [Resolved] Application.LoadComponent 사용 시 절대 Pack URI 지정으로 인한 ArgumentException 및 상대 URI 표준화
+
+### 1. 현상 (Symptom)
+* 단위 테스트 또는 동적 리소스 로딩 코드에서 `Application.LoadComponent(new Uri("pack://application:,,,/GRC;component/Themes/PrimitiveTokens.xaml", UriKind.Absolute))` 호출 시 `System.ArgumentException: 절대 URI를 사용할 수 없습니다.` 예외 발생.
+
+### 2. 원인 (Root Cause)
+1. WPF 내부의 `Application.LoadComponent` API는 BAML 리소스 로딩 규격상 반드시 상대 URI(`UriKind.Relative`)를 요구함.
+2. XAML 마크업 내 `ResourceDictionary.Source`는 절대 Pack URI를 지원하지만, C# 코드-비하인드에서 직접 `Application.LoadComponent`를 호출할 때는 Pack 스킴이 포함된 절대 URI를 전달하면 런타임 인자 검증에서 거부됨.
+
+### 3. 해결책 (Resolution)
+1. **상대 URI 표준화 (`UriKind.Relative`)**:
+   * C# 코드에서 `Application.LoadComponent` 호출 시 어셈블리 상대 경로로 일원화:
+     ```csharp
+     var uri = new Uri("/GRC;component/Themes/PrimitiveTokens.xaml", UriKind.Relative);
+     var dict = (ResourceDictionary)Application.LoadComponent(uri);
+     ```
+2. **PackUriHelper 스킴 사전 등록**:
+   * WPF `Application`을 생성하지 않는 헤드리스 테스트 환경에서는 `_ = PackUriHelper.UriSchemePack;`를 호출하여 URI 파서에 pack 스킴을 사전 등록.
+
+### 4. 검증 (Verification)
+* `tests/GRC.Tests/ThemeResourceTests.cs`에서 상대 URI 기반 컴포넌트 로드 및 동결 브러시 유효성 검증 통과.
+* 테스트 스위트 전량 통과 (**Exit Code 0**).
+
+---
+
+## 2026-10-14: [Resolved] 스트리밍 및 가상화 스크롤 도중 마우스 휠 상향 회전 시 최하단 강제 스크롤 하이재킹 및 1틱 탈출 트랩 해결
+
+### 1. 현상 (Symptom)
+* 과거 대화를 읽기 위해 마우스 휠을 위로 빠르게 굴릴 때, 화면이 상단으로 올라가지 못하고 자동으로 다시 최하단으로 끌려 내려가는 스크롤 하이재킹(Scroll Hijacking) 현상 발생.
+
+### 2. 원인 (Root Cause)
+1. **무상태(Stateless) 판정의 탈출 불가능 트랩**:
+   * 최하단(예: 1000px)에서 휠을 1~2틱 위로 올렸을 때(예: 985px), 16ms 주기로 AI 스트리밍 토큰이 들어오면 `extentHeightChange`가 발생하여 판정 기준선이 올라감.
+   * 사용자의 뷰포트가 24px 허용오차 이내에 머무는 순간 `CalculateIsAtBottom`이 `true`를 반환하여 즉시 `ScrollToEnd()`가 호출됨. 16ms 이내에 24px 이상 벗어나지 못해 최하단에 갇힘.
+2. **가상화 패널(`VirtualizingStackPanel` with `ScrollUnit="Pixel"`) 아이템 실체화 변동**:
+   * 상단 스크롤 시 이전에 가상화되어 측정되지 않았던 대화 아이템이 렌더 트리에 진입하면서 `ExtentHeightChange`가 수백 픽셀 단위로 급증함.
+   * 이에 따라 `referenceHeight`가 현재 `scrollableHeight`보다 수백 픽셀 낮아져 사용자가 한참 위에 머물러도 바닥인 것으로 오판단함.
+3. **비동기 디스패처 큐잉(`DispatcherPriority.Loaded`) 지연 실행**:
+   * 직전 프레임에서 적재된 `ScrollToEnd()` 비동기 태스크가 유저가 휠을 위로 돌린 직후 뒤늦게 실행되어 화면을 바닥으로 강제 텔레포트시킴.
+
+### 3. 해결책 (Resolution)
+1. **사용자 의도 기반 상태 머신 (`IsAutoScrollActive` Attached DependencyProperty) 도입**:
+   * `PreviewMouseWheel`: 마우스 휠을 위로 회전(`e.Delta > 0`)하는 순간 즉시 `SetIsAutoScrollActive(sv, false)` 호출.
+   * `ScrollChanged`: 순수 사용자 조작(`isPureUserScroll = e.ExtentHeightChange == 0 && e.ViewportHeightChange == 0`)이면서 뷰포트가 위로 이동한 경우(`e.VerticalChange < 0`) 즉각 비활성화.
+   * 창 최대화/리사이징(`ViewportHeightChange > 0`)으로 인한 클램핑 역방향 오프셋 변동은 `isPureUserScroll` 가드로 사용자 조작에서 격리.
+2. **지연 실행 검증 (Lazy Guard)**:
+   * 디스패처에 대기 중이던 `ScrollToEnd()` 실행 시점에 `if (GetIsAutoScrollActive(sv))`를 2차 확인하여 큐 대기 시간 중 발생한 사용자 조작을 보호.
+3. **능동적 하향 조작 시에만 재활성화**:
+   * 토큰 유입 시(`VerticalChange == 0`)에는 재활성화되지 않도록 차단하고, 사용자가 능동적으로 휠을 아래로 굴려 바닥에 도달하거나(`e.VerticalChange > 0 && isAtBottomNow`), 스크롤바가 없는 경우(`sv.ScrollableHeight <= 0`), 또는 메시지 전송 시(`ScrollToEnd`)에만 `IsAutoScrollActive = true`로 복구.
+
+### 4. 검증 (Verification)
+* `tests/GRC.Tests/SmartAutoScrollTests.cs`에 STA 스레드 기반 `AutoScrollHelper_StateTransitions_ExecuteOnStaThread` 단위 테스트 추가.
+* 기본 6종 경계값 테스트 및 상태 전이 테스트 전량 통과 (총 78/78 통과, **Exit Code 0**).
 
 
 
