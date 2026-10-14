@@ -26,3 +26,14 @@ related:
 > **[정제 완료 기준선]** 2026-10-14 이전 상위 항목은 정제 완료됨. 신규 인시던트는 이 아래에 추가됩니다.
 
 ---
+
+### 3. LLM JSON 파서 내결함성 및 역직렬화 트랩 (LlmJsonParser)
+* **현상**:
+  1. **사전/사후 잡담 괄호 트랩**: LLM이 JSON 페이로드 앞뒤에 설명용 괄호(예: `Format {template}. Payload: {"key": "val"}`)를 출력할 때 단순 `IndexOf('{')` 방식은 비정상 괄호를 파싱 대상으로 삼아 실패.
+  2. **문자열형 숫자 및 Enum 불일치**: LLM이 숫자 필드를 큰따옴표로 감싸거나(`"count": "42"`), DTO의 Enum을 문자열(`"Planning"`)로 반환할 때 기본 System.Text.Json 역직렬화 예외 발생.
+  3. **토큰 상한에 의한 JSON 절단(Truncation)**: 긴 서술문이나 배열 출력 도중 토큰 제한으로 문자열이나 괄호가 닫히지 않고 끊겨 전체 응답이 유실됨.
+* **대응책**:
+  1. `LenientOptions`에 `NumberHandling = JsonNumberHandling.AllowReadingFromString` 및 `JsonStringEnumConverter`를 등록하고 정적 캐싱하여 매 요청마다 옵션 재생성 오버헤드를 제거.
+  2. 마크다운 코드블록(```` ```json ````) 우선 파싱, Index 0 기준 문자열 리터럴/이스케이프 추적 및 다중 후보군(Candidate) 순차 역직렬화 파이프라인 구현.
+  3. 불완전하게 종료된 스트림에 대해 `RepairTruncatedJson`을 적용하여 열린 따옴표 및 스택에 남은 미닫힘 괄호(`]`, `}`)를 역순으로 닫고, 불완전한 trailing key/comma를 정리하여 데이터 복구율 극대화.
+
