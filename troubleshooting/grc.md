@@ -165,4 +165,120 @@ related:
 * 단위 테스트 스위트 전량 통과 (`dotnet test tests/GRC.Tests/GRC.Tests.csproj` - 33/33 Pass, **Exit Code 0**).
 * 솔루션 전체 빌드 검증 (`dotnet build GRC.sln` - 0 Warning, 0 Error, **Exit Code 0**).
 
+---
+
+## 2026-10-14: [Resolved] XAML 벡터 아이콘 지오메트리 아키텍처 구축 및 장식용 이모지 전면 제거
+
+### 1. 현상 (Symptom)
+* UI 전반에 장식용 유니코드 이모지(`🔄`, `📋`, `🗑`, `🌱`, `💾`, `🔑`, `📁`, `⚙`, `✨`, `🎭`, `💬`, `💭`, `📍`, `❖`, `▣`, `🔹`, `✕`, `▶`, `+`, `←`)가 인라인 `TextBlock` 또는 `Button.Content`로 혼용되어 데스크톱 테마 일관성을 저해하고 OS/폰트 렌더러에 따라 색상 왜곡 및 픽셀 뭉개짐 발생.
+* 인라인 SVG 문자열(`M12,2L14.6...`, `M2.01 21L...`)이 뷰 파일마다 중복 정의되어 유지보수성이 저하되고 전역 스타일 변경에 취약함.
+* 가이드라인([Modern_AI_Desktop_UI_Guidelines.md](../ai_agent_refs/Modern_AI_Desktop_UI_Guidelines.md) §4)에서 규정한 "순수 XAML `<Geometry>` 벡터 리소스 사전 및 장식용 이모지 제로 원칙"에 미달함.
+
+### 2. 원인 (Root Cause)
+1. 중앙 벡터 아이콘 리소스 사전(`Themes/VectorIcons.xaml`)의 부재로 인해 각 뷰 개발 시 손쉬운 이모지 텍스트나 인라인 중복 Path 문자열로 임시 구현됨.
+2. `App.xaml`에서 공용 벡터 지오메트리를 `MergedDictionaries`로 등록하지 않아 컴포넌트 간 재사용 불가능.
+
+### 3. 해결책 (Resolution)
+1. **중앙 집중식 벡터 아이콘 리소스 사전 구축 (`Themes/VectorIcons.xaml`)**:
+   * 외부 이미지 파일(PNG), 글꼴(Font Awesome) 의존성을 완전 배제하고 HiDPI 환경에서도 선명한 순수 `<Geometry x:Key="Icon...">` 27종 정의:
+     - 범용 액션: `IconPlay`, `IconStop`, `IconStopSquare`, `IconTerminal`, `IconCheck`, `IconClose`, `IconPlus`, `IconAlertTriangle`, `IconCopy`, `IconRefresh`, `IconSearch`, `IconChevronDown`, `IconChevronRight`, `IconChevronLeft`, `IconArrowLeft`, `IconTool`, `IconSparkles`, `IconActivity`, `IconUser`, `IconShield`
+     - 특화 도메인: `IconSend`, `IconEdit`, `IconBook`, `IconHistory`, `IconSettings`, `IconKey`, `IconFolder`, `IconTrash`, `IconBranch`, `IconSave`, `IconMessageSquare`, `IconBrain`, `IconHourglass`, `IconMapPin`, `IconDiamond`, `IconSquare`
+2. **`App.xaml` 리소스 통합 등록**:
+   * `Application.Resources`의 `MergedDictionaries` 최상단에 `Themes/VectorIcons.xaml`을 링크하여 모든 뷰/컨트롤에서 `{StaticResource Icon...}` 단일 심볼로 즉시 참조 가능하도록 확립.
+3. **7개 XAML 뷰 및 테마 전수조사 및 일괄 치환**:
+   * `Themes/ModernStyles.xaml`: 우클릭 컨텍스트 메뉴 내 5대 액션(재전송, 복사, 삭제, 세션 분기, 기억 저장) 이모지를 단일 컬러 벡터 패스로 전면 교체.
+   * `Views/SettingsView.xaml`: `← 뒤로` 및 `🔑`, `📁` 이모지를 `IconChevronLeft`, `IconKey`, `IconFolder`로 교체.
+   * `Views/SessionListView.xaml`: 헤더 설정 버튼 텍스트 제거 및 `IconSettings` 단독 아이콘 버튼화(`ToolTip="설정"`), `+ 새 대화 시작` -> `IconPlus`, 아키텍트 중복 Path 제거, 웰컴 카드(`🎭`, `⚙`, `✨`), 세션 삭제 버튼(`✕`)을 `{StaticResource Icon...}`으로 교체.
+   * `Views/ChatView.xaml`: 상단 우측 '상태창' 및 '비우기' 버튼을 중앙 도구들과 동일한 무테두리/투명 배경 `GhostButton` 스타일로 통일하고, 기존 텍스트 색상과 동일한 차분한 뉴트럴 그레이(`#AAAAAA`)의 `IconShield`(RPG 방패/스탯) 및 `IconTrash`(휴지통) 16x16 순수 아이콘으로 교체(`ToolTip` 연동), 상단 세션 도구 및 하단 입력창 컨트롤을 순수 지오메트리 패스로 교체.
+   * `Views/SessionArchitectWindow.xaml`: 타이틀바 스파클, 승인 버튼(`▶`), 자동 실행 토글(`↻`)을 `IconSparkles`, `IconPlay`, `IconRefresh`로 교체.
+   * `Views/StatusWindow.xaml`: 위치(`📍`), 커스텀 스탯(`❖`), 상태(`▣`), 인벤토리 항목(`🔹`)을 `IconMapPin`, `IconDiamond`, `IconSquare`, `IconChevronRight`로 교체.
+   * `Views/EditWorldviewWindow.xaml` & `Views/NewSessionSetupWindow.xaml`: 스탯 추가(`+`) 및 스탯 삭제(`✕`) 버튼을 `IconPlus` 및 `IconClose` 벡터 패스로 치환.
+
+### 4. 검증 (Verification)
+* 전체 XAML 코드 정규식 스캔 결과: XML 주석을 제외한 XAML 코드/텍스트 내 장식용 이모지 및 유니코드 특수문자 **0건 (완전 소멸)** 확인.
+* 단위 테스트 스위트 전량 통과 (`dotnet test tests/GRC.Tests/GRC.Tests.csproj` - 33/33 Pass, **Exit Code 0**).
+* 솔루션 전체 빌드 검증 (`dotnet build GRC.sln` - 0 Warning, 0 Error, **Exit Code 0**).
+
+---
+
+## 2026-10-14: [Resolved] WindowChrome 기반 일체형 커스텀 셸 및 Windows 11 Snap Layouts 연동 구축
+
+### 1. 현상 (Symptom)
+* 메인 윈도우(`MainWindow.xaml`)가 Windows OS 표준 네이티브 캡션 바를 사용하고 있어, 내부 다크 테마 캔버스와 상단 타이틀바 사이에 시각적 단절감이 존재하고 프레임리스(Frameless) 현대적 AI 클라이언트 룩앤필에 미달함.
+* 커스텀 타이틀바 도입 시 발생할 수 있는 최대화 시 화면 밖 잘림(Taskbar Over-spill) 및 Windows 11 Snap Layouts 플라이아웃(최대화 버튼 호버 분할 메뉴) 무반응 우려 존재.
+
+### 2. 해결책 (Resolution)
+1. **WindowChrome 셸 프레임워크 탑재 (`MainWindow.xaml`)**:
+   * `WindowStyle="SingleBorderWindow"` 유지로 네이티브 DWM 윈도우 그림자 및 둥근 모서리 보존.
+   * `shell:WindowChrome` 속성 정의: `CaptionHeight="36"`, `GlassFrameThickness="-1"`, `ResizeBorderThickness="6"`, `UseAeroCaptionButtons="False"`.
+   * 최상단 36px 높이의 일체형 커스텀 캡션 바 구축: 좌측 공식 고해상도 앱 아이콘(`/Resources/GRC.ico` 16x16) + 앱 타이틀 브랜딩("GRC" + "GenAI Roleplay Chat"), 중앙 드래그 가능 캡션 영역, 우측 시스템 창 제어 버튼군(최소화, 최대화, 닫기) 배치.
+   * 닫기 버튼 전용 Windows 표준 레드 호버 액센트(`Background="#E81123"`) 적용.
+2. **Win32 DWM, Snap Layouts 및 시스템 메뉴 메시지 훅 (`MainWindow.xaml.cs`)**:
+   * `DWMWA_USE_IMMERSIVE_DARK_MODE` 및 `DWMWCP_ROUND` 연동.
+   * Windows 11 22H2+ Mica/Backdrop 투명화 파이프라인 탑재 (`DWMSBT_MAINWINDOW`).
+   * `WM_NCHITTEST` 트랩: `MaximizeButton.PointFromScreen`으로 로컬 DIP 좌표 변환 후 `HTMAXBUTTON`(9)을 반환하여 Windows 11 네이티브 Snap Layouts 플라이아웃 메뉴 완벽 활성화.
+   * `WM_NCLBUTTONDOWN` / `WM_NCLBUTTONUP` 메시지 중계 및 `ToggleMaximize` 핸들러 연동.
+   * `StateChanged` 이벤트에 따른 최대화(`☐`) / 복원(`M3 1h6v6H9 M1 3h6v6H1z`) 아이콘 동적 전환 및 툴팁 갱신.
+   * 좌측 공식 앱 아이콘 클릭 시 Windows 시스템 메뉴(복원/이동/크기/최소화/최대화/닫기) 호출 및 더블클릭 시 창 닫기 핸들러 연동. 타이틀바 우클릭 시스템 메뉴 호출 연동.
+
+### 3. 검증 (Verification)
+* 단위 테스트 스위트 전량 통과 (`dotnet test GRC.sln` - 33/33 Pass, **Exit Code 0**).
+* 솔루션 전체 빌드 검증 (`dotnet build GRC.sln` - 0 Warning, 0 Error, **Exit Code 0**).
+
+---
+
+## 2026-10-14: [Resolved] WindowChrome 커스텀 타이틀바 내 앱 아이콘 미표시 및 레이아웃 절단 버그 해결
+
+### 1. 현상 (Symptom)
+* `MainWindow.xaml`에 커스텀 타이틀바를 적용한 후, 좌측 상단 시스템 메뉴 영역에 배치한 공식 앱 아이콘(`GRC.ico`)이 화면에 렌더링되지 않고 공백으로 남는 현상 발생.
+
+### 2. 원인 (Root Cause)
+1. **상대 URI 해석 경로 오류**: WPF XAML에서 `<Image Source="/Resources/GRC.ico" />`로 선언 시, BAML 컴파일 컨텍스트에 따라 pack URI가 아닌 로컬 파일시스템 루트(`C:\Resources\GRC.ico`)로 오인식되어 `DirectoryNotFoundException` 유발.
+2. **글로벌 암시적 버튼 스타일(Padding) 간섭에 의한 너비 절단**: `Themes/ModernStyles.xaml`의 `BaseButtonStyle`이 전역 `Style TargetType="Button"`으로 적용되어 `Padding="12,6"`을 강제 상속함. 너비 22px인 아이콘 버튼 내부에서 좌우 패딩 24px(12+12)이 차감되어 내부 `ContentPresenter`의 가용 폭이 `-2px`로 음수 붕괴하며 16x16 아이콘이 강제 절단(Clipped to 0px).
+3. **Button의 마우스 다운 이벤트 삼킴(Swallowing)**: 기본 WPF `Button` 클래스가 내부 `OnMouseLeftButtonDown`에서 `e.Handled = true`를 설정하여 `MouseLeftButtonDown="AppIcon_MouseLeftButtonDown"` 시스템 메뉴 호출 핸들러가 단일 클릭 시 격발되지 않음.
+
+### 3. 해결책 (Resolution)
+1. **정규 Pack URI 명시 (`pack://application:,,,/GRC;component/Resources/GRC.ico`)**: 어셈블리 리소스 식별자를 명시한 완전한 Pack URI로 변경하여 런타임 BAML 및 리소스 로더가 안정적으로 `GRC.ico`를 디코딩하도록 확립.
+2. **`Border` 기반 경량 컨테이너 전환 및 시인성 개선**: 암시적 `Button` 스타일 및 패딩 상속을 원천 차단하고 `Border`(`Width="28"`, `Height="28"`, `CornerRadius="4"`, `Cursor="Hand"`)에 투명 배경 및 마우스 호버 트리거(`#252528`)를 구성하여 아이콘(22x22)이 36px 높이 타이틀바에서 최적의 비율로 온전하게 렌더링되도록 구현.
+3. **직접 라우티드 이벤트 연동**: `Border.MouseLeftButtonDown`을 통해 단일 클릭 시 시스템 메뉴(`SystemCommands.ShowSystemMenu`) 호출 및 더블 클릭 시 창 닫기(`Close()`)가 누락 없이 격발되도록 보장.
+4. **회귀 방지 단위 테스트 추가 (`tests/GRC.Tests/IconResourceTests.cs`)**:
+   - `AppIcon_ResourceStream_ExistsAndDecodesSuccessfully`: 리소스 스트림 및 256x256 아이콘 디코딩 검증.
+   - `AppIcon_ImageSourceConverter_ResolvesPackUri`: `ImageSourceConverter`의 Pack URI 변환 유효성 검증.
+   - `AppIcon_ImageElementOnStaThread_RendersWithoutClipping`: STA 스레드 상에서 `Border`(28x28) 내부 `Image` 배치 및 22x22 렌더 크기 유지(절단 방지) 검증.
+
+5. **미니멀 타이포그래피 브랜딩 디자인 결정**: 이후 세련된 미니멀 프레임리스 데스크톱 룩앤필(VS Code, Windows Terminal 스타일)을 위해 커스텀 타이틀바 내부의 앱 아이콘 렌더링을 배제하고, 좌측 16px 여백의 순수 텍스트 브랜딩(`GRC` 볼드 + 서브타이틀) 및 전역 캡션 드래그(`IsHitTestVisible="False"`)로 통일함. OS 작업 표시줄 및 Alt+Tab용 `Window.Icon`은 정규 Pack URI로 유지.
+
+### 4. 검증 (Verification)
+* `tests/GRC.Tests/IconResourceTests.cs` 포함 단위 테스트 스위트 36/36 전량 통과 (**Exit Code 0**).
+* 솔루션 전체 빌드 검증 (`dotnet build GRC.sln` - 0 Warning, 0 Error, **Exit Code 0**).
+
+---
+
+## 2026-10-14: [Resolved] 테스트 스위트 전수 점검, 일회성 검증 테스트 정리 및 유닛/통합(Trait) 분리
+
+### 1. 현상 (Symptom)
+* 일상적인 빌드 QA 검증 시 `dotnet test GRC.sln`이 전체 36개 테스트를 일괄 실행하면서, 외부 네트워크 HTTP 통신을 수행하는 `ModelVerificationTests`로 인해 수십 초~1분 이상 지연되거나 외부 구글 서버 지연 시 타임아웃(30초) 실패 위험이 상존함.
+* 과거 모델 진단용 일회성 음성/모델 폐기 검증 및 타이틀바 디버깅용 임시 테스트가 테스트 스위트에 잔류함.
+
+### 2. 해결책 (Resolution)
+1. **일회성/임시 테스트 정리**:
+   - `ModelVerificationTests.cs`: 구글 서버 폐기 모델(`gemini-3.6-flash`, `gemini-3.1-pro-preview`) 대상 음성 호출 시험 케이스 제거.
+   - `IconResourceTests.cs`: 타이틀바 아이콘 디버깅용 일회성 `ImageSourceConverter` 테스트 제거 및 프로덕션 `Window.Icon`의 `BitmapFrame` 256x256 디코딩 검증으로 정돈.
+2. **xUnit `[Trait("Category", "Integration")]` 카테고리 분리**:
+   - 실제 Google Cloud Vertex AI 실시간 엔드포인트를 호출하는 `ModelVerificationTests`에 `[Trait("Category", "Integration")]` 속성 부여.
+   - 일상 빌드 QA 시 순수 로컬 인메모리 유닛 테스트(29개)만 즉시 실행되도록 분리:
+     - 일상 빌드 QA: `dotnet test GRC.sln --filter "Category!=Integration"` (~40ms 실행)
+     - 외부 API 가용성 시험: `dotnet test GRC.sln --filter "Category=Integration"`
+3. **프로젝트 실행 프로토콜 갱신 (`.agents/AGENTS.md`)**:
+   - 일상 테스트 명령어를 `--filter "Category!=Integration"`으로 등록하여 40ms 단위의 초고속 피드백 루프 확립.
+
+### 3. 검증 (Verification)
+* 일상 로컬 유닛 테스트 29/29 통과 (소요 시간: **42ms**, Exit Code 0).
+* 외부 API 통합 테스트 4/4 통과 (소요 시간: **5s**, Exit Code 0).
+* 솔루션 빌드 검증 (`dotnet build GRC.sln` - 0 Warning, 0 Error, **Exit Code 0**).
+
+
+
+
+
 
