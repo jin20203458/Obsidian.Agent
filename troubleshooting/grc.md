@@ -68,3 +68,33 @@ related:
   - struct 및 record 타입 역직렬화.
   - 잘린 JSON 객체 및 배열 복구 역직렬화.
 * 솔루션 전체 빌드(`dotnet build GRC.sln`) 및 테스트 스위트 24/24 통과 (**Exit Code 0**).
+
+---
+
+## 2026-10-14: [Resolved] 설정 화면 내 LLM 엔드포인트 실시간 연결 시험(Test Connection) 부재 및 통신 가용성 사전 검증 결여
+
+### 1. 현상 (Symptom)
+* 사용자가 API Key 오타, Project ID 누락, 비인가 Service Account 키 파일 등록 등 설정 오류를 범하더라도 설정 화면에서 이를 즉각 검증할 방법이 없음.
+* 실제 롤플레잉 세션을 시작하고 첫 대화를 전송한 뒤에야 통신 예외가 발생하여 사용자 경험이 훼손되고 디버깅 시간이 지연되는 결함 발생.
+
+### 2. 원인 (Root Cause)
+1. `SettingsViewModel`에 엔드포인트 가용성 및 RTT 지연시간을 사전 점검하는 비동기 핑(Ping) 로직이 결여되어 있었음.
+2. Google Cloud Vertex AI 및 AI Studio의 인증 토큰 유효성, Project ID 정합성, 모델명 지원 여부를 실시간 진단할 UI 피드백 파이프라인 부재.
+
+### 3. 해결책 (Resolution)
+1. **`Phalanx.Cockpit` 아키텍처 이식 (`TestConnectionCommand`)**: `SettingsViewModel.cs`에 15초 타임아웃 기반 초경량 핑 호출(`"Respond with 'OK'."`, maxOutputTokens: 16) 로직을 탑재.
+2. **듀얼 모드 실시간 분기 진단**:
+   * **Vertex AI**: Project ID 및 키 파일 존재 여부 검사 -> OAuth2 Bearer 토큰 획득 -> `global` 엔드포인트 호출.
+   * **AI Studio**: API 키 유효성 검사 -> `generativelanguage.googleapis.com` 엔드포인트 호출.
+3. **지연시간 및 구글 API 에러 메시지 상세 추출**: `Stopwatch` 기반 왕복 시간(ms) 측정 및 비정상 응답 시 Google API 에러 JSON에서 `error.message`를 추출하여 사용자에게 구체적 조치 방안 노출.
+4. **UI 바인딩 및 상태 피드백**: [SettingsView.xaml](file:///c:/Users/user/Documents/GitHub/GRC/GRC/Views/SettingsView.xaml)에 진행 상태, 비활성화 가드(`CanExecute`), 상태별 전용 색상 피드백(성공 녹색, 실패 적색, 진행 황색) 패널 배치.
+
+### 4. 검증 (Verification)
+* `tests/GRC.Tests/SettingsViewModelTests.cs` 전용 5개 테스트 작성 및 검증 통과:
+  - Vertex AI 모드 Project ID 누락 방어 (`FAIL: Project ID 미입력`) 검증.
+  - Vertex AI 키 파일 미등록 방어 (`FAIL: google-credentials.json 미등록`) 검증.
+  - AI Studio API 키 누락 방어 (`FAIL: Gemini API 키 미입력`) 검증.
+  - Mock HTTP 200 응답 시 PASS 판정, 전역 리전 표기 및 지연시간 측정 검증.
+  - Mock HTTP 403 응답 시 구글 에러 JSON 본문 메시지(`API key not valid`) 추출 검증.
+* 솔루션 전체 빌드(`dotnet build GRC.sln`) 및 테스트 스위트 29/29 통과 (**Exit Code 0**).
+
