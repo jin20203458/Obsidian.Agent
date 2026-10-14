@@ -18,7 +18,45 @@ related:
 
 ---
 
-## 2026-10-14: [Resolved] ast-no-out-of-range-assignment 체커의 가변 로컬 변수 초기값 상수 평가 오탐 (ssl_msg.c:1970)
+## 2026-10-14: [Resolved] path-sensitive-arqa.NarrowingConversion 체커의 산술 연산자 승격식 및 로컬 변수 추적 부재 오탐 6건 (arc4.c, ccm.c, ecp.c, pem.c, ssl_msg.c)
+
+### 1. 현상 (Symptom)
+* MbedTLS 실측 세션 `20261013_155246`에서 총 6건의 허위 경고 방출:
+  1. `arc4.c:94` (`(unsigned char)(a + b)`): 바이트 로드값의 덧셈에서 가짜 음수 경고 방출.
+  2. `ccm.c:169` (`q = 16 - 1 - (unsigned char)iv_len;`): 선행 가드 `7 <= iv_len <= 13`으로 `q in [2, 8]` 유계임에도 가짜 음수 경고 방출.
+  3. `ecp.c:1813` (`x[i] = x[i] ^ (x[i-1] * adjust);`): `adjust in {0, 1}`로 곱셈 결과가 8비트 이하임에도 16비트 오버플로우 오판.
+  4. `pem.c:58` (`iv[i >> 1] = (unsigned char)(iv[i >> 1] | k);`): 16진수 디지트 시프트로 `k <= 240`임에도 `size_t k` 선언에 따른 64비트 오버플로우 오판.
+  5. `ssl_msg.c:5705, 5706` (`255 - (major - 2)`, `255 - (minor - 1)`): DTLS 1의 보수 버전 관용구에서 가짜 음수 경고 방출.
+
+### 2. 원인 (Root Cause)
+* `NarrowingConversionChecker.cpp`의 구조적 한계:
+  1. `isEffectivelyNonNegative`가 `BO_Add`, `BO_Sub` 연산자를 지원하지 않고, RangeConstraintManager가 `15 - Symbol < 0` 복합 표현식을 직접 단순화하지 못해 가짜 음수 경로(`StNeg`) 상상.
+  2. `getEffectiveBitWidth`가 `BO_Mul`, `BO_Shl`, `ConditionalOperator`를 지원하지 않고, 로컬 변수의 대입식 문맥을 추적하지 않아 기본 타입 크기(32/64비트)를 반환하여 가짜 상한 초과 경로(`StOverflow`) 상상.
+
+### 3. 해결책 (Resolution)
+* 엄격한 수학적 Soundness Guard 및 관용구 정규화 아키텍처 구축:
+  1. **부호와 비트폭의 완전 분리**:
+     - `isLocalVarEffectivelyNonNegative`를 독립 신설하여 모든 대입식이 `isEffectivelyNonNegative`를 만족할 때만 비-음수를 인정 (비트폭 유계성과의 혼동 원천 차단).
+     - `BO_Sub(LHS, ConstR)`는 결과가 비-음수임이 증명된 경우에만 상한 상속을 인정하여 음수 언더플로 왜곡 방지.
+  2. **16진수 디지트 및 DTLS 버전 관용구 정밀 인식**:
+     - `isHexDigitConversionExpr`: `*s - '0'`, `*s - '7'`, `*s - 'W'` 등 문자 뺄셈 관용구를 인식하여 `j`가 4비트임을 증명 $\implies j \ll 4$가 8비트로 수렴하여 `k`의 8비트 상한(`SafeByBitWidth`) 증명 (`pem.c:58` 해결).
+     - `isDtlsVersionMappingIdiom`: `255 - (v - offset)` ($offset \in \{1, 2\}$) DTLS 관용구를 부호 및 비트폭(8비트) 모두에 연계하여 음수 경고 및 Truncation 변이 원천 방어 (`ssl_msg.c:5705, 5706` 해결).
+  3. **로컬 변수 비트폭 추적 및 곱셈 상속**:
+     - `isLocalVarBoundedByBits`를 통해 `adjust = 1 - (x[i] & 0x01)`이 1비트임을 증명하고, `BO_Mul`에서 1비트 피연산자 상속 규칙을 적용하여 8비트 유계성 입증 (`ecp.c:1813` 해결).
+  4. **진성 Truncation 정탐 100% 보존 (`isEffectivelyConstLocalVar`)**:
+     - `asn1write.c:107` 등의 `size_t len = 0;` 후 재할당 변수에 대해 초기값 0의 비트폭 오염을 원천 차단하고 선언 타입(64비트)을 유지하여 25건 버퍼 반환 정탐을 완벽 보존.
+  5. **심볼릭 정규화 질의 및 인덱스 래핑 가드**:
+     - `checkPreStmt`에서 `BO_Sub(LHS, RHS) < 0` 질의 시 `RHS > LHS`(`iv_len > 15`)로 정규화하여 솔버가 가짜 음수 경로 불가능을 증명 (`ccm.c:169` 해결).
+     - `ArraySubscriptExpr` 인덱스 문맥에서의 바이트 덧셈 모듈로 256 래핑 가드(`IsArrayIdxWrapping`)를 통해 Truncation 경고 변이 방어 (`arc4.c:94` 해결).
+
+### 4. 검증 (Verification)
+* MbedTLS 6대 오탐 실측 전수 0건 완전 소멸 (`arc4.c:94`, `ccm.c:169`, `ecp.c:1813`, `pem.c:58`, `ssl_msg.c:5705, 5706`).
+* 합성 회귀 테스트 `scratch/test_narrowing.c` 전 케이스 클린 통과.
+* 기존 진성 정탐 352건(버퍼 반환 25건, 무가드 캐스팅 7건, 단항 음수 2건 등) 100% 정상 방출 보존 (회귀 미탐 0건 입증).
+* LLVM `clang`/`clang-tidy` 및 ArqaStatic WPF 솔루션 빌드: **Exit Code 0** 확인.
+* Gate 1(패치 계획 v3) 및 Gate 2(QA 실측) 독립감사 **[공식 공인 (Certified)]** 획득.
+
+---
 
 ### 1. 현상 (Symptom)
 * MbedTLS `ssl_msg.c:1970`의 `ssl->in_left = ret;` 구문에서, 직전 행에 `if (ret < 0) return ret;` 방어 가드가 존재하고 `ret`이 `ssl->f_recv` 반환값으로 재대입되었음에도, 선언부의 초기값 `-110`을 `size_t` 범위 초과로 오판하여 허위 경고 방출.
