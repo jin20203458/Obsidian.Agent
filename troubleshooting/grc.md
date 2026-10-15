@@ -143,3 +143,54 @@ related:
 > **[정제 완료 기준선]** 2026-10-14 이전 상위 항목은 정제 완료됨. 신규 인시던트는 이 아래에 추가됩니다.
 
 ---
+
+## 2026-10-15: [Resolved] TensorPrimitives.CosineSimilarity의 영벡터(Zero-Vector) 연산 시 NaN 발생 및 방어 가드
+
+### 1. 현상 (Symptom)
+* `.NET 8.0 System.Numerics.Tensors.TensorPrimitives.CosineSimilarity`를 사용하여 벡터 코사인 유사도를 계산할 때, 입력 벡터 중 하나가 모든 요소가 0인 영벡터(Zero-Vector)인 경우 결과값으로 `float.NaN`이 반환됨.
+* 반환된 `float.NaN`이 상위 유사도 랭킹 비교(`score >= threshold`)나 정렬 연산으로 전파되어 랭킹 알고리즘이 엉뚱한 결과를 산출하거나 오동작하는 잠재적 엣지 케이스 발생.
+
+### 2. 원인 (Root Cause)
+* 코사인 유사도 수학식 $$\\text{Similarity} = \\frac{A \\cdot B}{\\|A\\| \\|B\\|}$$ 에서 영벡터의 크기(L2 Norm, $\\|A\\|$)가 0이 되므로, 부동소수점 나눗셈에서 0으로 나누기(Division by Zero)가 발생하여 IEEE 754 부동소수점 규격에 따라 `NaN`이 산출됨.
+
+### 3. 해결책 (Resolution)
+* **`VectorMathHelper` 삼항 연산 방어 가드 구축**:
+  `TensorPrimitives.CosineSimilarity` 연산 직후 `float.IsNaN`을 검사하여 `NaN` 발생 시 `0.0f`로 클램핑하여 안전하게 반환:
+  ```csharp
+  public static float CosineSimilarity(ReadOnlySpan<float> x, ReadOnlySpan<float> y)
+  {
+      if (x.IsEmpty || y.IsEmpty || x.Length != y.Length)
+      {
+          return 0.0f;
+      }
+
+      float similarity = TensorPrimitives.CosineSimilarity(x, y);
+      return float.IsNaN(similarity) ? 0.0f : similarity;
+  }
+  ```
+* **핵심 부정 제약 (Never use X)**: **절대 `TensorPrimitives.CosineSimilarity`의 반환값을 `float.IsNaN` 검증 없이 직접 비교식에 사용하지 말 것.** 빈 데이터베이스나 초기화되지 않은 임베딩 벡터가 유입될 경우 `NaN` 비교로 인해 의도치 않게 모든 필터링이 실패할 수 있음.
+
+---
+
+## 2026-10-15: [Resolved] Google text-embedding-004의 Vertex AI vs AI Studio API 엔드포인트 및 페이로드 스키마 비대칭 일원화
+
+### 1. 현상 (Symptom)
+* Google Cloud Vertex AI 환경과 Google AI Studio 환경 간에 `text-embedding-004` REST 호출 엔드포인트 URL 패턴, HTTP 인증 방식, 요청 JSON 스키마 및 응답 JSON 스키마가 완전히 달라 단일 DTO로 역직렬화할 경우 null 참조 예외 발생.
+
+### 2. 원인 (Root Cause)
+* **AI Studio (Gemini Developer API)**:
+  - 엔드포인트: `models/text-embedding-004:embedContent?key={ApiKey}`
+  - 요청 바디: `{"content": {"parts": [{"text": "..."}]}}`
+  - 응답 바디: `{"embedding": {"values": [...]}}`
+* **Vertex AI (Google Cloud Publisher API)**:
+  - 엔드포인트: `publishers/google/models/text-embedding-004:predict` (전역 리전 `locations/global`)
+  - 요청 바디: `{"instances": [{"content": "..."}]}`
+  - 응답 바디: `{"predictions": [{"embeddings": {"values": [...]}}]}`
+  - 인증 방식: OAuth2 Bearer 토큰 (`Authorization: Bearer {token}`)
+
+### 3. 해결책 (Resolution)
+* **`GeminiApiService.GetEmbeddingAsync` 내부 분기 일원화**:
+  - `appSettings.UseVertexAI` 설정값에 따라 요청/응답 DTO(`EmbedContentRequest/Response` vs `VertexEmbedRequest/Response`)를 완전히 분리하여 직렬화.
+  - 상위 계층(`ILorebookService`, `IMemoryManagerService`)에서는 서비스 분기를 알 필요 없이 `Task<float[]> GetEmbeddingAsync(string text)` 단일 시그니처만 호출하여 768차원 `float[]` 배열을 투명하게 수신하도록 추상화.
+  - ProjectId/ApiKey 부재, HTTP 오류, 파싱 실패 시 `try-catch`로 Fail-safe 가드를 두고 `Array.Empty<float>()`를 안전하게 반환하여 대화 파이프라인 차단을 방지.
+
