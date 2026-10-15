@@ -194,3 +194,55 @@ related:
   - 상위 계층(`ILorebookService`, `IMemoryManagerService`)에서는 서비스 분기를 알 필요 없이 `Task<float[]> GetEmbeddingAsync(string text)` 단일 시그니처만 호출하여 768차원 `float[]` 배열을 투명하게 수신하도록 추상화.
   - ProjectId/ApiKey 부재, HTTP 오류, 파싱 실패 시 `try-catch`로 Fail-safe 가드를 두고 `Array.Empty<float>()`를 안전하게 반환하여 대화 파이프라인 차단을 방지.
 
+---
+
+## 2026-10-15: [Resolved] Gemini API Part 빈 문자열 입력 시 HTTP 400 Bad Request 방어 및 Auto-Play 안전 Fallback
+
+### 1. 현상 (Symptom)
+* 플레이어가 입력을 입력하지 않고 `[계속 진행]`, `[Auto-Play]`를 실행하거나 빈 텍스트를 보낼 경우 `latestUserMessage.Text`가 빈 문자열(`""`) 또는 공백이 됨.
+* Gemini API(Vertex AI / AI Studio)는 Content Part의 text가 비어있을 경우 `HTTP 400 Bad Request (contents.parts.text must not be empty)` 에러를 즉시 반환하고 대화 스트리밍이 크래시됨.
+
+### 2. 원인 (Root Cause)
+* Google Gemini API 규격상 `contents[].parts[].text` 필드는 null 또는 빈 문자열을 허용하지 않으며 최소 1자 이상의 유효한 텍스트를 요구함.
+
+### 3. 해결책 (Resolution)
+* **`CognitivePromptAssembler` 내 다단계 안전 Fallback 패턴 도입**:
+  - `latestUserMessage.Text`가 `string.IsNullOrWhiteSpace`인 경우:
+    1. `cognitiveContext.PlotCatalyst`가 존재하면 촉매 서술 지침으로 채택하여 주입.
+    2. `PlotCatalyst`마저 비어있다면 `"(서사를 계속 진행하십시오.)"` 안전 Fallback 텍스트를 강제 주입하여 빈 Part 생성을 원천 차단.
+  - **핵심 부정 제약 (Never use X)**: **절대 검증되지 않은 유저 텍스트를 검사 없이 그대로 `new Part(text)`에 전달하지 말 것.** 빈 입력 상황에서도 항상 유효한 대체 텍스트가 보장되어야 함.
+
+---
+
+## 2026-10-15: [Resolved] Sparse/Dense 병렬 합집합 로어북 검색 시 임베딩 Null-safe 가드 및 중복 제거
+
+### 1. 현상 (Symptom)
+* 로어북 엔트리 중 일부만 임베딩이 계산되어 있거나 `queryEmbedding`이 미생성(null)된 상태에서 시맨틱 검색을 수행할 경우 NullReferenceException이 발생하거나 검색이 누락됨.
+* 키워드 정규식(Sparse)과 임베딩 유사도(Dense)에 동일한 로어북이 동시에 걸렸을 때 프롬프트에 중복 항목이 이중 주입되어 토큰을 낭비하고 어텐션을 교란함.
+
+### 2. 원인 (Root Cause)
+* 단순 병렬 결합 시 `queryEmbedding` 및 `entry.Embedding`의 null 가능성 검사가 누락되었고, 컬렉션 병합 후 고유 식별자(`Name`) 기준의 중복 제거 필터가 결여됨.
+
+### 3. 해결책 (Resolution)
+* **`HybridLorebookRetriever` 2단계 안전망 구현**:
+  - `queryEmbedding == null`이거나 `entry.Embedding == null`인 경우 Dense 연산을 안전하게 0ms 스킵하고 Sparse 키워드 매칭 결과만 반환(Graceful Fallback).
+  - 결합된 결과에 대해 `.DistinctBy(e => e.Name)`으로 중복 엔트리를 완벽 제거하고 `Priority` 내림차순 정렬 후 상위 `maxResults`개만 반환.
+
+---
+
+## 2026-10-15: [Resolved] 2계층 단서 추적기(ClueTracker)의 3중 안전망 및 20턴 TTL/슬롯 초과 시 Dormant 무손실 이관
+
+### 1. 현상 (Symptom)
+* 미회수 떡밥(`unresolvedClues`)을 세션 진행 중 무제한 축적할 경우 프롬프트 토큰이 팽창하고 모델 환각이 유발됨.
+* 반대로 단순 삭제(Drop)할 경우 수십~수백 턴 뒤에 회수되어야 하는 대서사 복선이 영구 소실되는 인과율 파괴 발생.
+
+### 2. 원인 (Root Cause)
+* 단기 작업 기억(RAM)과 장기 영구 아카이브(Cold Storage) 간의 티어드 이관 파이프라인 부재.
+
+### 3. 해결책 (Resolution)
+* **`ClueTracker` 3중 결정론적 안전망 구축**:
+  1. **슬롯 상한(Max 3) 무손실 이관**: 4번째 단서 유입 시 가장 오래된 1번 단서를 삭제하지 않고 `Status = ClueStatus.Dormant`로 전환하여 `_archivedClues`로 자동 이관(Paging-out).
+  2. **20턴 TTL 만료 아카이빙**: `TickTurn(currentTurn)` 호출 시 20턴 동안 참조되지 않은 단서는 `Dormant` 상태로 아카이브에 안전 보존.
+  3. **조건부 주입 (Gating)**: 유저가 직접 추궁/의심하지 않는 평소에는 프롬프트 주입 0토큰(0% 누설)을 유지하고, 추궁 시에만 `<latent_secrets>`로 조건부 주입.
+
+
