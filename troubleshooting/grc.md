@@ -245,4 +245,65 @@ related:
   2. **20턴 TTL 만료 아카이빙**: `TickTurn(currentTurn)` 호출 시 20턴 동안 참조되지 않은 단서는 `Dormant` 상태로 아카이브에 안전 보존.
   3. **조건부 주입 (Gating)**: 유저가 직접 추궁/의심하지 않는 평소에는 프롬프트 주입 0토큰(0% 누설)을 유지하고, 추궁 시에만 `<latent_secrets>`로 조건부 주입.
 
+---
+
+## 2026-10-15: [Resolved] MemoryManagerService V3 컷오버 시 metaDirective 합성 및 GenerationConfig/ThinkingAnchor 무손실 보존
+
+### 1. 현상 (Symptom)
+* V3 프롬프트 조립기(`CognitivePromptAssembler`) 연동 시 챕터 전환 지시문, 스탯 임계치 이벤트(`MAX/MIN`), Fast-Forward 등의 시스템 지침(`metaDirective`)이 유실되는 위험.
+* 조립기가 순수 DTO 프롬프트만 생성하므로 `preset.Temperature`, `MaxOutputTokens`, `ThinkingConfig(medium)` 및 `ConsumeAnchorFlag()`에 의한 앵커 추론 강화가 해제되는 현상.
+* 로어북 텍스트가 SystemInstruction에서 분리되면서 `CurrentLorebookText`를 사용하는 TTS 인물 맞춤 보이스 합성이 침묵하거나 기본 보이스로 폴백되는 현상.
+
+### 2. 원인 (Root Cause)
+* 프롬프트 조립 책임을 가진 조립기(`CognitivePromptAssembler`)는 순수 문자열 및 콘텐츠 배치만 담당하므로, API 레벨의 모델 실행 파라미터(`GenerationConfig`, `SafetySettings`) 및 TTS 참조 속성(`CurrentLorebookText`)은 상위 서비스(`MemoryManagerService`)의 명시적 재부착 책임임.
+
+### 3. 해결책 (Resolution)
+* **`effectiveUserMessage` 합성**: 유저 텍스트와 `metaDirective`를 합성하여 프롬프트 조립기에 전달함으로써 시스템 개입 이벤트의 100% 프롬프트 주입을 보장.
+* **`GenerationConfig` / `SafetySettings` 재부착 패턴**:
+  ```csharp
+  var assembledRequest = _cognitivePromptAssembler.AssemblePrompt(preset, shortTermSnapshot, effectiveUserMessage, cognitiveContext);
+  var request = assembledRequest with
+  {
+      SafetySettings = GetSafetySettings(settings.SafetyThreshold),
+      GenerationConfig = new GenerationConfig(preset.Temperature, preset.MaxOutputTokens, "text/plain", null, new ThinkingConfig(ThinkingLevel.medium))
+  };
+  ```
+* **`CurrentLorebookText` 동기화**: 하이브리드 검색으로 인출된 로어북들을 `$"[{l.Name}]\n{l.Content}"`로 즉시 갱신하여 TTS 엔진(`ChatViewModel:389`)이 캐릭터 보이스를 완벽 식별하도록 보장.
+
+---
+
+## 2026-10-15: [Resolved] 상태창 갱신 파이프라인의 단일 책임 원칙(SRP) 확보 및 ChatWorkflowService 우회 결합 방지
+
+### 1. 현상 (Symptom)
+* 비동기 상태창 갱신 모델이 반환한 미회수 단서(`unresolvedClues`)를 `ChatWorkflowService`에서 직접 `IClueTracker`로 주입하려 할 경우, 워크플로우 서비스가 턴 번호 상태를 알지 못하고 의존성이 불필요하게 비대해지는 결합도 왜곡 발생.
+
+### 2. 원인 (Root Cause)
+* 대화 세션의 모든 상태(컨텍스트, 턴 카운터, 이력)는 이미 `MemoryManagerService`가 단일 책임(SSOT)으로 관리하고 있음에도, 비동기 파이프라인 종단을 워크플로우 서비스에 분산 배치하려 했기 때문.
+
+### 3. 해결책 (Resolution)
+* **`MemoryManagerService.UpdateContextStatus` 내부로 클루 갱신 일원화**:
+  - `ChatViewModel` -> `_memoryService.UpdateContextStatus(payload)`의 단일 진입점에서 `payload.UnresolvedClues`를 처리하도록 통합.
+  - `ChatWorkflowService`는 스트리밍 채널 및 통신 제어에만 집중(SRP 완벽 준수).
+* **세션 하위 호환성 100% 보장**:
+  - `ChatSession` 레코드에 `List<ClueSlotItem>? ActiveClues = null`, `ArchivedClues = null`을 기본값으로 배치하여 기존 v1.0 세션 파일 로드 시에도 역직렬화 실패 없는 무손실 호환 확보.
+
+---
+
+## 2026-10-15: [Resolved] 세션 복원(RestoreSession) 시 불필요한 High Thinking 앵커 강제 발동 방지 및 조건부 활성화
+
+### 1. 현상 (Symptom)
+* 플레이어가 대화 중 앱을 종료했다가 다시 켤 때마다(`RestoreSession`), 직전 대화 기록(단기 18턴)이 온전히 살아있음에도 불구하고 매번 첫 턴에 `ThinkingLevel.high` 앵커 추론이 강제 발동하여 2~4초의 첫 글자 출력 지연과 수천 개의 Thinking 토큰이 낭비됨.
+
+### 2. 원인 (Root Cause)
+* 과거 3.0 시절 `RestoreSession` 말미에 무조건 `Volatile.Write(ref _requiresHighQualityAnchor, 1);`을 수행하도록 하드코딩되어 있어, 대화-종료-재접속 사이클마다 매번 앵커가 재점화됨.
+
+### 3. 해결책 (Resolution)
+* **대화 이력 기반 조건부 앵커 발동 (`MemoryManagerService.cs`)**:
+  ```csharp
+  // 대화 내역이 없는 신규 세션일 때만 앵커를 활성화하고, 기존 대화가 이어지는 세션 로드 시에는 불필요한 과잉 추론 방지
+  int anchorRequired = (session.History == null || session.History.Count == 0) ? 1 : 0;
+  Volatile.Write(ref _requiresHighQualityAnchor, anchorRequired);
+  ```
+* **효과**: 대화 내역이 있는 세션을 다시 열었을 때는 즉각적인 빠른 스트리밍(지연시간 0초)을 유지하고, 톤 확립이 필요한 빈 세션이나 18턴 압축/챕터 전환 시에만 정확히 앵커가 작동하도록 교정.
+
 
