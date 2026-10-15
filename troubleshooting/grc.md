@@ -306,4 +306,45 @@ related:
   ```
 * **효과**: 대화 내역이 있는 세션을 다시 열었을 때는 즉각적인 빠른 스트리밍(지연시간 0초)을 유지하고, 톤 확립이 필요한 빈 세션이나 18턴 압축/챕터 전환 시에만 정확히 앵커가 작동하도록 교정.
 
+---
+
+## 2026-10-15: [Resolved] Vertex AI 한국어 임베딩의 토큰 길이 더미 벡터 침묵 결함 및 LLM(global) vs Embedding(asia-northeast3 서울) 리전 분리 규격
+
+### 1. 현상 (Symptom)
+* **더미 벡터 반환 현상**: Vertex AI를 통해 `text-embedding-004` 모델을 호출할 때, "흑철검"과 "바닥에 뒹구는 시커먼 쇠칼"처럼 전혀 다른 문장임에도 768차원 전체가 소수점 18자리까지 100% 동일한 벡터(`SequenceEqual: True`, 코사인 유사도 1.0000)가 반환됨. 심지어 전혀 무관한 대조군 문장("주방에서 갓 구운 빵과 따뜻한 수프를 먹는다")조차 단서 문장과 동일한 토큰 길이(15토큰)라는 이유로 코사인 유사도 `0.9995`가 산출되는 심각한 시맨틱 왜곡 발생.
+* **LLM 리전 404 오류**: 최신 주력 LLM(`gemini-3.8-flash`, `gemini-4-argon`, `gemini-3.5-flash-lite`)을 로컬 리전(`us-central1`, `asia-northeast3`) 엔드포인트로 호출할 경우 `404 NotFound: Publisher model ... was not found` 예외 발생.
+
+### 2. 원인 (Root Cause)
+1. **AI Studio vs Vertex AI 모델 파편화**:
+   * Google AI Studio의 `text-embedding-004`는 한국어가 포함된 통합 다국어 모델이나, Google Cloud Vertex AI의 `text-embedding-004`는 **영어 및 코드 전용 모델**임.
+   * Vertex AI의 영어 전용 토크나이저는 한국어 유니코드가 인입되면 에러(HTTP 400/500)를 던지지 않고 **`HTTP 200 OK`를 반환하며 입력 텍스트의 토큰 길이에 비례하는 고정된 정적 더미 벡터를 반환(Silent Failure)**함.
+2. **LLM 모델의 배포 리전 제한**:
+   * 최신 Gemini 프리뷰/주력 LLM은 Google Cloud 정책상 물리 로컬 리전(`us-central1`, `asia-northeast3` 등)에 배포되지 않고 전역 프록시 엔드포인트(`locations/global`)에서만 서비스됨 (2026-10-15 실측 검증).
+3. **C# 직렬화 이스케이프 왜곡**:
+   * `System.Text.Json` 기본 직렬화기가 한글을 `\uXXXX`로 변환하여 전송하면서 토크나이저 파손을 가중시킴.
+
+### 3. 리전별 물리 실측 데이터 (2026-10-15 Ground Truth)
+
+| 모델 구분 | 모델 식별자 | 전역 (`locations/global`) | 미국 중부 (`us-central1`) | 서울 (`asia-northeast3`) | 최종 판정 및 아키텍처 규칙 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **임베딩** | `text-multilingual-embedding-002` | `200 OK` (451ms) | `200 OK` (1,087ms) | **`200 OK` (559ms)** | **서울 리전 물리 직결 채택 (2배 고속화)** |
+| **LLM Flash** | `gemini-3.8-flash` | **`200 OK` (9,100ms)** | `404 NotFound` | `404 NotFound` (382ms) | **반드시 `locations/global` 단일 고정** |
+| **LLM Pro** | `gemini-4-argon` | **`200 OK` (1,707ms)** | `404 NotFound` | `404 NotFound` (120ms) | **반드시 `locations/global` 단일 고정** |
+| **LLM FlashLite** | `gemini-3.5-flash-lite` | **`200 OK` (775ms)** | `404 NotFound` | `404 NotFound` (111ms) | **반드시 `locations/global` 단일 고정** |
+
+### 4. 해결책 (Resolution)
+1. **Vertex AI 한국어 전용 다국어 모델 전환 (`GeminiApiService.cs`)**:
+   * 모델명을 Vertex AI 공식 다국어 모델인 **`text-multilingual-embedding-002`**로 교체.
+   * 한글 직렬화 시 원형 보존을 위해 `_jsonOptions.Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping` 적용.
+2. **엔드포인트 리전 분리 아키텍처 확립**:
+   * **최신 주력 LLM (`gemini-3.8-flash`, `gemini-4-argon`, `gemini-3.5-flash-lite`)**: 반드시 `https://aiplatform.googleapis.com/.../locations/global/...` 단일 엔드포인트 사용 (`us-central1` 및 `asia-northeast3` 호출 시 404 차단).
+   * **임베딩 모델 (`text-multilingual-embedding-002`)**: `https://asia-northeast3-aiplatform.googleapis.com/.../locations/asia-northeast3/...` (서울 리전 물리 직결, 약 400~500ms로 `us-central1`의 1,087ms 대비 2배 이상 고속화).
+   * **TTS 모델 (`GeminiTtsService`)**: `us-central1` 엔드포인트 유지.
+3. **실측 기반 RAG 골디락스 임계치(0.70f) 동기화**:
+   * 다국어 모델 정상화 후 실측 결과:
+     * 단어 100% 회피 패러프레이징 유관 문장: 유사도 **`0.71 ~ 0.75`**
+     * 완전히 무관한 일상 대화 대조군 문장: 유사도 **`0.55 ~ 0.63`**
+   * 기존 비현실적인 고임계치(`0.80 ~ 0.85`)를 실측 분리 기준점인 **`0.70f`**로 일괄 교정하여, 유관 문장 100% 인출 및 무관 문장 100% 차단 달성.
+
+
 

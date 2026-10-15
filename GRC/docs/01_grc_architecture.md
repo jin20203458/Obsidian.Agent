@@ -65,7 +65,7 @@ flowchart TB
 
 ### 3) 중기 기억 (Event Ledger 팩트 누적)
 *   절삭된 8턴은 **Gemini 3.5 Flash-Lite** 모델을 통해 문학적 허구나 감상적 수사를 배제한 **3~5개의 불변 팩트 불릿(Fact Bullets)**으로 정제 추출됩니다.
-*   추출된 각 불릿은 구글 `text-embedding-004` API를 통해 768차원 시맨틱 벡터가 결합되어 현재 챕터의 `EventLedgers`에 누적됩니다.
+*   추출된 각 불릿은 구글 다국어 임베딩(`text-multilingual-embedding-002`, 서울 리전 `asia-northeast3` 직결) API를 통해 768차원 시맨틱 벡터가 결합되어 현재 챕터의 `EventLedgers`에 누적됩니다.
 *   소설 재작성(덮어쓰기)으로 인한 팩트 유실 및 문체 왜곡을 원천 차단합니다. 10회 누적(약 80턴) 시 챕터를 전환하고 이전 챕터를 큐로 밀어냅니다.
 
 ### 4) 장기 기억 (Chronicle 살리언스 증발)
@@ -73,9 +73,9 @@ flowchart TB
 *   **살리언스 증발(Salience Evaporation)** 기법을 적용하여 핵심 인과율과 세계관의 변화(Canon Events)만을 선별해 1,500자 이내의 대과거 연대기로 영구 보존합니다.
 
 ### 5) 보조 인지 엔진 (Selective Auxiliary Cognitive Engines)
-*   **하이브리드 로어북 (`HybridLorebookRetriever`)**: 정규식 1차 키워드 스캔과 시맨틱 임베딩 2차 유사도 검색을 결합하여 오탈자나 간접적 언급에도 설정집을 누락 없이 인출합니다. (대화 우클릭 수동 기억 추출은 단일 책임 원칙(SRP)에 따라 [LorebookService.cs](../../../GRC/GRC/Services/LorebookService.cs)로 완전 분리 격리됨)
-*   **살리언스 게이티드 RAG (`GatedRAGRetriever`)**: 유저 입력의 복잡도/복선 살리언스 점수가 3점 미만일 때는 0ms로 바이패스하고, 3점 이상일 때만 과거 완료된 챕터들의 사건 렛저를 SIMD(`TensorPrimitives`)로 즉시 인출합니다.
-*   **이중 계층 단서 추적기 (`ClueTracker`)**: 상태창 모델이 발견한 서사 떡밥을 Active/Archived 계층으로 추적하며, 20턴 TTL 만료 시 자동 휴면 처리하여 토큰 낭비를 방지합니다.
+*   **하이브리드 로어북 (`HybridLorebookRetriever`)**: 정규식 1차 키워드 스캔과 시맨틱 임베딩 2차 유사도 검색(골디락스 임계치 0.70f, 3턴 잔존 Sticky)을 결합하여 오탈자나 간접적 언급에도 설정집을 누락 없이 인출합니다. (대화 우클릭 수동 기억 추출은 단일 책임 원칙(SRP)에 따라 [LorebookService.cs](../../../GRC/GRC/Services/LorebookService.cs)로 완전 분리 격리됨)
+*   **살리언스 게이티드 RAG (`GatedRAGRetriever`)**: 유저 입력의 복잡도/복선 살리언스 점수가 3점 미만일 때는 0ms로 바이패스하고, 3점 이상일 때만 과거 완료된 챕터들의 사건 렛저를 SIMD(`TensorPrimitives`, 임계치 0.70f)로 즉시 인출합니다.
+*   **이중 계층 단서 추적기 (`ClueTracker`)**: 상태창 모델이 발견한 서사 떡밥을 Active/Archived 계층으로 추적하며, 3단계 하이브리드 게이팅(키워드 -> 3턴 Sticky -> 0.70f 시맨틱)을 통해 플레이어가 직접 상호작용한 대상 단서만 핀포인트로 인출합니다.
 *   **시간 인식 관계망 (`BiTemporalEntityProjector`)**: 인물 관계를 단순 호감도 숫자가 아닌 `[초기: 불신과 경계] -> [현재: 깊은 유대와 의지]` 형태로 시간 궤적을 1줄 투영하여 극적 감정선의 깊이를 부여합니다.
 
 </memory_pipeline>
