@@ -240,3 +240,19 @@ related:
 > **[정제 완료 기준선]** 2026-10-16 이전 상위 항목은 정제 완료됨. 신규 인시던트는 이 아래에 추가됩니다.
 
 ---
+
+## 2026-10-16: [Resolved] 로어북 3순위 상태창 인물 인출 조건식 오타 버그 수정 및 활성 인물 윈도우 슬라이싱 최적화
+
+### 1. 현상 (Symptom)
+- 상태창에 인물이 1명이라도 존재할 경우, 로어북에 등록된 카테고리 "인물" 항목 전체가 무차별 매칭되어 최대 3,000토큰 예산이 조기에 소진되는 결함 발생.
+- 챕터 누적으로 인해 상태창 인물 사전(`Chars`)이 비대해졌을 때, 과거에 이미 퇴장한 조연 로어북까지 상시 인출 후보군으로 포함되어 현재 장면의 로어북 인출을 저해할 위험 존재.
+
+### 2. 원인 (Root Cause)
+- `HybridLorebookRetriever.cs` 내 3단계 조건식이 `string.Equals(entry.Category, "인물", ...) || charNameSet.Contains(entry.Name)...`로 작성되어 논리합(`||`)에 의해 카테고리가 "인물"인 모든 항목이 `charNameSet` 포함 여부와 무관하게 무조건 참(True)으로 평가됨.
+- `MemoryManagerService.cs`에서 활성 인물 이름(`activeChars`)을 추출할 때 단기 기억 전체(`_shortTermMemory`)를 대상으로 검색하여 오래 전 퇴장한 인물까지 활성 상태로 간주함.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+- **오타 조건식 제거**: `HybridLorebookRetriever.cs` L108에서 무차별 `Category == "인물" ||` 조건을 제거하고, `charNameSet.Contains(entry.Name) || (entry.Keywords != null && entry.Keywords.Any(k => charNameSet.Contains(k)))`로 한정하여 상태창 인물과 실제 매칭될 때만 후보로 등록되도록 수정.
+- **최근 4개 메시지 슬라이싱**: `MemoryManagerService.cs`에서 `_shortTermMemory.TakeLast(4)` 및 현재 입력 텍스트에 이름이 직접 언급된 인물만 `activeChars`로 엄격히 필터링하여 프롬프트 예산 잠식 방지.
+- **의무 검증 (Ground Truth)**: `MemoryManagerServiceTests` 내 단위 테스트 12건(최근 4개 메시지 외 인물 배제 검증 신규 테스트 포함) 및 전체 단위 테스트 127건, 통합 테스트 9건 전원 통과(Exit Code 0).
+
