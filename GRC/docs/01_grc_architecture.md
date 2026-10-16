@@ -40,9 +40,9 @@ flowchart TB
         end
         
         subgraph AUXILIARY ["Selective Auxiliary Cognitive Engines"]
-            HL["하이브리드 로어북 (HybridLorebookRetriever)<br>- 1차 Regex 완전 일치 + 2차 text-embedding-004 코사인 유사도"]
-            GR["살리언스 게이티드 RAG (GatedRAGRetriever)<br>- 살리언스 3점 이상 시 과거 챕터 렛저 SIMD 핀포인트 인출"]
-            CT["이중 계층 떡밥 추적기 (ClueTracker)<br>- 활성/휴면 단서 추적, 최대 20턴 TTL 관리"]
+            HL["하이브리드 로어북 (HybridLorebookRetriever)<br>- 1차 Regex 완전 일치 + 2차 text-multilingual-embedding-002 코사인 유사도 (0.68f)"]
+            GR["살리언스 게이티드 RAG (GatedRAGRetriever)<br>- 살리언스 3점 이상 시 과거 챕터 렛저 SIMD 핀포인트 인출 (0.70f)"]
+            CT["이중 계층 떡밥 추적기 (ClueTracker)<br>- 활성/휴면 단서 추적, 최대 20턴 TTL 관리 (0.70f)"]
             BP["시간 인식 관계 투영기 (BiTemporalEntityProjector)<br>- 초기 상태 vs 현재 상태 감정 낙차 1줄 투영"]
         end
         
@@ -73,7 +73,7 @@ flowchart TB
 *   **살리언스 증발(Salience Evaporation)** 기법을 적용하여 핵심 인과율과 세계관의 변화(Canon Events)만을 선별해 1,500자 이내의 대과거 연대기로 영구 보존합니다.
 
 ### 5) 보조 인지 엔진 (Selective Auxiliary Cognitive Engines)
-*   **하이브리드 로어북 (`HybridLorebookRetriever`)**: 정규식 1차 키워드 스캔과 시맨틱 임베딩 2차 유사도 검색(골디락스 임계치 0.70f, 3턴 잔존 Sticky)을 결합하여 오탈자나 간접적 언급에도 설정집을 누락 없이 인출합니다. (대화 우클릭 수동 기억 추출은 단일 책임 원칙(SRP)에 따라 [LorebookService.cs](../../../GRC/GRC/Services/LorebookService.cs)로 완전 분리 격리됨)
+*   **하이브리드 로어북 (`HybridLorebookRetriever`)**: 정규식 1차 키워드 스캔과 시맨틱 임베딩 2차 유사도 검색(골디락스 임계치 0.68f, 3턴 잔존 Sticky)을 결합하여 오탈자나 간접적 언급에도 설정집을 누락 없이 인출합니다. (대화 우클릭 수동 기억 추출은 단일 책임 원칙(SRP)에 따라 [LorebookService.cs](../../../GRC/GRC/Services/LorebookService.cs)로 완전 분리 격리됨)
 *   **살리언스 게이티드 RAG (`GatedRAGRetriever`)**: 유저 입력의 복잡도/복선 살리언스 점수가 3점 미만일 때는 0ms로 바이패스하고, 3점 이상일 때만 과거 완료된 챕터들의 사건 렛저를 SIMD(`TensorPrimitives`, 임계치 0.70f)로 즉시 인출합니다.
 *   **이중 계층 단서 추적기 (`ClueTracker`)**: 상태창 모델이 발견한 서사 떡밥을 Active/Archived 계층으로 추적하며, 3단계 하이브리드 게이팅(키워드 -> 3턴 Sticky -> 0.70f 시맨틱)을 통해 플레이어가 직접 상호작용한 대상 단서만 핀포인트로 인출합니다.
 *   **시간 인식 관계망 (`BiTemporalEntityProjector`)**: 인물 관계를 단순 호감도 숫자가 아닌 `[초기: 불신과 경계] -> [현재: 깊은 유대와 의지]` 형태로 시간 궤적을 1줄 투영하여 극적 감정선의 깊이를 부여합니다.
