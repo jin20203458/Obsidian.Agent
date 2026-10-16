@@ -256,3 +256,21 @@ related:
 - **최근 4개 메시지 슬라이싱**: `MemoryManagerService.cs`에서 `_shortTermMemory.TakeLast(4)` 및 현재 입력 텍스트에 이름이 직접 언급된 인물만 `activeChars`로 엄격히 필터링하여 프롬프트 예산 잠식 방지.
 - **의무 검증 (Ground Truth)**: `MemoryManagerServiceTests` 내 단위 테스트 12건(최근 4개 메시지 외 인물 배제 검증 신규 테스트 포함) 및 전체 단위 테스트 127건, 통합 테스트 9건 전원 통과(Exit Code 0).
 
+---
+
+## 2026-10-17: [Resolved] 구버전 세션 로어북 백그라운드 임베딩 백필(Backfill) 중 세션 전환 및 로어북 수정 시 상태 오염/데이터 손실 경합 조건 해결
+
+### 1. 현상 (Symptom)
+- 임베딩이 없는 구버전 세션 로드 시 백그라운드에서 임베딩을 비동기 생성하는 도중(약 1~2초), 사용자가 즉시 로어북 편집창을 열어 새 항목을 등록하거나 뒤로 가기 후 다른 세션을 열면:
+  - 신규 등록한 로어북이 백그라운드 태스크 완료 시점에 구버전 목록으로 덮어써져 영구 증발.
+  - 뒤로 가기를 누르고 다른 세션 파일을 열었을 때, 이전 세션의 로어북 데이터가 현재 열린 다른 세션 파일에 덮어써져 저장되는 파일 오염 위험 발생.
+
+### 2. 원인 (Root Cause)
+- `ChatViewModel.cs`의 `Task.Run` 내부에서 시작 시점의 스냅샷 변수 없이 인스턴스 멤버(`CurrentPreset`, `_currentFileName`)를 직접 참조하고, 비동기 호출 완료 후 무조건 `CurrentPreset with { Lorebooks = updatedLores }`로 전체를 덮어썼기 때문.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+- **세션 활성 수명주기 앵커링**: `private bool _isSessionActive;` 플래그 및 `string targetFileName = _currentFileName;` 스냅샷을 캡처하고, `GoBack()` 호출 시 `_isSessionActive = false;`로 전환. 비동기 완료 후 `!_isSessionActive || _currentFileName != targetFileName`일 경우 즉시 작업을 폐기하여 파일 오염 차단.
+- **비파괴적 선택적 임베딩 병합(Selective Merge)**: 전체 리스트를 덮어쓰지 않고, 완료된 768차원 임베딩을 `(Name, Content)` 키 딕셔너리로 구축한 뒤 현재 `CurrentPreset.Lorebooks`의 항목 중 임베딩이 결여된 항목에만 선택적으로 주입. 백그라운드 실행 중 유저가 추가/수정한 로어북 무손실 보존.
+- **WPF STA 스레드 안전 디스패칭**: `Application.Current?.Dispatcher` 가드를 통해 UI 스레드 위반 없이 안전하게 상태를 반영하고 세션 파일과 동기화.
+
+
