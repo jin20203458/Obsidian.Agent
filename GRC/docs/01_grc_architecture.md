@@ -30,21 +30,21 @@ flowchart TB
         SYS["불변 시스템 지시문 (Prefix-Frozen SystemInstruction)<br>- 페르소나 및 세계관 불변 동결 (Prompt Cache Hit Rate 극대화)"]
         
         subgraph TIERS ["3-Tier Memory & Reasoning Pipeline"]
-            M1["단기 기억 (Raw History): 최근 18턴"]
-            M2["중기 기억 (Event Ledger): 불변 팩트/비밀 불릿 + 768차원 임베딩 누적"]
-            M3["장기 기억 (Chronicle): Gemini Pro 살리언스 증발 1,500자 연대기"]
+            M1["단기 기억 (Raw History): 최근 18턴 원문"]
+            M2["사건 불릿 원장 (Single Event Ledger): 단일 불변 원장 무손실 누적 (Append-Only)<br>- 상시 노출: 최신 15개 [제N장] 그룹화 (TakeLast 15)<br>- 과거 회상 RAG: 15개 제외 과거 전체 풀 (Take Count-15)"]
+            M3["장기 기억 (Macro Chronicle): 챕터 완료 즉시 Gemini Pro 살리언스 증발 1,500자 연대기 병합"]
             
-            M1 -->|"18턴 도달 시 8턴 절삭 후 백그라운드 추출"| M2
-            M2 -->|"10회 누적(80턴) 시 챕터 마감 및 큐 이관"| M3
+            M1 -->|"18턴 도달 시 8턴 절삭 후 백그라운드 팩트 추출"| M2
+            M2 -->|"10회 누적(80턴, 1개 챕터 마감) 즉시 비동기 병합"| M3
         end
         
         subgraph AUXILIARY ["Selective Auxiliary Cognitive Engines (2-Core RAG)"]
-            HL["하이브리드 로어북 RAG (HybridLorebookRetriever)<br>- 1차 Regex 완전 일치 + 2차 text-multilingual-embedding-002 코사인 유사도 (0.68f)"]
-            GR["사건 불릿포인트 RAG (GatedRAGRetriever)<br>- 1단계 회상 살리언스 게이트(>=3점) + 2단계 SIMD 핀포인트 인출 (0.70f)"]
+            HL["하이브리드 로어북 RAG (HybridLorebookRetriever)<br>- 1차 Regex 완전 일치 + 2차 text-embedding-004 코사인 유사도 (0.68f, 3턴 잔존 Sticky)"]
+            GR["사건 불릿포인트 RAG (GatedRAGRetriever)<br>- 단일 원장 과거 풀 대상 시맨틱 임베딩 유사도 (>=0.70f) 직결 + Turn 오름차순 인과 재정렬"]
             BP["시간 인식 관계 투영기 (BiTemporalEntityProjector)<br>- 초기 상태 vs 현재 상태 감정 낙차 1줄 투영"]
         end
         
-        ASSEMBLER["인지 프롬프트 조립기 (CognitivePromptAssembler)<br>- 토큰 예산 패킹 & User 최신 턴 직전 동적 슬롯 주입"]
+        ASSEMBLER["인지 프롬프트 조립기 (CognitivePromptAssembler)<br>- [Turn X] 메타 제거, [제N장] 그룹 헤더 및 상태 권위 가드레일 패킹"]
         
         SYS --> ASSEMBLER
         TIERS --> ASSEMBLER
@@ -55,24 +55,25 @@ flowchart TB
 
 ### 1) 불변 접두사 동결 (Prefix-Frozen SystemInstruction)
 *   세계관, 시스템 페르소나, 불변 지시문을 `SystemInstruction`에 완전히 격리하여 고정합니다.
-*   동적으로 변하는 로어북, 사건 렛저, 챕터 줄거리는 최신 유저 메시지 직전의 **동적 컨텍스트 슬롯(Dynamic Context Slot)**에 주입함으로써, LLM 엔진의 프롬프트 캐시 적중률을 극대화하고 문체 오염을 방지합니다.
+*   동적으로 변하는 로어북, 사건 렛저, 대서사 연대기는 최신 유저 메시지 직전의 **동적 컨텍스트 슬롯(Dynamic Context Slot)**에 주입함으로써, LLM 엔진의 프롬프트 캐시 적중률을 극대화하고 문체 오염을 방지합니다.
 
 ### 2) 단기 기억 (Raw History)
 *   가장 최근에 주고받은 날것의 대화 18턴을 손실 없이 보존합니다.
 *   **비동기 압축 트리거**: 18턴에 도달하면 가장 오래된 8턴을 절삭하여 백그라운드 스레드(`Task.Run`)에서 사건 팩트 추출을 시작합니다. 낙관적 락(`_shortTermVersion`)을 통해 동시성 정합성을 보장합니다.
 
-### 3) 중기 기억 (Event Ledger 팩트 및 비밀 누적)
-*   절삭된 8턴은 **Gemini 3.5 Flash-Lite** 모델을 통해 문학적 허구나 감상적 수사를 배제한 **3~5개의 불변 팩트 불릿(Fact Bullets)**으로 정제 추출됩니다. (행동 사실뿐만 아니라 **'새롭게 드러난 중요 단서나 비밀, 체결된 약속/맹세'**가 팩트로 함께 기록됩니다.)
-*   추출된 각 불릿은 구글 다국어 임베딩(`text-multilingual-embedding-002`, 서울 리전 `asia-northeast3` 직결) API를 통해 768차원 시맨틱 벡터가 결합되어 현재 챕터의 `EventLedgers`에 누적됩니다.
-*   소설 재작성(덮어쓰기)으로 인한 팩트 유실 및 문체 왜곡을 원천 차단합니다. 10회 누적(약 80턴) 시 챕터를 전환하고 이전 챕터를 큐로 밀어냅니다.
+### 3) 사건 불릿 원장 (Single Event Ledger 및 [제N장] 시간축 앵커)
+*   **단일 원장 무손실 누적 (Append-Only)**: 절삭된 8턴은 **Gemini 3.5 Flash-Lite** 모델을 통해 문학적 허구를 배제한 3~5개의 불변 팩트 불릿(Fact Bullets)으로 추출되며, 구글 768차원 임베딩과 함께 `_currentContext.EventLedgers` 단일 리스트에 영구 누적됩니다.
+*   **챕터 전환 시 무손실 승계**: 80턴(1개 챕터)이 끝나 새 챕터로 전환될 때도 단일 원장 전체를 그대로 승계하여 챕터 전환 직후 상시 불릿이 증발하는 결함을 원천 차단합니다.
+*   **상시 노출 칸 (`<internal_chronicle_facts>`)**: 단일 원장의 **최신 15개(`TakeLast(15)`)**를 항상 노출하며, 장 번호가 변경될 때만 `[제N장]` 그룹 헤더를 1회 출력하여 중복 토큰을 없애고 챕터 경계 인과를 보존합니다. 헤더에 `(현재 제N장 진행 중)`을 명시하여 시간 기준점을 확립합니다.
+*   **과거 회상 RAG 풀 (`<recalled_history>`)**: 단일 원장에서 **최신 15개를 제외한 앞쪽 전체(`Take(Count - 15)`)**가 자동으로 과거 회상 검색 대상이 됩니다.
 
-### 4) 장기 기억 (Chronicle 살리언스 증발)
-*   챕터 큐가 가득 차면(Max 3), 가장 오래된 챕터가 큐에서 빠져나와 **Gemini 4.0 Pro** 모델에 전달됩니다.
-*   **살리언스 증발(Salience Evaporation)** 기법을 적용하여 핵심 인과율과 세계관의 변화(Canon Events)만을 선별해 1,500자 이내의 대과거 연대기로 영구 보존합니다.
+### 4) 장기 연대기 (Macro Chronicle 즉시 병합)
+*   레거시 3개 챕터(240턴) 지연 대기 큐를 전면 폐지하고, **1개 챕터(80턴)가 마감되는 즉시** 해당 장의 불릿들을 **Gemini 4.0 Pro** 모델에 비동기 전달합니다.
+*   **살리언스 증발(Salience Evaporation)** 기법을 적용하여 1,500자 이내의 대서사 산문 연대기(`_longTermSummary`)로 즉시 병합 보존하여 서사의 거시적 대의명분 공백을 완전히 해소합니다.
 
 ### 5) 보조 인지 엔진 (2-Core RAG & Relational Projector)
-*   **하이브리드 로어북 RAG (`HybridLorebookRetriever`)**: 정규식 1차 키워드 스캔과 시맨틱 임베딩 2차 유사도 검색(골디락스 임계치 0.68f, 3턴 잔존 Sticky)을 결합하여 오탈자나 간접적 언급에도 설정집을 누락 없이 인출합니다. (대화 우클릭 수동 기억 추출은 단일 책임 원칙(SRP)에 따라 [LorebookService.cs](../../../GRC/GRC/Services/LorebookService.cs)로 완전 분리 격리됨)
-*   **사건 불릿포인트 RAG (`GatedRAGRetriever`)**: 유저 입력의 복잡도/복선 회상 살리언스 점수가 3점 미만일 때는 0ms로 바이패스하고, 3점 이상일 때만 과거 완료된 챕터들의 사건/비밀 렛저를 SIMD(`TensorPrimitives`, 임계치 0.70f)로 즉시 핀포인트 인출합니다.
+*   **하이브리드 로어북 RAG (`HybridLorebookRetriever`)**: 정규식 1차 키워드 스캔과 시맨틱 임베딩 2차 유사도 검색(골디락스 임계치 0.68f, 3턴 잔존 Sticky)을 결합하여 오탈자나 간접적 언급에도 설정집을 누락 없이 인출합니다.
+*   **사건 불릿포인트 RAG (`GatedRAGRetriever`)**: 매 턴 계산된 768차원 유저 쿼리 임베딩을 키워드 검문소 없이 코사인 유사도($\ge 0.70$) 스캔에 직결하여, 질문형뿐 아니라 평서문 행동 묘사로 과거 아이템/장소를 다룰 때도 상위 2개를 핀포인트 인출합니다. 인출 결과는 `item.Turn` 오름차순으로 재정렬하여 선후 인과 역전을 차단하며, 헤더에 `[떠오른 과거의 기억 - 현재 상태와 상충 시 현재 상태가 우선함]`을 명시하여 현재 상태 오판을 원천 방어합니다.
 *   **시간 인식 관계망 (`BiTemporalEntityProjector`)**: 인물 관계를 단순 호감도 숫자가 아닌 `[초기: 불신과 경계] -> [현재: 깊은 유대와 의지]` 형태로 시간 궤적을 1줄 투영하여 극적 감정선의 깊이를 부여합니다.
 
 </memory_pipeline>

@@ -1,7 +1,7 @@
 ---
 description: >-
   [Level 2: 작업 SOP / Orchestration] 최신 Agentic SE 연구 기반 복합/중대형 과업 전용
-  에이전트 협동 및 이중 계쇄(Dual-Gated: Plan Audit -> Code QA Audit) 오케스트레이션 표준 가이드라인.
+  에이전트 협동 및 이중 계쇄(Dual-Gated: Plan Audit -> Code QA Audit, Fast-Track 지원) 오케스트레이션 표준 가이드라인.
   협동 워크플로우 활성화 기준 및 서브에이전트 역할 분담 정의.
 related:
   - ../README.md
@@ -30,8 +30,9 @@ related:
 
 ## 2. 활성화 원칙 (On-Demand Activation Gatekeeper)
 
-* **원칙 (사용자 명시적 요청 필수)**: 본 가이드라인의 5단계 이중 계쇄 협동 워크플로우는 **사용자가 명시적으로 지시한 경우에만 가동**합니다. 
+* **원칙 (사용자 명시적 요청 필수)**: 본 가이드라인의 협동 워크플로우는 **사용자가 명시적으로 지시한 경우에만 가동**합니다. 
 * **기본 모드 (Solo Mode)**: 사용자의 별도 지시가 없는 모든 일상 작업은 Level 1 [`Agent_Runtime_Operations_Protocol.md`](./Agent_Runtime_Operations_Protocol.md)에 따라 메인 에이전트가 단독으로 코딩하고 터미널 Mandatory QA(`run_command` Exit Code 0)를 직접 수행하여 신속히 종결합니다.
+* **패스트트랙 모드 (Fast-Track: Single-Gate QA Only)**: 사용자가 계획 감사 생략(`[Fast-Track]`, "계획감사 생략", "바로 구현" 등)을 명시적으로 지시한 경우에만 가동합니다. Step 1의 `implementation_plan.md` 작성(Gate 2 검증 기준선 확보) 직후 Gate 1(Plan Auditor)을 생략하고 Step 2(구현)로 직행하되, Step 3(Gate 2 QA 감사)은 엄격히 유지합니다. (에이전트의 자율 생략 판단은 엄격히 금지)
 
 ---
 
@@ -51,11 +52,11 @@ flowchart TD
         S1_Plan["Main Agent: implementation_plan.md 작성"]
         S1_Audit["Plan Auditor Subagent 소환 (Read-Only)"]
         G1{"Gate 1: 계획 승인?"}
-        S1_Plan --> S1_Audit --> G1
+        S1_Plan -->|"표준 모드"| S1_Audit --> G1
     end
 
     subgraph Step2 ["Step 2. 책임 구현 (Implementation)"]
-        S2_Code["Main Agent: 승인된 계획 범위 내 소스 직접 집필"]
+        S2_Code["Main Agent: 승인/수립된 계획 범위 내 소스 직접 집필"]
     end
 
     subgraph Step3 ["Step 3. 코드/QA 감사 & Gate 2 (QA Audit)"]
@@ -70,6 +71,7 @@ flowchart TD
 
     Task --> S0_Worker
     S0_Report --> S1_Plan
+    S1_Plan -->|"Fast-Track (유저 명시적 지시 시 Gate 1 생략)"| S2_Code
     G1 -- "Fail (결함 지적)" --> S1_Plan
     G1 -- "Pass (승인)" --> S2_Code
     S2_Code --> S3_QA
@@ -88,13 +90,14 @@ flowchart TD
 
 ### Step 1: 정형 계획 수립 및 1차 계획 감사 (Gate 1)
 * 메인 에이전트가 `implementation_plan.md`를 작성한 후 `Plan Auditor` 서브에이전트에게 Gate 1 심사를 요청합니다.
+* **Fast-Track 바이패스**: 사용자가 명시적으로 지시한 경우에 한해 Gate 1 감사를 생략하고 Step 2로 직행합니다 (단, Step 3 대조 기준선 확보를 위해 계획서 작성 자체는 필수).
 * **Gate 1 통과 루브릭**:
   - [ ] 기존 아키텍처 및 시스템 불변식 위반 0건
   - [ ] 누락된 영향권 파일 및 엣지 케이스 분기 0건
   - [ ] 단일 책임 원칙(SRP) 및 롤백 가능성 확보
 
 ### Step 2: 메인 에이전트의 책임 구현 (Implementation)
-* 메인 에이전트가 승인된 계획서 범위 내에서만 소스코드를 직접 작성/수정합니다.
+* 메인 에이전트가 승인/수립된 계획서 범위 내에서만 소스코드를 직접 작성/수정합니다.
 * 코딩 중 중대한 설계 변경이 필요해지면 작업을 멈추고 Step 1로 복귀하여 계획서를 갱신하고 재감사를 받습니다.
 
 ### Step 3: 2차 코드/QA 감사 (Gate 2)

@@ -139,296 +139,104 @@ related:
 
 ---
 
-> [!NOTE]
-> **[정제 완료 기준선]** 2026-10-14 이전 상위 항목은 정제 완료됨. 신규 인시던트는 이 아래에 추가됩니다.
-
----
-
 ## 2026-10-15: [Resolved] TensorPrimitives.CosineSimilarity의 영벡터(Zero-Vector) 연산 시 NaN 발생 및 방어 가드
 
 ### 1. 현상 (Symptom)
-* `.NET 8.0 System.Numerics.Tensors.TensorPrimitives.CosineSimilarity`를 사용하여 벡터 코사인 유사도를 계산할 때, 입력 벡터 중 하나가 모든 요소가 0인 영벡터(Zero-Vector)인 경우 결과값으로 `float.NaN`이 반환됨.
-* 반환된 `float.NaN`이 상위 유사도 랭킹 비교(`score >= threshold`)나 정렬 연산으로 전파되어 랭킹 알고리즘이 엉뚱한 결과를 산출하거나 오동작하는 잠재적 엣지 케이스 발생.
+* `.NET 8.0 TensorPrimitives.CosineSimilarity` 연산 시 영벡터(Zero-Vector) 입력에 대해 `float.NaN`이 반환되어 상위 유사도 랭킹 및 필터링 비교식이 침묵 파손되는 결함.
 
 ### 2. 원인 (Root Cause)
-* 코사인 유사도 수학식 $$\\text{Similarity} = \\frac{A \\cdot B}{\\|A\\| \\|B\\|}$$ 에서 영벡터의 크기(L2 Norm, $\\|A\\|$)가 0이 되므로, 부동소수점 나눗셈에서 0으로 나누기(Division by Zero)가 발생하여 IEEE 754 부동소수점 규격에 따라 `NaN`이 산출됨.
+* 코사인 유사도 연산 중 영벡터의 크기(L2 Norm = 0)로 인한 0 나누기(Division by Zero) 발생.
 
-### 3. 해결책 (Resolution)
-* **`VectorMathHelper` 삼항 연산 방어 가드 구축**:
-  `TensorPrimitives.CosineSimilarity` 연산 직후 `float.IsNaN`을 검사하여 `NaN` 발생 시 `0.0f`로 클램핑하여 안전하게 반환:
-  ```csharp
-  public static float CosineSimilarity(ReadOnlySpan<float> x, ReadOnlySpan<float> y)
-  {
-      if (x.IsEmpty || y.IsEmpty || x.Length != y.Length)
-      {
-          return 0.0f;
-      }
-
-      float similarity = TensorPrimitives.CosineSimilarity(x, y);
-      return float.IsNaN(similarity) ? 0.0f : similarity;
-  }
-  ```
-* **핵심 부정 제약 (Never use X)**: **절대 `TensorPrimitives.CosineSimilarity`의 반환값을 `float.IsNaN` 검증 없이 직접 비교식에 사용하지 말 것.** 빈 데이터베이스나 초기화되지 않은 임베딩 벡터가 유입될 경우 `NaN` 비교로 인해 의도치 않게 모든 필터링이 실패할 수 있음.
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+* **`VectorMathHelper` 삼항 연산 가드**: `float.IsNaN(similarity) ? 0.0f : similarity` 클램핑 적용.
+* **핵심 부정 제약 (Never use X)**: **절대 `TensorPrimitives.CosineSimilarity` 반환값을 `float.IsNaN` 검증 없이 직접 비교식에 사용하지 말 것.**
 
 ---
 
 ## 2026-10-15: [Resolved] Google text-embedding-004의 Vertex AI vs AI Studio API 엔드포인트 및 페이로드 스키마 비대칭 일원화
 
 ### 1. 현상 (Symptom)
-* Google Cloud Vertex AI 환경과 Google AI Studio 환경 간에 `text-embedding-004` REST 호출 엔드포인트 URL 패턴, HTTP 인증 방식, 요청 JSON 스키마 및 응답 JSON 스키마가 완전히 달라 단일 DTO로 역직렬화할 경우 null 참조 예외 발생.
+* Google Cloud Vertex AI와 AI Studio 간의 REST 엔드포인트 URL, 인증 헤더(OAuth2 Bearer vs API Key), 요청/응답 JSON 스키마 비대칭으로 인한 역직렬화 실패 및 null 참조 예외 발생.
 
 ### 2. 원인 (Root Cause)
-* **AI Studio (Gemini Developer API)**:
-  - 엔드포인트: `models/text-embedding-004:embedContent?key={ApiKey}`
-  - 요청 바디: `{"content": {"parts": [{"text": "..."}]}}`
-  - 응답 바디: `{"embedding": {"values": [...]}}`
-* **Vertex AI (Google Cloud Publisher API)**:
-  - 엔드포인트: `publishers/google/models/text-embedding-004:predict` (전역 리전 `locations/global`)
-  - 요청 바디: `{"instances": [{"content": "..."}]}`
-  - 응답 바디: `{"predictions": [{"embeddings": {"values": [...]}}]}`
-  - 인증 방식: OAuth2 Bearer 토큰 (`Authorization: Bearer {token}`)
+* AI Studio는 `content.parts` 구조 및 ApiKey 쿼리를 사용하나, Vertex AI는 `instances[].content` 구조 및 Bearer 토큰을 요구하여 단일 DTO로 역직렬화 불가.
 
-### 3. 해결책 (Resolution)
-* **`GeminiApiService.GetEmbeddingAsync` 내부 분기 일원화**:
-  - `appSettings.UseVertexAI` 설정값에 따라 요청/응답 DTO(`EmbedContentRequest/Response` vs `VertexEmbedRequest/Response`)를 완전히 분리하여 직렬화.
-  - 상위 계층(`ILorebookService`, `IMemoryManagerService`)에서는 서비스 분기를 알 필요 없이 `Task<float[]> GetEmbeddingAsync(string text)` 단일 시그니처만 호출하여 768차원 `float[]` 배열을 투명하게 수신하도록 추상화.
-  - ProjectId/ApiKey 부재, HTTP 오류, 파싱 실패 시 `try-catch`로 Fail-safe 가드를 두고 `Array.Empty<float>()`를 안전하게 반환하여 대화 파이프라인 차단을 방지.
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+* **내부 분기 추상화 (`GeminiApiService.GetEmbeddingAsync`)**: `UseVertexAI` 설정에 따라 요청/응답 DTO를 분리 직렬화하고, 상위 계층에는 `Task<float[]> GetEmbeddingAsync(string text)` 단일 시그니처로 768차원 배열 투명 반환.
+* **불변식**: 외부 API 공급자 간 스키마 차이를 상위 도메인 서비스로 노출하지 말고 API 서비스 계층에서 단일 인터페이스로 격리할 것.
 
 ---
 
 ## 2026-10-15: [Resolved] Gemini API Part 빈 문자열 입력 시 HTTP 400 Bad Request 방어 및 Auto-Play 안전 Fallback
 
 ### 1. 현상 (Symptom)
-* 플레이어가 입력을 입력하지 않고 `[계속 진행]`, `[Auto-Play]`를 실행하거나 빈 텍스트를 보낼 경우 `latestUserMessage.Text`가 빈 문자열(`""`) 또는 공백이 됨.
-* Gemini API(Vertex AI / AI Studio)는 Content Part의 text가 비어있을 경우 `HTTP 400 Bad Request (contents.parts.text must not be empty)` 에러를 즉시 반환하고 대화 스트리밍이 크래시됨.
+* `[Auto-Play]` 실행이나 빈 텍스트 전송 시 Gemini API가 `HTTP 400 Bad Request (contents.parts.text must not be empty)`를 반환하며 스트리밍 세션 크래시 발생.
 
 ### 2. 원인 (Root Cause)
-* Google Gemini API 규격상 `contents[].parts[].text` 필드는 null 또는 빈 문자열을 허용하지 않으며 최소 1자 이상의 유효한 텍스트를 요구함.
+* Gemini API 규격상 `contents[].parts[].text`는 null 및 빈 문자열을 불허하고 1자 이상의 유효 텍스트를 요구함.
 
-### 3. 해결책 (Resolution)
-* **`CognitivePromptAssembler` 내 다단계 안전 Fallback 패턴 도입**:
-  - `latestUserMessage.Text`가 `string.IsNullOrWhiteSpace`인 경우:
-    1. `cognitiveContext.PlotCatalyst`가 존재하면 촉매 서술 지침으로 채택하여 주입.
-    2. `PlotCatalyst`마저 비어있다면 `"(서사를 계속 진행하십시오.)"` 안전 Fallback 텍스트를 강제 주입하여 빈 Part 생성을 원천 차단.
-  - **핵심 부정 제약 (Never use X)**: **절대 검증되지 않은 유저 텍스트를 검사 없이 그대로 `new Part(text)`에 전달하지 말 것.** 빈 입력 상황에서도 항상 유효한 대체 텍스트가 보장되어야 함.
-
----
-
-## 2026-10-15: [Resolved] Sparse/Dense 병렬 합집합 로어북 검색 시 임베딩 Null-safe 가드 및 중복 제거
-
-### 1. 현상 (Symptom)
-* 로어북 엔트리 중 일부만 임베딩이 계산되어 있거나 `queryEmbedding`이 미생성(null)된 상태에서 시맨틱 검색을 수행할 경우 NullReferenceException이 발생하거나 검색이 누락됨.
-* 키워드 정규식(Sparse)과 임베딩 유사도(Dense)에 동일한 로어북이 동시에 걸렸을 때 프롬프트에 중복 항목이 이중 주입되어 토큰을 낭비하고 어텐션을 교란함.
-
-### 2. 원인 (Root Cause)
-* 단순 병렬 결합 시 `queryEmbedding` 및 `entry.Embedding`의 null 가능성 검사가 누락되었고, 컬렉션 병합 후 고유 식별자(`Name`) 기준의 중복 제거 필터가 결여됨.
-
-### 3. 해결책 (Resolution)
-* **`HybridLorebookRetriever` 2단계 안전망 구현**:
-  - `queryEmbedding == null`이거나 `entry.Embedding == null`인 경우 Dense 연산을 안전하게 0ms 스킵하고 Sparse 키워드 매칭 결과만 반환(Graceful Fallback).
-  - 결합된 결과에 대해 `.DistinctBy(e => e.Name)`으로 중복 엔트리를 완벽 제거하고 `Priority` 내림차순 정렬 후 상위 `maxResults`개만 반환.
-
----
-
-## 2026-10-15: [Resolved] 2계층 단서 추적기(ClueTracker)의 3중 안전망 및 20턴 TTL/슬롯 초과 시 Dormant 무손실 이관
-
-### 1. 현상 (Symptom)
-* 미회수 떡밥(`unresolvedClues`)을 세션 진행 중 무제한 축적할 경우 프롬프트 토큰이 팽창하고 모델 환각이 유발됨.
-* 반대로 단순 삭제(Drop)할 경우 수십~수백 턴 뒤에 회수되어야 하는 대서사 복선이 영구 소실되는 인과율 파괴 발생.
-
-### 2. 원인 (Root Cause)
-* 단기 작업 기억(RAM)과 장기 영구 아카이브(Cold Storage) 간의 티어드 이관 파이프라인 부재.
-
-### 3. 해결책 (Resolution)
-* **`ClueTracker` 3중 결정론적 안전망 구축**:
-  1. **슬롯 상한(Max 3) 무손실 이관**: 4번째 단서 유입 시 가장 오래된 1번 단서를 삭제하지 않고 `Status = ClueStatus.Dormant`로 전환하여 `_archivedClues`로 자동 이관(Paging-out).
-  2. **20턴 TTL 만료 아카이빙**: `TickTurn(currentTurn)` 호출 시 20턴 동안 참조되지 않은 단서는 `Dormant` 상태로 아카이브에 안전 보존.
-  3. **조건부 주입 (Gating)**: 유저가 직접 추궁/의심하지 않는 평소에는 프롬프트 주입 0토큰(0% 누설)을 유지하고, 추궁 시에만 `<latent_secrets>`로 조건부 주입.
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+* **다단계 안전 Fallback (`CognitivePromptAssembler`)**: `string.IsNullOrWhiteSpace` 감지 시 `PlotCatalyst` 지침을 우선 채택하고, 부재 시 `"(서사를 계속 진행하십시오.)"` 대체 텍스트를 강제 주입.
+* **핵심 부정 제약 (Never use X)**: **절대 검증되지 않은 빈 유저 입력을 검사 없이 `new Part(text)`에 직접 전달하지 말 것.**
 
 ---
 
 ## 2026-10-15: [Resolved] MemoryManagerService V3 컷오버 시 metaDirective 합성 및 GenerationConfig/ThinkingAnchor 무손실 보존
 
 ### 1. 현상 (Symptom)
-* V3 프롬프트 조립기(`CognitivePromptAssembler`) 연동 시 챕터 전환 지시문, 스탯 임계치 이벤트(`MAX/MIN`), Fast-Forward 등의 시스템 지침(`metaDirective`)이 유실되는 위험.
-* 조립기가 순수 DTO 프롬프트만 생성하므로 `preset.Temperature`, `MaxOutputTokens`, `ThinkingConfig(medium)` 및 `ConsumeAnchorFlag()`에 의한 앵커 추론 강화가 해제되는 현상.
-* 로어북 텍스트가 SystemInstruction에서 분리되면서 `CurrentLorebookText`를 사용하는 TTS 인물 맞춤 보이스 합성이 침묵하거나 기본 보이스로 폴백되는 현상.
+* 순수 DTO 프롬프트 조립기(`CognitivePromptAssembler`) 분리 후 상위 모델 파라미터(`GenerationConfig`, `ThinkingConfig(medium)`) 및 시스템 지침(`metaDirective`)이 유실되는 결함.
 
 ### 2. 원인 (Root Cause)
-* 프롬프트 조립 책임을 가진 조립기(`CognitivePromptAssembler`)는 순수 문자열 및 콘텐츠 배치만 담당하므로, API 레벨의 모델 실행 파라미터(`GenerationConfig`, `SafetySettings`) 및 TTS 참조 속성(`CurrentLorebookText`)은 상위 서비스(`MemoryManagerService`)의 명시적 재부착 책임임.
+* 조립기는 프롬프트 텍스트 배치만 담당하므로 API 레벨 실행 설정 및 시스템 지침 합성은 상위 서비스(`MemoryManagerService`)의 명시적 재부착 책임임.
 
-### 3. 해결책 (Resolution)
-* **`effectiveUserMessage` 합성**: 유저 텍스트와 `metaDirective`를 합성하여 프롬프트 조립기에 전달함으로써 시스템 개입 이벤트의 100% 프롬프트 주입을 보장.
-* **`GenerationConfig` / `SafetySettings` 재부착 패턴**:
-  ```csharp
-  var assembledRequest = _cognitivePromptAssembler.AssemblePrompt(preset, shortTermSnapshot, effectiveUserMessage, cognitiveContext);
-  var request = assembledRequest with
-  {
-      SafetySettings = GetSafetySettings(settings.SafetyThreshold),
-      GenerationConfig = new GenerationConfig(preset.Temperature, preset.MaxOutputTokens, "text/plain", null, new ThinkingConfig(ThinkingLevel.medium))
-  };
-  ```
-* **`CurrentLorebookText` 동기화**: 하이브리드 검색으로 인출된 로어북들을 `$"[{l.Name}]\n{l.Content}"`로 즉시 갱신하여 TTS 엔진(`ChatViewModel:389`)이 캐릭터 보이스를 완벽 식별하도록 보장.
-
----
-
-## 2026-10-15: [Resolved] 상태창 갱신 파이프라인의 단일 책임 원칙(SRP) 확보 및 ChatWorkflowService 우회 결합 방지
-
-### 1. 현상 (Symptom)
-* 비동기 상태창 갱신 모델이 반환한 미회수 단서(`unresolvedClues`)를 `ChatWorkflowService`에서 직접 `IClueTracker`로 주입하려 할 경우, 워크플로우 서비스가 턴 번호 상태를 알지 못하고 의존성이 불필요하게 비대해지는 결합도 왜곡 발생.
-
-### 2. 원인 (Root Cause)
-* 대화 세션의 모든 상태(컨텍스트, 턴 카운터, 이력)는 이미 `MemoryManagerService`가 단일 책임(SSOT)으로 관리하고 있음에도, 비동기 파이프라인 종단을 워크플로우 서비스에 분산 배치하려 했기 때문.
-
-### 3. 해결책 (Resolution)
-* **`MemoryManagerService.UpdateContextStatus` 내부로 클루 갱신 일원화**:
-  - `ChatViewModel` -> `_memoryService.UpdateContextStatus(payload)`의 단일 진입점에서 `payload.UnresolvedClues`를 처리하도록 통합.
-  - `ChatWorkflowService`는 스트리밍 채널 및 통신 제어에만 집중(SRP 완벽 준수).
-* **세션 하위 호환성 100% 보장**:
-  - `ChatSession` 레코드에 `List<ClueSlotItem>? ActiveClues = null`, `ArchivedClues = null`을 기본값으로 배치하여 기존 v1.0 세션 파일 로드 시에도 역직렬화 실패 없는 무손실 호환 확보.
-
----
-
-## 2026-10-15: [Resolved] 세션 복원(RestoreSession) 시 불필요한 High Thinking 앵커 강제 발동 방지 및 조건부 활성화
-
-### 1. 현상 (Symptom)
-* 플레이어가 대화 중 앱을 종료했다가 다시 켤 때마다(`RestoreSession`), 직전 대화 기록(단기 18턴)이 온전히 살아있음에도 불구하고 매번 첫 턴에 `ThinkingLevel.high` 앵커 추론이 강제 발동하여 2~4초의 첫 글자 출력 지연과 수천 개의 Thinking 토큰이 낭비됨.
-
-### 2. 원인 (Root Cause)
-* 과거 3.0 시절 `RestoreSession` 말미에 무조건 `Volatile.Write(ref _requiresHighQualityAnchor, 1);`을 수행하도록 하드코딩되어 있어, 대화-종료-재접속 사이클마다 매번 앵커가 재점화됨.
-
-### 3. 해결책 (Resolution)
-* **대화 이력 기반 조건부 앵커 발동 (`MemoryManagerService.cs`)**:
-  ```csharp
-  // 대화 내역이 없는 신규 세션일 때만 앵커를 활성화하고, 기존 대화가 이어지는 세션 로드 시에는 불필요한 과잉 추론 방지
-  int anchorRequired = (session.History == null || session.History.Count == 0) ? 1 : 0;
-  Volatile.Write(ref _requiresHighQualityAnchor, anchorRequired);
-  ```
-* **효과**: 대화 내역이 있는 세션을 다시 열었을 때는 즉각적인 빠른 스트리밍(지연시간 0초)을 유지하고, 톤 확립이 필요한 빈 세션이나 18턴 압축/챕터 전환 시에만 정확히 앵커가 작동하도록 교정.
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+* **지침 합성 및 C# `with` 식 재부착**: 유저 텍스트에 `metaDirective`를 합성하고, `assembledRequest with { SafetySettings = ..., GenerationConfig = ... }` 패턴으로 모델 실행 파라미터 재부착.
+* **불변식**: 프롬프트 조립기 분리 시 API 모델 실행 파라미터가 DTO 전환 과정에서 누락되지 않도록 상위 서비스에서 불변식으로 보존할 것.
 
 ---
 
 ## 2026-10-15: [Resolved] Vertex AI 한국어 임베딩의 토큰 길이 더미 벡터 침묵 결함 및 LLM(global) vs Embedding(asia-northeast3 서울) 리전 분리 규격
 
 ### 1. 현상 (Symptom)
-* **더미 벡터 반환 현상**: Vertex AI를 통해 `text-embedding-004` 모델을 호출할 때, "흑철검"과 "바닥에 뒹구는 시커먼 쇠칼"처럼 전혀 다른 문장임에도 768차원 전체가 소수점 18자리까지 100% 동일한 벡터(`SequenceEqual: True`, 코사인 유사도 1.0000)가 반환됨. 심지어 전혀 무관한 대조군 문장("주방에서 갓 구운 빵과 따뜻한 수프를 먹는다")조차 단서 문장과 동일한 토큰 길이(15토큰)라는 이유로 코사인 유사도 `0.9995`가 산출되는 심각한 시맨틱 왜곡 발생.
-* **LLM 리전 404 오류**: 최신 주력 LLM(`gemini-3.8-flash`, `gemini-4-argon`, `gemini-3.5-flash-lite`)을 로컬 리전(`us-central1`, `asia-northeast3`) 엔드포인트로 호출할 경우 `404 NotFound: Publisher model ... was not found` 예외 발생.
+* **더미 벡터 침묵 실패**: Vertex AI `text-embedding-004`에 한국어 인입 시 에러 없이 `HTTP 200 OK`와 함께 토큰 길이에 비례하는 고정 더미 벡터가 반환되어 무관한 문장 간 유사도 `0.9995` 오판정 발생.
+* **LLM 리전 404 오류**: 최신 주력 LLM(`gemini-3.8-flash`, `gemini-4-argon`)을 로컬 리전(`us-central1`, `asia-northeast3`)으로 호출 시 `404 NotFound` 발생.
 
 ### 2. 원인 (Root Cause)
-1. **AI Studio vs Vertex AI 모델 파편화**:
-   * Google AI Studio의 `text-embedding-004`는 한국어가 포함된 통합 다국어 모델이나, Google Cloud Vertex AI의 `text-embedding-004`는 **영어 및 코드 전용 모델**임.
-   * Vertex AI의 영어 전용 토크나이저는 한국어 유니코드가 인입되면 에러(HTTP 400/500)를 던지지 않고 **`HTTP 200 OK`를 반환하며 입력 텍스트의 토큰 길이에 비례하는 고정된 정적 더미 벡터를 반환(Silent Failure)**함.
-2. **LLM 모델의 배포 리전 제한**:
-   * 최신 Gemini 프리뷰/주력 LLM은 Google Cloud 정책상 물리 로컬 리전(`us-central1`, `asia-northeast3` 등)에 배포되지 않고 전역 프록시 엔드포인트(`locations/global`)에서만 서비스됨 (2026-10-15 실측 검증).
-3. **C# 직렬화 이스케이프 왜곡**:
-   * `System.Text.Json` 기본 직렬화기가 한글을 `\uXXXX`로 변환하여 전송하면서 토크나이저 파손을 가중시킴.
+1. Vertex AI의 `text-embedding-004`는 영어/코드 전용 모델로 한글 인입 시 정적 더미 벡터를 조용히 반환함.
+2. 최신 Gemini LLM은 로컬 리전에 배포되지 않고 전역 프록시 엔드포인트(`locations/global`)에서만 서비스됨.
+3. `System.Text.Json` 기본 직렬화기의 한글 `\uXXXX` 유니코드 이스케이프 왜곡.
 
-### 3. 리전별 물리 실측 데이터 (2026-10-15 Ground Truth)
-
-| 모델 구분 | 모델 식별자 | 전역 (`locations/global`) | 미국 중부 (`us-central1`) | 서울 (`asia-northeast3`) | 최종 판정 및 아키텍처 규칙 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **임베딩** | `text-multilingual-embedding-002` | `200 OK` (451ms) | `200 OK` (1,087ms) | **`200 OK` (559ms)** | **서울 리전 물리 직결 채택 (2배 고속화)** |
-| **LLM Flash** | `gemini-3.8-flash` | **`200 OK` (9,100ms)** | `404 NotFound` | `404 NotFound` (382ms) | **반드시 `locations/global` 단일 고정** |
-| **LLM Pro** | `gemini-4-argon` | **`200 OK` (1,707ms)** | `404 NotFound` | `404 NotFound` (120ms) | **반드시 `locations/global` 단일 고정** |
-| **LLM FlashLite** | `gemini-3.5-flash-lite` | **`200 OK` (775ms)** | `404 NotFound` | `404 NotFound` (111ms) | **반드시 `locations/global` 단일 고정** |
-
-### 4. 해결책 (Resolution)
-1. **Vertex AI 한국어 전용 다국어 모델 전환 (`GeminiApiService.cs`)**:
-   * 모델명을 Vertex AI 공식 다국어 모델인 **`text-multilingual-embedding-002`**로 교체.
-   * 한글 직렬화 시 원형 보존을 위해 `_jsonOptions.Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping` 적용.
-2. **엔드포인트 리전 분리 아키텍처 확립**:
-   * **최신 주력 LLM (`gemini-3.8-flash`, `gemini-4-argon`, `gemini-3.5-flash-lite`)**: 반드시 `https://aiplatform.googleapis.com/.../locations/global/...` 단일 엔드포인트 사용 (`us-central1` 및 `asia-northeast3` 호출 시 404 차단).
-   * **임베딩 모델 (`text-multilingual-embedding-002`)**: `https://asia-northeast3-aiplatform.googleapis.com/.../locations/asia-northeast3/...` (서울 리전 물리 직결, 약 400~500ms로 `us-central1`의 1,087ms 대비 2배 이상 고속화).
-   * **TTS 모델 (`GeminiTtsService`)**: `us-central1` 엔드포인트 유지.
-3. **실측 기반 RAG 골디락스 임계치 및 다계층 게이팅 확립**:
-   * **단서(클루) RAG (`ClueTracker`)**: 임계치 **`0.70f`** (정탐 최저 0.7083 vs 비교군 최고 0.6607, 10/10 100% 분리)
-   * **로어북 RAG (`HybridLorebookRetriever`)**: 임계치 **`0.68f`** (정탐 하한 0.6910 vs 비교군 최고 0.6072, 10/10 100% 분리)
-   * **과거 렛저 RAG (`GatedRAGRetriever`)**: **2단계 하이브리드 파이프라인** (1단계 회상 살리언스 게이트 3점 이상 통과 후 2단계 임베딩 `0.70f` 평가. 배경 단어가 유사한 대조군 문장도 1단계 게이트 0점으로 0ms 즉시 차단되어 10/10 100% 분리)
+### 3. 해결책 및 아키텍처 SSOT 규격 (Resolution & Invariants)
+1. **한국어 다국어 모델 전환**: **`text-multilingual-embedding-002`**로 교체하고 `JavaScriptEncoder.UnsafeRelaxedJsonEscaping` 적용.
+2. **리전 분리 아키텍처 불변식**:
+   * **최신 주력 LLM**: 반드시 `locations/global` 단일 엔드포인트 사용 (`us-central1`/`asia-northeast3` 호출 금지, 404 에러 방어).
+   * **임베딩 모델**: 반드시 `asia-northeast3` (서울 리전 물리 직결, 약 400~500ms로 2배 고속화).
+   * **TTS 모델**: `us-central1` 엔드포인트 유지.
 
 ---
 
-## 2026-10-15: [Resolved] RAG 3종(로어북, 단서, 과거 렛저) 30문장 전수 실측 분리도 평가 및 2단계 게이팅 완벽 분리 실증
-
-### 1. 목적 (Objective)
-* 한국어 공식 특화 모델 `text-multilingual-embedding-002` (서울 `asia-northeast3` 리전) 환경에서 키워드가 전혀 일치하지 않는 패러프레이징 쿼리 15건(정탐) vs 무관한 일상/하드 네거티브 15건(비교군) 등 총 30개 문장에 대한 시맨틱 분리도를 전수 실측하고 최적 임계치 및 오탐 방어 기제를 실증함.
-
-### 2. 실측 30문장 벤치마크 결과 (Ground Truth)
-
-#### [1] 로어북 RAG (대상: "엘리시아: 아스테리아 제국의 제2황녀이자 주인공의 정략결혼 약혼녀. 눈부신 금발과 벽안을 지닌 냉혹하고 오만한 미녀. 제국 마법단 총지휘관.", 임계치 0.68f)
-| 유형 | 세부 유형 | 유사도 | 판정 (기준 0.68f) | 입력 쿼리 |
-| :--- | :--- | :--- | :--- | :--- |
-| **정탐** | 외모/신분 우회 | `0.7315` | **정탐 성공 (PASS)** | "그 건방진 금발 황녀의 복부를 칼로 깊숙이 찌른다." |
-| **정탐** | 약혼 관계 우회 | `0.7135` | **정탐 성공 (PASS)** | "약혼녀의 뺨을 차갑게 후려치며 차가운 눈으로 쏘아본다." |
-| **정탐** | 궁정 직계 우회 | `0.6941` | **정탐 성공 (PASS)** | "황제의 둘째 딸에게 다가가 정중하게 허리를 숙여 인사한다." |
-| **정탐** | 태도/신분 우회 | `0.7417` | **정탐 성공 (PASS)** | "오만하기 짝이 없는 금발 귀족 아가씨의 콧대를 꺾어놓아야겠다." |
-| **정탐** | 마법단 직책/성격 우회 | `0.6910` | **정탐 성공 (PASS)** | "제국 마법단의 차가운 총지휘관에게 다가가 전선의 상황을 보고한다." |
-| **비교군** | 일상 식사 | `0.5713` | **차단 성공 (PASS)** | "주방에서 갓 구운 따뜻한 빵과 치즈를 집어 먹는다." |
-| **비교군** | 일상 독서 | `0.5535` | **차단 성공 (PASS)** | "벽난로 앞의 낡은 나무 의자에 조용히 앉아 책을 읽는다." |
-| **비교군** | 사냥 전투 | `0.6072` | **차단 성공 (PASS)** | "숲속에서 갑자기 튀어나온 거대한 멧돼지에게 활을 겨눈다." |
-| **비교군** | 하드 네거티브 (경비병) | `0.5843` | **차단 성공 (PASS)** | "성문을 지키는 늙은 경비병에게 통행증을 내밀며 문을 열라고 요구한다." |
-| **비교군** | 하드 네거티브 (상인 거래) | `0.5949` | **차단 성공 (PASS)** | "거리의 연금술 상점에 들러 상처를 치료할 붉은 물약을 흥정한다." |
-* **결과**: **10/10 완벽 분리** (비교군 최고점 `0.6072` vs 정탐 최저점 `0.6910` 사이에 `0.0838`의 안전 마진 확보).
-
-#### [2] 단서(클루) RAG (대상: "탁자 위의 흑철검 자루에 치명적인 독침이 숨겨져 있다.", 임계치 0.70f)
-| 유형 | 세부 유형 | 유사도 | 판정 (기준 0.70f) | 입력 쿼리 |
-| :--- | :--- | :--- | :--- | :--- |
-| **정탐** | 이음동의어 우회 | `0.7537` | **정탐 성공 (PASS)** | "바닥에 뒹구는 시커먼 쇠칼을 주워서 구석구석 꼼꼼하게 조사한다." |
-| **정탐** | 대명사 우회 | `0.7083` | **정탐 성공 (PASS)** | "그녀가 쓰던 무기를 손에 쥐고 손잡이 이음새를 살핀다." |
-| **정탐** | 암기 장치 우회 | `0.7683` | **정탐 성공 (PASS)** | "칼자루 끝에 어떤 위험한 암기나 장치가 장착되어 있는지 분해해본다." |
-| **정탐** | 독극물 우회 | `0.7294` | **정탐 성공 (PASS)** | "블레이드 그립 부분에 수상한 액체나 침이 발려 있는지 냄새를 맡는다." |
-| **정탐** | 도검 조사 우회 | `0.8057` | **정탐 성공 (PASS)** | "테이블에 놓인 검은 도검을 조심스럽게 들어 올려 자루를 만져본다." |
-| **비교군** | 일상 수면 | `0.6152` | **차단 성공 (PASS)** | "침대에 누워 이불을 덮고 깊은 잠을 청한다." |
-| **비교군** | 이동 준비 | `0.5410` | **차단 성공 (PASS)** | "내일 아침 일찍 말을 타고 다음 마을로 출발할 준비를 한다." |
-| **비교군** | 동료 대화 | `0.5956` | **차단 성공 (PASS)** | "동료에게 다가가 오늘 저녁에 무엇을 먹을지 묻는다." |
-| **비교군** | 하드 네거티브 (서재 책장) | `0.6607` | **차단 성공 (PASS)** | "서재 구석의 책장을 뒤져 오래된 역사책을 꺼내본다." |
-| **비교군** | 하드 네거티브 (요리 식칼) | `0.6569` | **차단 성공 (PASS)** | "식칼을 들고 도마 위에서 당근과 양파를 잘게 썬다." |
-* **결과**: **10/10 완벽 분리** (비교군 최고점 `0.6607` vs 정탐 최저점 `0.7083` 완벽 분리).
-
-#### [3] 과거 렛저 회상 RAG (대상: "비 내리는 부둣가에서 붉은 머리 마법사에게 비밀 서신을 건네받고 동맹을 맹세했다.", 1단계 살리언스 게이트 + 2단계 임베딩 0.70f)
-| 유형 | 세부 유형 | 1단계 점수 | 2단계 유사도 | 최종 판정 | 입력 쿼리 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **정탐** | 항구/빨간 머리 | 6점 | `0.7332` | **정탐 완벽 성공 (PASS)** | "예전에 그 항구에서 빨간 머리 여자와 손잡았던 날 기억나?" |
-| **정탐** | 선창/밀서 | 3점 | `0.7509` | **정탐 완벽 성공 (PASS)** | "비바람 몰아치던 선창에서 건네받았던 그 은밀한 편지는 어디 있지?" |
-| **정탐** | 선착장/술사/약조 | 3점 | `0.7359` | **정탐 완벽 성공 (PASS)** | "우리 배 타는 곳에서 그 술사와 맺었던 약조를 잊어선 안 돼." |
-| **정탐** | 바닷가/마법사/약속 | 6점 | `0.8421` | **정탐 완벽 성공 (PASS)** | "그때 바닷가에서 붉은 마법사 녀석과 편지 주고받으면서 한 약속 생각나?" |
-| **정탐** | 포구/쪽지/동맹 | 3점 | `0.7953` | **정탐 완벽 성공 (PASS)** | "포구에서 마법사한테 비밀리에 쪽지 받고 한패가 되기로 했잖아." |
-| **비교군** | 일상 기상 | 0점 | `0.6029` | **1단계 즉시 차단 (PASS)** | "아침 햇살에 눈을 비비며 텐트 밖으로 걸어 나온다." |
-| **비교군** | 대장간 수리 | 0점 | `0.6595` | **1단계 즉시 차단 (PASS)** | "대장간에 들러 방패의 찌그러진 부분을 망치로 펴달라고 부탁한다." |
-| **비교군** | 하드 네거티브 (동굴 조우) | 0점 | `0.6483` | **1단계 즉시 차단 (PASS)** | "산속 동굴에서 길을 잃은 사냥꾼을 만나 모닥불을 피웠다." |
-| **비교군** | 하드 네거티브 (바다 풍경) | 0점 | `0.7062` | **1단계 즉시 차단 (PASS)** | "푸른 바다 위에서 돛을 올리고 시원한 바닷바람을 맞는다." |
-| **비교군** | 하드 네거티브 (미래 약속) | 3점 | `0.6440` | **2단계 유사도 차단 (PASS)** | "내일 정오에 시청 앞 광장에서 경비대장과 만나기로 약속하자." |
-* **결과**: **10/10 완벽 분리** (단독 임베딩 유사도 0.7062인 바다 풍경 문장도 1단계 살리언스 게이트 0점으로 0ms 즉시 차단).
-
-### 3. 핵심 공학적 통찰 (Engineering Insights)
-1. **단순 임베딩 RAG의 한계와 2단계 살리언스 게이트의 절대적 가치**:
-   - "푸른 바다 위에서 돛을 올리고 시원한 바닷바람을 맞는다"는 원문의 "비 내리는 부둣가"와 해양적 공간 공유로 인해 순수 코사인 유사도가 `0.7062`로 측정됨.
-   - 만약 1단계 게이트 없이 임베딩 유사도만 사용했다면 유저가 단순히 배를 타는 서사에서도 500턴 전 부둣가 동맹 맹세가 오탐 인출되었을 것임.
-   - GRC의 `GatedRAGRetriever`는 **1단계에서 시간 부사 및 회상 앵커 키워드 점수를 먼저 채점하여 0점(3점 미만)으로 0ms만에 완전 차단**하므로 실질 오탐을 0건으로 봉쇄함.
-2. **로어북 0.68f 골디락스 임계치**:
-   - 비교군 최고점 `0.6072`와 정탐 경계점 `0.6910` 사이에 안전 마진 `0.08`이 존재하므로, 로어북 임계치를 `0.68f`로 미세 조정하여 오탐률 0%를 유지하면서 간접 호칭 정탐률 100%를 달성함.
-
----
-
-## 2026-10-16: [Resolved] ClueTracker의 과잉 생성 편향 및 우선순위 왜곡 해결을 위한 ClueTracker 영구 적출 및 2대 핵심 RAG 단일화
+## 2026-10-16: [Resolved] 단일 불릿 원장(Single Event Ledger) 일원화 및 [제N장] 시간축 앵커 도입을 통한 서사 시간 왜곡, 81턴 불릿 증발 및 240턴 장기 기억 지연 결함 완전 해결
 
 ### 1. 현상 (Symptom)
-* 매 턴 상태창 갱신 모델(Gemini 3.5 Flash-Lite)이 `unresolvedClues`를 채우려는 본능으로 인해, 평범한 일상 행동("도적의 찢어진 옷자락", "탁자 먼지")까지 사소한 디테일을 억지 떡밥으로 과잉 생성하여 10~20턴 만에 시스템에 20개 이상의 잡음 단서가 범람함.
-* 단서 간 중요도/가중치 부재로 인해, 최근에 발생한 사소한 잡음 단서가 슬롯(최대 3개)을 차지하여 정작 아카이브에 잠든 메가톤급 핵심 복선("선황 암살의 진범")이 프롬프트에 올라오지 못하는 심각한 우선순위 역전 왜곡 발생.
-* 단서의 해결 여부 판정이 모호하여 이미 끝난 사건이 나중에 아카이브에서 미해결 떡밥으로 부활하는 좀비 단서(Zombie Clues) 위험 실재.
+* 챕터 전환(81턴) 시 `EventLedgers`가 빈 리스트로 초기화되어 최근 15개 불릿이 프롬프트에서 즉시 소멸하는 기억 단절 발생.
+* 3개 챕터(240턴) 대기 큐로 인해 2~4장 진행 중 장기 줄거리가 프롬프트 어디에도 존재하지 않는 거대한 기억 공백 발생.
+* 시스템 턴 번호(`[Turn X]`) 노출로 인한 서사 시간 괴리 및 행동 묘사(평서문) 시 RAG 검문소 오차단.
 
 ### 2. 원인 (Root Cause)
-* 복선이나 비밀은 본질적으로 서사의 '사건적 사실(Fact)'임에도 불구하고, 이를 HP나 골드처럼 매 턴 상태창으로 수집하려는 이원화(옥상옥) 구조로 설계했기 때문.
+* v1.0 레거시 3챕터 대기 큐(`_mediumBuffers`)와 v3.0 불릿 시스템의 중복 및 상태창 단서 수집(`unresolvedClues`) 모델의 옥상옥 구조로 인한 파편화.
 
-### 3. 해결책 (Resolution)
-* **`ClueTracker` 및 `unresolvedClues` 완전 적출**:
-  - `IClueTracker.cs`, `ClueTracker.cs`, `ClueTrackerTests.cs` 영구 삭제.
-  - `StatusPayload.cs` 및 `BuildStatusRequest`에서 `unresolvedClues` 필드를 완전히 제거하여 상태창 모델의 잡음 과잉 생성 원천 차단.
-  - `CognitivePromptAssembler`에서 `<latent_secrets>` 태그 슬롯 및 `ActiveClues` 의존성 제거.
-* **`EventLedgerExtractor` 팩트 추출 프롬프트 보강**:
-  - 8턴마다 추출되는 불변 팩트 불릿 프롬프트에 *"체결된 약속/맹세, 그리고 새롭게 드러난 중요 단서나 비밀"*을 팩트로 기록하도록 명시하여 진짜 중요한 복선만 렛저에 누적되도록 단일화.
-* **2대 핵심 RAG (로어북, 사건 불릿포인트) 단일화**:
-  - 모든 과거 복선/비밀 회수는 100% 분리가 실측 검증된 `GatedRAGRetriever`가 전담.
-  - 잡음 0%, 좀비 단서 0%, 우선순위 왜곡 0%의 무결점 인지 아키텍처 확립.
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+1. **단일 불릿 원장(Single Event Ledger) 일원화**:
+   * 챕터 전환 시 `EventLedgers`를 무손실 누적 승계하고, 상시 15개는 언제나 `TakeLast(15)`, 과거 RAG 풀은 `Take(Count - 15)`로 단일 슬라이싱하여 81턴 불릿 증발 원천 차단.
+   * 1개 챕터(80턴) 완료 즉시 백그라운드 Pro 모델 장기 요약을 가동하여 기억 공백 해소.
+2. **시간축 앵커 및 RAG 인과 정렬**:
+   * 프롬프트 내 `[Turn X]`를 제거하고 장 번호 변경 시에만 `[제N장]` 그룹 헤더를 1회 출력. RAG 인출 결과는 `item.Turn` 오름차순으로 재정렬하여 인과 역전 방지.
+3. **핵심 부정 제약 (Never use X)**:
+   * **절대 매 턴 상태창 모델에 단서(`unresolvedClues`) 수집 슬롯을 두지 말 것(Never collect clues via turn status model).** 복선과 비밀은 잡음 생성과 우선순위 역전을 유발하므로 독자적 슬롯을 두지 말고 `EventLedger` 팩트 단일 원장으로 일원화하여 관리할 것.
 
+---
 
+> [!NOTE]
+> **[정제 완료 기준선]** 2026-10-16 이전 상위 항목은 정제 완료됨. 신규 인시던트는 이 아래에 추가됩니다.
 
+---
