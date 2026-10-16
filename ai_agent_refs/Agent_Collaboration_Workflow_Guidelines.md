@@ -32,7 +32,7 @@ related:
 
 * **원칙 (사용자 명시적 요청 필수)**: 본 가이드라인의 협동 워크플로우는 **사용자가 명시적으로 지시한 경우에만 가동**합니다. 
 * **기본 모드 (Solo Mode)**: 사용자의 별도 지시가 없는 모든 일상 작업은 Level 1 [`Agent_Runtime_Operations_Protocol.md`](./Agent_Runtime_Operations_Protocol.md)에 따라 메인 에이전트가 단독으로 코딩하고 터미널 Mandatory QA(`run_command` Exit Code 0)를 직접 수행하여 신속히 종결합니다.
-* **패스트트랙 모드 (Fast-Track: Single-Gate QA Only)**: 사용자가 계획 감사 생략(`[Fast-Track]`, "계획감사 생략", "바로 구현" 등)을 명시적으로 지시한 경우에만 가동합니다. Step 1의 `implementation_plan.md` 작성(Gate 2 검증 기준선 확보) 직후 Gate 1(Plan Auditor)을 생략하고 Step 2(구현)로 직행하되, Step 3(Gate 2 QA 감사)은 엄격히 유지합니다. (에이전트의 자율 생략 판단은 엄격히 금지)
+* **패스트트랙 모드 (Fast-Track: Single-Gate QA Only)**: 사용자가 계획 감사 생략(`[Fast-Track]`, "계획감사 생략", "바로 구현" 등)을 명시적으로 지시한 경우 가동합니다. Step 1 계획서 작성 후 Gate 1만 생략하고 Step 2(구현)로 직행하되, **Step 2 완료 직후 사용자에게 답변을 출력하는 조기 종료를 절대 금지하며 반드시 Step 3(Gate 2 QA 감사관 소환)을 실행**해야 합니다. (자율 생략 판단 금지)
 
 ---
 
@@ -98,6 +98,7 @@ flowchart TD
 
 ### Step 2: 메인 에이전트의 책임 구현 (Implementation)
 * 메인 에이전트가 승인/수립된 계획서 범위 내에서만 소스코드를 직접 작성/수정합니다.
+* **조기 종료 방지 불변식 (Anti-Premature Completion)**: 코드 수정을 마친 메인 에이전트는 즉시 텍스트 답변으로 작업을 종료할 수 없으며, 반드시 다음 도구 호출로 `invoke_subagent(QA Auditor)`를 실행하여 Gate 2 심사를 받아야 합니다.
 * 코딩 중 중대한 설계 변경이 필요해지면 작업을 멈추고 Step 1로 복귀하여 계획서를 갱신하고 재감사를 받습니다.
 
 ### Step 3: 2차 코드/QA 감사 (Gate 2)
