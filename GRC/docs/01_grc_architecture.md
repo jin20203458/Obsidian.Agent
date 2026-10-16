@@ -13,7 +13,7 @@ related:
 
 ## 1. 인지 코어 3.0 메모리 파이프라인 (Cognitive Core 3.0 Memory Pipeline)
 
-대규모 롤플레잉 서사를 진행할 때, 모든 대화를 프롬프트에 무제한 누적하면 컨텍스트 윈도우 초과, 프롬프트 캐시 미스, 비용 폭발 및 서사 왜곡(Lost in the middle)을 초과합니다. GRC v3.0은 이를 해결하기 위해 **불변 접두사 동결(Prefix-Frozen SystemInstruction)**, **사건 렛저(Event Ledger) 팩트 추출**, **게이티드 하이브리드 RAG**, **이중 계층 복선 추적(Clue Tracker)**을 유기적으로 결합한 Cognitive Core 3.0 아키텍처를 탑재했습니다.
+대규모 롤플레잉 서사를 진행할 때, 모든 대화를 프롬프트에 무제한 누적하면 컨텍스트 윈도우 초과, 프롬프트 캐시 미스, 비용 폭발 및 서사 왜곡(Lost in the middle)을 초과합니다. GRC v3.0은 이를 해결하기 위해 **불변 접두사 동결(Prefix-Frozen SystemInstruction)**, **사건 렛저(Event Ledger) 팩트/비밀 추출**, **2대 핵심 게이티드 RAG(로어북, 사건 불릿포인트)**를 유기적으로 결합한 Cognitive Core 3.0 아키텍처를 탑재했습니다.
 
 `[IMPLEMENTED]` 메모리 파이프라인 및 인지 모듈 구현체:
 - 파이프라인 총괄: [MemoryManagerService.cs](../../../GRC/GRC/Services/MemoryManagerService.cs)
@@ -21,7 +21,6 @@ related:
 - 사건 렛저 추출기: [EventLedgerExtractor.cs](../../../GRC/GRC/Services/EventLedgerExtractor.cs)
 - 하이브리드 로어북 인출기: [HybridLorebookRetriever.cs](../../../GRC/GRC/Services/HybridLorebookRetriever.cs)
 - 살리언스 게이티드 RAG: [GatedRAGRetriever.cs](../../../GRC/GRC/Services/GatedRAGRetriever.cs)
-- 이중 계층 복선 추적기: [ClueTracker.cs](../../../GRC/GRC/Services/ClueTracker.cs)
 - 시간 인식 관계 투영기: [BiTemporalEntityProjector.cs](../../../GRC/GRC/Helpers/BiTemporalEntityProjector.cs)
 - SIMD 벡터 연산 헬퍼: [VectorMathHelper.cs](../../../GRC/GRC/Helpers/VectorMathHelper.cs)
 
@@ -32,17 +31,16 @@ flowchart TB
         
         subgraph TIERS ["3-Tier Memory & Reasoning Pipeline"]
             M1["단기 기억 (Raw History): 최근 18턴"]
-            M2["중기 기억 (Event Ledger): 불변 팩트 불릿 + 768차원 임베딩 누적"]
+            M2["중기 기억 (Event Ledger): 불변 팩트/비밀 불릿 + 768차원 임베딩 누적"]
             M3["장기 기억 (Chronicle): Gemini Pro 살리언스 증발 1,500자 연대기"]
             
             M1 -->|"18턴 도달 시 8턴 절삭 후 백그라운드 추출"| M2
             M2 -->|"10회 누적(80턴) 시 챕터 마감 및 큐 이관"| M3
         end
         
-        subgraph AUXILIARY ["Selective Auxiliary Cognitive Engines"]
-            HL["하이브리드 로어북 (HybridLorebookRetriever)<br>- 1차 Regex 완전 일치 + 2차 text-multilingual-embedding-002 코사인 유사도 (0.68f)"]
-            GR["살리언스 게이티드 RAG (GatedRAGRetriever)<br>- 살리언스 3점 이상 시 과거 챕터 렛저 SIMD 핀포인트 인출 (0.70f)"]
-            CT["이중 계층 떡밥 추적기 (ClueTracker)<br>- 활성/휴면 단서 추적, 최대 20턴 TTL 관리 (0.70f)"]
+        subgraph AUXILIARY ["Selective Auxiliary Cognitive Engines (2-Core RAG)"]
+            HL["하이브리드 로어북 RAG (HybridLorebookRetriever)<br>- 1차 Regex 완전 일치 + 2차 text-multilingual-embedding-002 코사인 유사도 (0.68f)"]
+            GR["사건 불릿포인트 RAG (GatedRAGRetriever)<br>- 1단계 회상 살리언스 게이트(>=3점) + 2단계 SIMD 핀포인트 인출 (0.70f)"]
             BP["시간 인식 관계 투영기 (BiTemporalEntityProjector)<br>- 초기 상태 vs 현재 상태 감정 낙차 1줄 투영"]
         end
         
@@ -57,14 +55,14 @@ flowchart TB
 
 ### 1) 불변 접두사 동결 (Prefix-Frozen SystemInstruction)
 *   세계관, 시스템 페르소나, 불변 지시문을 `SystemInstruction`에 완전히 격리하여 고정합니다.
-*   동적으로 변하는 로어북, 사건 렛저, 단서, 챕터 줄거리는 최신 유저 메시지 직전의 **동적 컨텍스트 슬롯(Dynamic Context Slot)**에 주입함으로써, LLM 엔진의 프롬프트 캐시 적중률을 극대화하고 문체 오염을 방지합니다.
+*   동적으로 변하는 로어북, 사건 렛저, 챕터 줄거리는 최신 유저 메시지 직전의 **동적 컨텍스트 슬롯(Dynamic Context Slot)**에 주입함으로써, LLM 엔진의 프롬프트 캐시 적중률을 극대화하고 문체 오염을 방지합니다.
 
 ### 2) 단기 기억 (Raw History)
 *   가장 최근에 주고받은 날것의 대화 18턴을 손실 없이 보존합니다.
 *   **비동기 압축 트리거**: 18턴에 도달하면 가장 오래된 8턴을 절삭하여 백그라운드 스레드(`Task.Run`)에서 사건 팩트 추출을 시작합니다. 낙관적 락(`_shortTermVersion`)을 통해 동시성 정합성을 보장합니다.
 
-### 3) 중기 기억 (Event Ledger 팩트 누적)
-*   절삭된 8턴은 **Gemini 3.5 Flash-Lite** 모델을 통해 문학적 허구나 감상적 수사를 배제한 **3~5개의 불변 팩트 불릿(Fact Bullets)**으로 정제 추출됩니다.
+### 3) 중기 기억 (Event Ledger 팩트 및 비밀 누적)
+*   절삭된 8턴은 **Gemini 3.5 Flash-Lite** 모델을 통해 문학적 허구나 감상적 수사를 배제한 **3~5개의 불변 팩트 불릿(Fact Bullets)**으로 정제 추출됩니다. (행동 사실뿐만 아니라 **'새롭게 드러난 중요 단서나 비밀, 체결된 약속/맹세'**가 팩트로 함께 기록됩니다.)
 *   추출된 각 불릿은 구글 다국어 임베딩(`text-multilingual-embedding-002`, 서울 리전 `asia-northeast3` 직결) API를 통해 768차원 시맨틱 벡터가 결합되어 현재 챕터의 `EventLedgers`에 누적됩니다.
 *   소설 재작성(덮어쓰기)으로 인한 팩트 유실 및 문체 왜곡을 원천 차단합니다. 10회 누적(약 80턴) 시 챕터를 전환하고 이전 챕터를 큐로 밀어냅니다.
 
@@ -72,10 +70,9 @@ flowchart TB
 *   챕터 큐가 가득 차면(Max 3), 가장 오래된 챕터가 큐에서 빠져나와 **Gemini 4.0 Pro** 모델에 전달됩니다.
 *   **살리언스 증발(Salience Evaporation)** 기법을 적용하여 핵심 인과율과 세계관의 변화(Canon Events)만을 선별해 1,500자 이내의 대과거 연대기로 영구 보존합니다.
 
-### 5) 보조 인지 엔진 (Selective Auxiliary Cognitive Engines)
-*   **하이브리드 로어북 (`HybridLorebookRetriever`)**: 정규식 1차 키워드 스캔과 시맨틱 임베딩 2차 유사도 검색(골디락스 임계치 0.68f, 3턴 잔존 Sticky)을 결합하여 오탈자나 간접적 언급에도 설정집을 누락 없이 인출합니다. (대화 우클릭 수동 기억 추출은 단일 책임 원칙(SRP)에 따라 [LorebookService.cs](../../../GRC/GRC/Services/LorebookService.cs)로 완전 분리 격리됨)
-*   **살리언스 게이티드 RAG (`GatedRAGRetriever`)**: 유저 입력의 복잡도/복선 살리언스 점수가 3점 미만일 때는 0ms로 바이패스하고, 3점 이상일 때만 과거 완료된 챕터들의 사건 렛저를 SIMD(`TensorPrimitives`, 임계치 0.70f)로 즉시 인출합니다.
-*   **이중 계층 단서 추적기 (`ClueTracker`)**: 상태창 모델이 발견한 서사 떡밥을 Active/Archived 계층으로 추적하며, 3단계 하이브리드 게이팅(키워드 -> 3턴 Sticky -> 0.70f 시맨틱)을 통해 플레이어가 직접 상호작용한 대상 단서만 핀포인트로 인출합니다.
+### 5) 보조 인지 엔진 (2-Core RAG & Relational Projector)
+*   **하이브리드 로어북 RAG (`HybridLorebookRetriever`)**: 정규식 1차 키워드 스캔과 시맨틱 임베딩 2차 유사도 검색(골디락스 임계치 0.68f, 3턴 잔존 Sticky)을 결합하여 오탈자나 간접적 언급에도 설정집을 누락 없이 인출합니다. (대화 우클릭 수동 기억 추출은 단일 책임 원칙(SRP)에 따라 [LorebookService.cs](../../../GRC/GRC/Services/LorebookService.cs)로 완전 분리 격리됨)
+*   **사건 불릿포인트 RAG (`GatedRAGRetriever`)**: 유저 입력의 복잡도/복선 회상 살리언스 점수가 3점 미만일 때는 0ms로 바이패스하고, 3점 이상일 때만 과거 완료된 챕터들의 사건/비밀 렛저를 SIMD(`TensorPrimitives`, 임계치 0.70f)로 즉시 핀포인트 인출합니다.
 *   **시간 인식 관계망 (`BiTemporalEntityProjector`)**: 인물 관계를 단순 호감도 숫자가 아닌 `[초기: 불신과 경계] -> [현재: 깊은 유대와 의지]` 형태로 시간 궤적을 1줄 투영하여 극적 감정선의 깊이를 부여합니다.
 
 </memory_pipeline>
