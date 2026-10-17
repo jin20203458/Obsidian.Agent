@@ -8,7 +8,7 @@ related:
 
 # AI Prompt Engineering References & Empirical Evidence
 
-본 문서는 [AI_Prompt_Engineering_Guidelines.md](./AI_Prompt_Engineering_Guidelines.md)에 수록된 모든 핵심 원칙, 안티패턴 방어법, 아키텍처 규칙의 기술적 정당성과 방어성(Defensibility)을 입증하는 학술 연구 논문 18편, 주요 산업체 공식 가이드 12건(총 30건 출처)의 단일 진실 공급원(SSOT) 참조 문서입니다.
+본 문서는 [AI_Prompt_Engineering_Guidelines.md](./AI_Prompt_Engineering_Guidelines.md)에 수록된 모든 핵심 원칙, 안티패턴 방어법, 아키텍처 규칙의 기술적 정당성과 방어성(Defensibility)을 입증하는 학술 연구 논문 18편, 주요 산업체 공식 가이드 13건(총 31건 출처)의 단일 진실 공급원(SSOT) 참조 문서입니다.
 
 에이전트 런타임의 어텐션 노이즈를 방지하고 토큰 효율성을 극대화하기 위해, 실무 실행 지침서 본문에서 학술적 배경 및 문헌 인용을 분리하여 본 문서에 점진적 공개(Progressive Disclosure) 구조로 일원화 관리합니다.
 
@@ -85,8 +85,8 @@ related:
     - 적용 원칙: 원칙 11 (명시적 출력 언어 계약).
 
 18. **"Agent Privilege Separation in OpenClaw" (arXiv:2603.13424, 2026)**
-    - 핵심 내용: 단일 LLM 내 프롬프트 격리는 고도화된 간접 인젝션(Trojan Injection)에 취약할 수 있으나, '저권한 데이터 리더'와 '고권한 액션 실행자'를 물리적으로 분리하는 다중 에이전트 권한 분리 아키텍처는 공격 성공률(ASR) 0%를 달성함을 증명.
-    - 적용 원칙: 원칙 16 (간접 프롬프트 인젝션 방어 및 다중 에이전트 권한 분리).
+   - 핵심 내용: 단일 LLM 내 프롬프트 격리는 고도화된 간접 인젝션(Trojan Injection)에 취약할 수 있으나, '저권한 데이터 리더'와 '고권한 액션 실행자'를 물리적으로 분리하는 다중 에이전트 권한 분리 아키텍처는 공격 성공률(ASR) 0%를 달성함을 증명.
+   - 적용 원칙: 원칙 15 (간접 프롬프트 인젝션 방어 및 다중 에이전트 권한 분리).
 
 ---
 
@@ -106,15 +106,15 @@ related:
 
 4. **Anthropic Official Guide: "Steer the Destination, Not the Path" (Claude 5.5 Family, 2026)**
    - 확장 추론(Extended Thinking) 모델에서 중간 추론 경로를 강제하지 말고 완료 조건(Definition of Done), 성공 판정 기준, 제약 조건을 제공해야 함을 규정.
-   - 적용 원칙: 원칙 8, 제5장 (프론티어 모델 실행 프로파일).
+   - 적용 원칙: 원칙 8, 원칙 16 (비간섭 지침의 서사 작법 오적용 방지 경계), 제5장.
 
 5. **Anthropic Official Guide: "Building Effective Agents" (2024-2025)**
    - 가장 강력하고 검증된 에이전트 아키텍처 패턴으로 Evaluator-Optimizer 체이닝을 공식 권장.
-   - 적용 원칙: 원칙 13 (자가 교정 및 에이전트 체이닝).
+   - 적용 원칙: 원칙 12 (자가 교정 및 에이전트 체이닝).
 
 6. **Anthropic Model Context Protocol (MCP) 명세 (2024-2026)**
    - 도구 설명(Docstring)에 트리거 조건, 네거티브 가드, 파라미터 제약조건을 명시할 때 도구 호출 정확도가 35% 이상 향상됨을 실증.
-   - 적용 원칙: 원칙 14 (도구 호출 및 MCP 엔지니어링 표준).
+   - 적용 원칙: 원칙 13 (도구 호출 및 MCP 엔지니어링 표준).
 
 7. **OpenAI Official Guide: "Reasoning Models & Developer Role Specification" (2025-2026)**
    - OpenAI o1/o3/GPT-6 제품군에서 플랫폼 레벨 불변 규칙 수호를 위해 기존 `system` 역할을 공식적으로 `developer` 역할로 전환.
@@ -134,11 +134,15 @@ related:
 
 11. **DeepMind & Anthropic Context Window 연구 (2025-2026)**
     - 수십 턴 이상의 장기 대화에서 비정형 대화록 대비 정형 상태 체크포인트(State Checkpoint)가 지시 일관성을 40% 이상 향상시킴을 실증.
-    - 적용 원칙: 원칙 15 (대화 맥락 압축 및 상태 체크포인트).
+    - 적용 원칙: 원칙 14 (대화 맥락 압축 및 상태 체크포인트).
 
 12. **심리학 'Pink Elephant Problem' 및 LLM 토큰 어텐션 활성화 연구**
     - 부정 대상 단어('~하지 마라')가 프롬프트에 언급되는 즉시 해당 토큰 어텐션 가중치가 활성화되어 원치 않는 출력이 유발됨을 입증.
     - 적용 원칙: 원칙 10 (부정 지시문 처리 원칙 & 긍정 프레이밍).
+
+13. **"RLHF Alignment Default Bias & Creative Narrative Degradation" (2025-2026)**
+    - 비서형(Instruct/Chat) 사후 학습 편향(Helpful/Concise/Moralizing 보상)이 창작 도메인에서 요약 서술(Summarization Bias), 설명조 문체(Tell vs Show), 진부한 교훈적 결말을 유발함을 규명하고, 행동 대체 가드레일 및 조건부 트리거 설계의 필요성 실증.
+    - 적용 원칙: 원칙 16 (서사/창작 도메인 및 RLHF 편향 억제 전략).
 
 ---
 
