@@ -1,9 +1,10 @@
 ---
 description: 비개발자 및 초보자를 위한 GRC 다운로드, 포터블 실행, API 키 설정 및 SmartScreen 안내 가이드.
 related:
-  - 00_project_overview.md
-  - 01_grc_architecture.md
-  - 03_grc_user_guide.md
+  - ../README.md
+  - ./00_project_overview.md
+  - ./01_grc_architecture.md
+  - ./03_grc_user_guide.md
 ---
 # GRC 사용자 퀵스타트 가이드 (User Quick Start Guide)
 

@@ -2,6 +2,9 @@
 description: GRC 프로젝트 개요 및 C#/.NET 네이티브 데스크톱 클라이언트 시스템 전반 설계서.
 related:
   - ../README.md
+  - ./01_grc_architecture.md
+  - ./02_user_quickstart_guide.md
+  - ./03_grc_user_guide.md
 ---
 # Project Overview
 
@@ -54,8 +57,8 @@ graph TB
         U2["멀티모달 오디오 동기화 재생기"]
     end
 
-    subgraph ENGINE ["Core Engine Layer"]
-        E1["3단계 기억 압축 파이프라인 (단기/중기/장기)"]
+    subgraph ENGINE ["Core Engine Layer (Cognitive Core 3.0)"]
+        E1["불변 접두사 동결 & 단일 사건 원장 (768차원 임베딩 / Gated RAG)"]
         E2["O(1) 무부하 파일 로거"]
     end
 
@@ -71,7 +74,7 @@ graph TB
 | 계층 | 하는 일 |
 |---|---|
 | **UI & Streaming** | AI의 응답을 60FPS로 부드럽게 화면에 그리고, 대사에 맞춰 미리 생성된 오디오를 지연 없이 재생합니다. |
-| **Core Engine** | 100턴 이상의 긴 대화를 단기-중기-장기 기억으로 압축하여 LLM에 주입하며, 디스크 I/O 병목 없이 기록을 저장합니다. |
+| **Core Engine** | 수백 턴 이상의 장기 대화를 단기 원문, 단일 사건 불릿 원장(768차원 임베딩 + Gated RAG), 대서사 연대기(Macro Chronicle) 및 하이브리드 로어북으로 정밀 관리하며, 디스크 I/O 병목 없이 기록을 저장합니다. |
 | **Session Architect** | 사용자의 짧은 아이디어를 바탕으로 복잡한 TRPG 세팅(로어북, 스탯 등)을 스스로 작성하고 문맥 오류를 검수합니다. |
 
 ---
@@ -83,7 +86,7 @@ graph TB
 | 과제 | 기존 웹 클라이언트 | GRC (GenAI Roleplay Chat) |
 |---|---|---|
 | **세션 준비** | 유저가 직접 수천 자의 프롬프트 작성 및 세팅 | 한 줄의 키워드만으로 AI가 6단계에 걸쳐 자율 생성 및 세팅 |
-| **기억 관리** | 단순 텍스트 잘라내기(Truncation) 또는 벡터 DB 의존 | 단기/중기(Flash)/장기(Pro) 모델을 혼용한 능동적 연대기 압축 |
+| **기억 관리** | 단순 텍스트 잘라내기(Truncation) 또는 무차별 벡터 검색 | 접두사 동결(Prefix-Frozen), 단일 사건 원장(Flash-Lite 팩트 추출 + 768차원 임베딩 RAG), 챕터 완료 즉시 Pro 대서사 병합을 결합한 Cognitive Core 3.0 |
 | **UI 응답성** | 무거운 DOM 렌더링 및 동기적 I/O로 인한 프레임 드랍 | 채널 기반 스트리밍과 O(1) 파일 쓰기로 0초 지연(Zero-Delay) 달성 |
 
 ---
@@ -95,6 +98,6 @@ graph TB
 | 문서 | 내용 |
 |---|---|
 | **[현재 문서]** 00_project_overview | 프로젝트 기획 철학, 비전, 고수준 구조 |
-| [01_grc_architecture](./01_grc_architecture.md) | 3-Tier 메모리, O(1) 로거, 비차단 스트리밍에 대한 구현 딥다이브 |
+| [01_grc_architecture](./01_grc_architecture.md) | Cognitive Core 3.0 메모리 파이프라인, O(1) 로거, 비차단 스트리밍 및 MVVM 구현 딥다이브 |
 | [02_user_quickstart_guide](./02_user_quickstart_guide.md) | 비개발자 무설치 포터블 실행, SmartScreen 우회, API 키 가이드 |
 | [03_grc_user_guide](./03_grc_user_guide.md) | GRC 7대 핵심 기능 사용자 사용설명서 및 활용 가이드 |

@@ -2,6 +2,10 @@
 description: GRC C#/.NET WPF 클라이언트 상세 아키텍처 명세 및 UI/비동기 패턴 구성도.
 related:
   - ../README.md
+  - ./00_project_overview.md
+  - ./02_user_quickstart_guide.md
+  - ./03_grc_user_guide.md
+  - ../../troubleshooting/grc.md
 ---
 # GRC Architecture & Deep Dive
 
@@ -13,14 +17,14 @@ related:
 
 ## 1. 인지 코어 3.0 메모리 파이프라인 (Cognitive Core 3.0 Memory Pipeline)
 
-대규모 롤플레잉 서사를 진행할 때, 모든 대화를 프롬프트에 무제한 누적하면 컨텍스트 윈도우 초과, 프롬프트 캐시 미스, 비용 폭발 및 서사 왜곡(Lost in the middle)을 초과합니다. GRC v3.0은 이를 해결하기 위해 **불변 접두사 동결(Prefix-Frozen SystemInstruction)**, **사건 렛저(Event Ledger) 팩트/비밀 추출**, **2대 핵심 게이티드 RAG(로어북, 사건 불릿포인트)**를 유기적으로 결합한 Cognitive Core 3.0 아키텍처를 탑재했습니다.
+대규모 롤플레잉 서사를 진행할 때, 모든 대화를 프롬프트에 무제한 누적하면 컨텍스트 윈도우 초과, 프롬프트 캐시 미스, 비용 폭발 및 서사 왜곡(Lost in the middle)이 발생합니다. GRC v3.0은 이를 해결하기 위해 **불변 접두사 동결(Prefix-Frozen SystemInstruction)**, **사건 렛저(Event Ledger) 팩트/비밀 추출**, **2대 핵심 게이티드 RAG(하이브리드 로어북, 사건 불릿포인트)**를 유기적으로 결합한 Cognitive Core 3.0 클린 아키텍처를 탑재했습니다.
 
 `[IMPLEMENTED]` 메모리 파이프라인 및 인지 모듈 구현체:
 - 파이프라인 총괄: [MemoryManagerService.cs](../../../GRC/GRC/Services/MemoryManagerService.cs)
-- 인지 프롬프트 조립기: [CognitivePromptAssembler.cs](../../../GRC/GRC/Services/CognitivePromptAssembler.cs)
-- 사건 렛저 추출기: [EventLedgerExtractor.cs](../../../GRC/GRC/Services/EventLedgerExtractor.cs)
-- 하이브리드 로어북 인출기: [HybridLorebookRetriever.cs](../../../GRC/GRC/Services/HybridLorebookRetriever.cs)
-- 살리언스 게이티드 RAG: [GatedRAGRetriever.cs](../../../GRC/GRC/Services/GatedRAGRetriever.cs)
+- 인지 프롬프트 조립기: [CognitivePromptAssembler.cs](../../../GRC/GRC/Services/Cognitive/CognitivePromptAssembler.cs)
+- 사건 렛저 추출기: [EventLedgerExtractor.cs](../../../GRC/GRC/Services/Cognitive/EventLedgerExtractor.cs)
+- 하이브리드 로어북 인출기: [HybridLorebookRetriever.cs](../../../GRC/GRC/Services/Cognitive/HybridLorebookRetriever.cs)
+- 살리언스 게이티드 RAG: [GatedRAGRetriever.cs](../../../GRC/GRC/Services/Cognitive/GatedRAGRetriever.cs)
 - 시간 인식 관계 투영기: [BiTemporalEntityProjector.cs](../../../GRC/GRC/Helpers/BiTemporalEntityProjector.cs)
 - SIMD 벡터 연산 헬퍼: [VectorMathHelper.cs](../../../GRC/GRC/Helpers/VectorMathHelper.cs)
 
@@ -30,18 +34,18 @@ flowchart TB
         SYS["불변 시스템 지시문 (Prefix-Frozen SystemInstruction)<br>- 페르소나 및 세계관 불변 동결 (Prompt Cache Hit Rate 극대화)"]
         
         subgraph TIERS ["3-Tier Memory & Reasoning Pipeline"]
-            M1["단기 기억 (Raw History): 최근 18턴 원문"]
+            M1["단기 기억 (Raw History): 최근 18개 메시지 (9턴 원문, ShortTermThreshold=18)"]
             M2["사건 불릿 원장 (Single Event Ledger): 단일 불변 원장 무손실 누적 (Append-Only)<br>- 상시 노출: 최신 15개 [제N장] 그룹화 (TakeLast 15)<br>- 과거 회상 RAG: 15개 제외 과거 전체 풀 (Take Count-15)"]
-            M3["장기 기억 (Macro Chronicle): 챕터 완료 즉시 Gemini Pro 살리언스 증발 1,500자 연대기 병합"]
+            M3["장기 기억 (Macro Chronicle): 챕터 마감(10회 누적, MediumTermThreshold=10) 즉시 Gemini Pro 1,500자 산문 병합"]
             
-            M1 -->|"18턴 도달 시 8턴 절삭 후 백그라운드 팩트 추출"| M2
-            M2 -->|"10회 누적(80턴, 1개 챕터 마감) 즉시 비동기 병합"| M3
+            M1 -->|"18개 메시지 도달 시 8개(4턴, ChunkSize=8) 절삭 후 Flash-Lite 팩트 추출"| M2
+            M2 -->|"10회 누적(80개 메시지 = 40턴 대화) 즉시 비동기 연대기 병합"| M3
         end
         
         subgraph AUXILIARY ["Selective Auxiliary Cognitive Engines (2-Core RAG)"]
-            HL["하이브리드 로어북 RAG (HybridLorebookRetriever)<br>- 1차 Regex 완전 일치 + 2차 text-multilingual-embedding-002 코사인 유사도 (>=0.68f, 3턴 잔존 Sticky)<br>- 상태창 활성 인물 연동 (최근 4턴 대화 등장 인물 필터링)"]
-            GR["사건 불릿포인트 RAG (GatedRAGRetriever)<br>- 단일 원장 과거 풀 대상 순수 시맨틱 임베딩 유사도 (>=0.71f) 직결 + 원장 인덱스(Index) 시간순 정렬"]
-            BP["엔티티 상태 투영기 (BiTemporalEntityProjector)<br>- 상태창 엔티티 상태/수치 1줄 투영 (중복 제거 및 정제)"]
+            HL["하이브리드 로어북 RAG (HybridLorebookRetriever)<br>- 1차 Regex 완전 일치 + 2차 768차원 임베딩 유사도 (>=0.68f, 3턴 잔존 Sticky)<br>- 상태창 활성 인물 연동 (최근 4개 메시지 등장 인물 필터링)"]
+            GR["사건 불릿포인트 RAG (GatedRAGRetriever)<br>- 단일 원장 과거 풀 대상 시맨틱 임베딩 유사도 (>=0.71f) 직결 + 원장 인덱스(Index) 시간순 정렬"]
+            BP["엔티티 상태 투영기 (BiTemporalEntityProjector)<br>- 상태창 인물 상태/수치 1줄 투영 (- 인물(이름): 상태 (수치))"]
         end
         
         ASSEMBLER["인지 프롬프트 조립기 (CognitivePromptAssembler)<br>- 가짜 Turn 제거, [제N장] 그룹 헤더 및 상태 권위 가드레일 패킹"]
@@ -58,23 +62,23 @@ flowchart TB
 *   동적으로 변하는 로어북, 사건 렛저, 대서사 연대기는 최신 유저 메시지 직전의 **동적 컨텍스트 슬롯(Dynamic Context Slot)**에 주입함으로써, LLM 엔진의 프롬프트 캐시 적중률을 극대화하고 문체 오염을 방지합니다.
 
 ### 2) 단기 기억 (Raw History)
-*   가장 최근에 주고받은 날것의 대화 18턴을 손실 없이 보존합니다.
-*   **비동기 압축 트리거**: 18턴에 도달하면 가장 오래된 8턴을 절삭하여 백그라운드 스레드(`Task.Run`)에서 사건 팩트 추출을 시작합니다. 낙관적 락(`_shortTermVersion`)을 통해 동시성 정합성을 보장합니다.
+*   가장 최근에 주고받은 날것의 대화 18개 메시지(9턴 대화, `ShortTermThreshold = 18`)를 손실 없이 보존합니다.
+*   **비동기 압축 트리거**: 18개 메시지에 도달하면 가장 오래된 8개 메시지(4턴 대화, `MemoryCompressionChunkSize = 8`)를 절삭하여 백그라운드 태스크(`Task.Run`)에서 사건 팩트 추출을 시작합니다. 낙관적 락(`_shortTermVersion`)을 통해 동시성 정합성을 보장합니다.
 
 ### 3) 사건 불릿 원장 (Single Event Ledger 및 [제N장] 시간축 앵커)
-*   **단일 원장 무손실 누적 (Append-Only)**: 절삭된 8턴은 **Gemini 3.5 Flash-Lite** 모델을 통해 문학적 허구를 배제한 3~5개의 순수 팩트 불릿(Fact Bullets)으로 추출되며, Google 768차원 다국어 임베딩(`text-multilingual-embedding-002`)과 함께 `_currentContext.EventLedgers` 단일 리스트에 영구 누적됩니다.
+*   **단일 원장 무손실 누적 (Append-Only)**: 절삭된 8개 메시지는 **Gemini 3.5 Flash-Lite** 모델을 통해 문학적 허구를 배제한 3~5개의 순수 팩트 불릿(Fact Bullets)으로 추출되며, Google 768차원 다국어 임베딩(`text-multilingual-embedding-002`)과 함께 `_currentContext.EventLedgers` 단일 리스트에 영구 누적됩니다.
 *   **가짜 Turn 메타태그 완전 적출**: 4턴 배치 단위로 동일하게 찍히던 왜곡된 가짜 Turn 번호를 완전히 제거하고, 단일 원장 인덱스(`Index`)를 통해 100% 발생 시간순 인과관계를 보존합니다.
-*   **챕터 전환 시 무손실 승계**: 80턴(1개 챕터)이 끝나 새 챕터로 전환될 때도 단일 원장 전체를 그대로 승계하여 챕터 전환 직후 상시 불릿이 증발하는 결함을 원천 차단합니다.
+*   **챕터 전환 시 무손실 승계**: 1개 챕터가 끝나 새 챕터로 전환될 때도 단일 원장 전체를 그대로 승계하여 챕터 전환 직후 상시 불릿이 증발하는 결함을 원천 차단합니다.
 *   **상시 노출 칸 (`<internal_chronicle_facts>`)**: 단일 원장의 **최신 15개(`TakeLast(15)`)**를 항상 노출하며, 장 번호가 변경될 때만 `[제N장]` 그룹 헤더를 1회 출력하여 중복 토큰을 없애고 챕터 경계 인과를 보존합니다. 헤더에 `(현재 제N장 진행 중)`을 명시하여 시간 기준점을 확립합니다.
 *   **과거 회상 RAG 풀 (`<recalled_history>`)**: 단일 원장에서 **최신 15개를 제외한 앞쪽 전체(`Take(Count - 15)`)**가 자동으로 과거 회상 검색 대상이 됩니다.
 
 ### 4) 장기 연대기 (Macro Chronicle 즉시 병합)
-*   레거시 3개 챕터(240턴) 지연 대기 큐(`_mediumBuffers`, `PrevContexts`)를 전면 폐지하고, **1개 챕터(80턴)가 마감되는 즉시** 해당 장의 불릿들을 **Gemini Pro** 모델에 비동기 전달합니다.
+*   과거 레거시 3개 챕터 지연 대기 큐(`_mediumBuffers`, `PrevContexts`)를 전면 폐지하고, **10회 압축 누적(80개 메시지 = 40턴 대화, `MediumTermThreshold = 10`)으로 챕터가 마감되는 즉시** 해당 장의 불릿들을 **Gemini Pro** 모델에 비동기 전달합니다.
 *   **살리언스 증발(Salience Evaporation)** 기법을 적용하여 1,500자 이내의 대서사 산문 연대기(`_longTermSummary`)로 즉시 병합 보존하여 서사의 거시적 대의명분 공백을 완전히 해소합니다.
 
 ### 5) 보조 인지 엔진 (2-Core RAG & Relational Projector)
-*   **하이브리드 로어북 RAG (`HybridLorebookRetriever`)**: 정규식 1차 키워드 스캔과 시맨틱 임베딩 2차 유사도 검색(골디락스 임계치 0.68f, 3턴 잔존 Sticky)을 결합하여 오탈자나 간접적 언급에도 설정집을 누락 없이 인출합니다. 또한 최근 4턴 대화 및 현재 입력에 등장하는 활성 인물(`activeChars`)을 필터링하여 조연 누적에 따른 로어북 토큰 예산(최대 3,000토큰) 고갈을 원천 차단합니다.
-*   **사건 불릿포인트 RAG (`GatedRAGRetriever`)**: 호출되지 않던 레거시 키워드 게이팅 데드코드를 전면 적출하고, 매 턴 계산된 768차원 유저 쿼리 임베딩을 실측 기반 순수 코사인 유사도(**$\ge 0.71f$**) 스캔에 직결하여 상위 2개를 핀포인트 인출합니다. 인출 결과는 단일 원장 인덱스(`Index`) 발생 시간순으로 정렬하여 선후 인과 역전을 차단하며, 헤더에 `[떠오른 과거의 기억 - 현재 상태와 상충 시 현재 상태가 우선함]`을 명시하여 현재 상태 오판을 원천 방어합니다.
+*   **하이브리드 로어북 RAG (`HybridLorebookRetriever`)**: 정규식 1차 키워드 스캔과 시맨틱 임베딩 2차 유사도 검색(임계치 `0.68f`, 3턴 잔존 Sticky)을 결합하여 오탈자나 간접적 언급에도 설정집을 누락 없이 인출합니다. 또한 최근 4개 메시지 및 현재 입력에 등장하는 활성 인물(`activeChars`)을 필터링하여 조연 누적에 따른 로어북 토큰 예산(최대 3,000토큰) 고갈을 원천 차단합니다.
+*   **사건 불릿포인트 RAG (`GatedRAGRetriever`)**: 레거시 키워드 게이팅 데드코드를 전면 적출하고, 매 턴 계산된 768차원 유저 쿼리 임베딩을 실측 기반 순수 코사인 유사도(**$\ge 0.71f$**) 스캔에 직결하여 상위 2개를 핀포인트 인출합니다. 인출 결과는 단일 원장 인덱스(`Index`) 발생 시간순으로 정렬하여 선후 인과 역전을 차단하며, 헤더에 `[떠오른 과거의 기억 - 현재 상태와 상충 시 현재 상태가 우선함]`을 명시하여 현재 상태 오판을 원천 방어합니다.
 *   **엔티티 상태 투영기 (`BiTemporalEntityProjector`)**: 불필요한 필드 및 중복 상태 텍스트 버그를 제거하고, `- 인물(이름): 상태 (수치)` 또는 `- 인물(이름): 상태` 형태로 간결하고 명확하게 투영합니다.
 
 </memory_pipeline>
@@ -164,7 +168,7 @@ flowchart TB
 ```mermaid
 flowchart TD
     T1["Tier 1: Primitive Tokens (PrimitiveTokens.xaml)<br>- 불변 Color (Zinc 스케일 #09090B ~ #FAFAFA)<br>- 치수 CornerRadius, 폰트 패밀리"]
-    T2["Tier 2: Semantic Theme Brushes (DarkTheme.xaml)<br>- BrushBackground, BrushSurface, BrushText<br>- po:Freeze='True' GPU 메모리 동결"]
+    T2["Tier 2: Semantic Theme Brushes (DarkTheme.xaml)<br>- AppBackgroundBrush, SurfaceBackgroundBrush, TextPrimaryBrush<br>- po:Freeze='True' GPU 메모리 동결"]
     T3["Tier 3: Component Styles (ModernStyles.xaml)<br>- BaseButtonStyle, ActionButton 계열<br>- ControlTemplate 및 VisualStateManager"]
     
     T1 --> T2 --> T3
@@ -198,7 +202,7 @@ sequenceDiagram
     UI->>W: new NewSessionSetupWindow()
     DS->>W: SetOwner(MainWindow)
     W-->>DS: ShowDialog() 결과 반환
-    DS-->>VM: NewSessionSetupResult (Confirmed, Preset, Title)
+    DS-->>VM: NewSessionSetupResult (Name, Worldview, Scenario, CustomStats, StatusUpdateGuide)
 ```
 
 * **뷰모델 순수성 보장**: `SessionListViewModel` 및 `ChatViewModel`은 `Views.*` 네임스페이스를 일체 참조하지 않으며, 모든 팝업 및 창 전환을 `IDialogService` 추상화 인터페이스를 통해 비동기로 위임합니다.
