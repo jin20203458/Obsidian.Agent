@@ -360,5 +360,49 @@ related:
    - `ChatWorkflowServiceTests`에 `ProcessChatStreamAsync_FiltersMarkdownAsterisksFromStreamAndFinalText` 테스트 추가.
    - 단위 테스트 170건 100% 통과(Exit Code 0, 541ms).
 
+---
 
+## 2026-10-17: [Resolved] 메타 지시문(MetaDirective) 합성에 따른 768차원 임베딩 쿼리 벡터 오염 해결, EventLedgerExtractor 정적 SystemInstruction KV Cache 분리 및 Thinking 자가 검증 기준 보강
 
+### 1. 현상 (Symptom)
+- 호감도 MAX 등 시스템 이벤트나 챕터 전환, 자동 이어쓰기 시 `[시스템 개입: ...]` 메타 텍스트가 `userMessage.Text`에 직접 병합되어 `GetEmbeddingAsync`로 전달됨에 따라, 순수 유저 의도 검색이어야 할 768차원 쿼리 임베딩 벡터가 메타 단어로 희석(Vector Dilution)되어 로어북/과거 기억 RAG 검색 정확도가 저하됨.
+- 프롬프트 조립 시 `<current_action>` 태그 내부에 `<meta_directive>`가 중첩 유입되어 지시문-데이터 역전 및 프롬프트 인젝션 모호성 발생.
+- 4턴 주기 백그라운드 사건 팩트 추출기(`EventLedgerExtractor`)가 `SystemInstruction: null`로 호출되어 약 400토큰의 정적 규칙과 스키마가 매번 캐시 미스(Cache Miss)를 일으켜 API 비용 및 지연이 누적되고, `Temperature: 0.1f` 하드코딩으로 인해 Flash-Lite 모델에서 무한 토큰 생성 루프 위험 노출.
+- Gemini 3.8 Flash 추론 모델의 사고 과정(Hidden Thinking)을 위한 명시적 자가 검증 기준(Verification Criteria)이 `<final_instruction>`에 부재.
+
+### 2. 원인 (Root Cause)
+1. `MemoryManagerService.cs`에서 `effectiveText = !string.IsNullOrWhiteSpace(metaDirective) ? $"{userMessage.Text}\n{metaDirective}" : userMessage.Text;`로 단순 문자열 결합 처리.
+2. `CognitivePromptAssembler.cs`가 `userActionText` 하나만 전달받아 `<current_action>` 태그 내부에 그대로 렌더링.
+3. `EventLedgerExtractor.cs`가 단일 `user` 메시지에 모든 지침과 최근 대화 이력을 연결하여 `SystemInstruction` 캐싱 인프라 미활용.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+1. **메타 지시문 독립 데이터 파이프라인 및 순수 유저 임베딩 복원**:
+   - `CognitiveContext`에 `MetaDirective` 프로퍼티를 신설하여 상위 서비스에서 메타 지시문을 독립 전달.
+   - `MemoryManagerService.cs`에서 순수 `userMessage.Text`로만 768차원 임베딩 및 `loreScanQuery`를 생성하여 쿼리 벡터 희석 원천 차단.
+   - `CognitivePromptAssembler.cs`에서 메타 지시문이 존재할 때만 `<current_action>` 앞쪽에 `<meta_directive>` 독립 상위 태그로 조건부 조립(미발생 시 완전 생략).
+2. **EventLedgerExtractor SystemInstruction 분리 및 샘플링 최적화**:
+   - 무인격 기능 명세, 5대 인과 규칙 및 TypeScript 인터페이스를 `SystemInstruction`으로 물리 분리하여 4턴 주기 KV Cache 100% 적중 달성.
+   - `GenerationConfig.Temperature: null`로 교정하여 구글 Gemini 기본 최적화 샘플링 엔진에 위임(원칙 7 준수).
+3. **Thinking 자가 검증 기준(Verification Criteria) 보강**:
+   - `<final_instruction>`에 `- [자가 검증]: 최종 서사를 출력하기 전, 직전 턴의 인과 관계 및 배경 맥락과 상충되지 않는지 내부적으로 자체 검증하십시오.` 항목 추가.
+4. **의무 검증 (Ground Truth)**:
+   - `CognitivePromptAssemblerTests`에 `AssemblePrompt_WhenMetaDirectivePresent_RendersIndependentTagBeforeCurrentAction`, `AssemblePrompt_WhenMetaDirectiveNull_OmitsMetaDirectiveTag`, `AssemblePrompt_FinalInstruction_ContainsThinkingSelfVerification` 단위 테스트 추가.
+   - 솔루션 전체 빌드(0 warning, 0 error) 및 Fast QA 177개 단위 테스트 100% 통과(Exit Code 0, 1.66s).
+
+---
+
+## 2026-10-17: [Resolved] 단위 테스트 환경에서 종료된 임시 STA 스레드의 Application.Current Dispatcher Invoke 호출로 인한 무한 대기(Deadlock) 해결
+
+### 1. 현상 (Symptom)
+- `dotnet test` 전체 테스트 스위트 실행 시 172개 테스트 통과 후 `DialogServiceTests`에서 프로세스가 멈추고 무한 대기(Hang)에 빠지는 결함 발생 (단독 실행 시에는 재현되지 않고 통과).
+
+### 2. 원인 (Root Cause)
+- 앞서 실행된 XAML 리소스 검증 테스트(`ThemeResourceTests`)가 임시 STA 스레드에서 `new Application()`을 호출하고 종료됨에 따라, 전역 `Application.Current.Dispatcher`가 이미 종료된 스레드(`Thread.IsAlive == false`)에 바인딩된 상태로 잔존함.
+- 뒤이어 xUnit 작업자 스레드에서 `DialogService.RunOnUIThread`가 호출되었을 때, `Application.Current != null` 및 `CheckAccess() == false`로 인해 `dispatcher.Invoke(action)`를 호출했으나, 수신 스레드가 이미 사망하여 메시지 펌프가 돌지 못해 영원히 블로킹됨.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+1. **스레드 생존성 및 종료 상태 가드 보강 (`IDialogService.cs`)**:
+   - `dispatcher == null || dispatcher.CheckAccess() || !dispatcher.Thread.IsAlive || dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished` 조건을 추가하여, UI 스레드가 사망했거나 셧다운된 테스트/헤드리스 환경에서는 백그라운드 스레드에서 즉시 안전하게 인라인 실행하도록 방어.
+   - 예외 상황 대비 `try-catch` 가드를 추가하여 `Invoke` 실패 시에도 즉시 인라인 폴백 보장.
+2. **의무 검증 (Ground Truth)**:
+   - 솔루션 전체 빌드(0 warning, 0 error) 및 Fast QA 177개 단위 테스트 100% 통과(Exit Code 0, 1.52s 완료).
