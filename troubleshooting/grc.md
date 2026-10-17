@@ -406,3 +406,37 @@ related:
    - 예외 상황 대비 `try-catch` 가드를 추가하여 `Invoke` 실패 시에도 즉시 인라인 폴백 보장.
 2. **의무 검증 (Ground Truth)**:
    - 솔루션 전체 빌드(0 warning, 0 error) 및 Fast QA 177개 단위 테스트 100% 통과(Exit Code 0, 1.52s 완료).
+
+---
+
+## 2026-10-17: [Resolved] GRC 런타임 6대 프롬프트(TTS, Lorebook, 상태창, 장기압축, 추천, 초기상황) 전수 최적화 및 Thinking 토큰 고갈 방지 아키텍처 수립
+
+### 1. 현상 및 잠재적 장애 모드 (Symptom & Failure Modes)
+- **TTS 실시간 번역 지연 병목**: 일본어 TTS 합성 직전 호출되는 Flash-Lite 번역 요청(`GeminiTtsService.cs`)에 `ThinkingConfig`가 누락되어 기본 사고(Thinking) 토큰이 폭주, 1~2초의 음성 출력 지연 발생 및 비격리 입력으로 인한 인젝션 취약점 노출.
+- **초기 0번 턴 모델 스타일 전이 (Style Bleed)**: `MemoryManagerService.InjectInitialScenario`에서 0번 턴 모델 메시지에 `[시스템: 해당 세계관과 초기 상황을 완벽히 인지했습니다...]`라는 기계적 대괄호 문구가 주입되어, LLM이 향후 턴에서 문학적 산문 대신 기계적 시스템 말투를 학습·모방하는 위험 존재.
+- **다크 판타지 로어북 추출 차단 위험**: `LorebookService.ExtractMemoryToLorebookAsync`에 `SafetySettings`가 `null`로 호출되어 전투/부상/저주 등 다크 판타지 지식 추출 시 API 필터 블록 및 빈 객체 폴백 위험 노출.
+- **Thinking 모델의 MaxOutputTokens 축소 시 JSON 파손 위험**: Gemini 2.0/2.5 Thinking 아키텍처에서 `maxOutputTokens`는 생각 토큰(Thought Tokens)과 가시적 응답 토큰(Visible Output Tokens)의 통합 총합이므로, 이를 1,024~2,048로 강제 축소할 경우 생각 토큰에 예산이 잠식되어 JSON 페이로드가 중간에 잘려 파싱 에러(`LlmJsonParser` 예외)가 발생하는 장애 모드 존재.
+
+### 2. 원인 (Root Cause)
+1. 프롬프트 내 데이터 격리(Spotlighting) 및 TypeScript 인터페이스 계약 미비.
+2. 백그라운드 단발성 작업(상태창 갱신, 로어북 추출, TTS 번역)에 Thinking 제어가 생략되거나 과도한 수준(`ThinkingLevel.medium`)으로 할당됨.
+3. 0번 턴 In-context Demonstration의 모델 역할 발화가 시스템 문구로 오염됨.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+1. **Thinking 토큰 총합 상한 보존 및 저비용 추론 가드**:
+   - 지연 시간 및 연산 비용 제어는 오직 `ThinkingConfig(ThinkingLevel.low)`로만 통제하며, `MaxOutputTokens`는 8,192의 넉넉한 상한을 유지하여 생각 토큰 소모로 인한 JSON 페이로드 잘림을 원천 방어.
+2. **GeminiTtsService 초고속 단발 번역 파이프라인 및 순수 자연어 보존**:
+   - `ThinkingConfig: new ThinkingConfig(ThinkingLevel.low)` 및 `MaxOutputTokens: 8192` 적용으로 번역 딜레이를 ~300ms로 단축.
+   - **TTS 음성 변조 방어**: 음성 합성 모델(`gemini-3.1-flash-tts-preview`) 및 사전 번역기에 XML 태그나 불릿포인트를 주입하면 음성의 운율(Prosody) 왜곡, 기계음 발생, 태그 음독 등의 결함이 발생하므로, 사전 번역 프롬프트와 음성 합성 프롬프트(`dynamicPrompt`)는 일체의 태그/기호 없이 **100% 순수 자연어 구어체 지시문**으로만 유지.
+3. **스타일 전이(Style Bleed) 원천 차단 및 테스트 동기화**:
+   - `InjectInitialScenario`의 유저 메시지를 `<initial_scenario>` 태그로 감싸고, 모델 메시지를 자연스러운 서사 앵커(`"주어진 세계관과 초기 상황의 흐름을 받아들여, 첫 발걸음을 뗄 준비를 마쳤습니다."`)로 교체.
+   - `MemoryManagerServiceTests.cs`의 단언문 동시 동기화.
+4. **LorebookService 세이프티 가드 및 스키마 확립**:
+   - `SafetySettings`에 4대 카테고리 `BLOCK_NONE` 적용으로 판타지 전투 서사의 오작동 차단.
+   - `ThinkingLevel.low` 적용 및 `<output_format>`에 `interface LorebookEntry` TypeScript 인터페이스 명시.
+5. **BuildStatusRequest & CompressToLongTerm & ReplySuggestion 정돈**:
+   - `BuildStatusRequest`: `ThinkingLevel.low`로 매 턴 상태창 갱신 딜레이 단축, `<user_action>`, `<narrative_description>`, `<final_instruction>` 태그 표준화.
+   - `CompressToLongTermAsync`: `<final_instruction>` 표준화 및 정중한 명령형 통일.
+   - `ReplySuggestionService`: `systemInstruction` 내 `type ReplySuggestions = string[];` 스키마 추가.
+6. **의무 검증 (Ground Truth)**:
+   - 솔루션 전체 빌드(0 warning, 0 error) 및 Fast QA 177개 단위 테스트 100% 통과(Exit Code 0, 1.54s 완료).
