@@ -440,3 +440,28 @@ related:
    - `ReplySuggestionService`: `systemInstruction` 내 `type ReplySuggestions = string[];` 스키마 추가.
 6. **의무 검증 (Ground Truth)**:
    - 솔루션 전체 빌드(0 warning, 0 error) 및 Fast QA 177개 단위 테스트 100% 통과(Exit Code 0, 1.54s 완료).
+
+---
+
+## 2026-10-17: [Resolved] 로어북 레거시 문자열 직렬화(CurrentLorebookText)의 부분 문자열 오탐(False-Positive) 제거 및 강타입 불변 컬렉션(CurrentActiveLorebooks) 전환
+
+### 1. 현상 (Symptom)
+* RAG 인출 단계에서 `MemoryManagerService`가 인출된 로어북 객체 목록(`matchedLorebooks`)을 `CurrentLorebookText`라는 단일 문자열 덩어리로 직렬화해 두고, `ChatViewModel`의 TTS 프리페치 로직에서 프리셋의 전체 로어북($N$개)을 순회하며 `_memoryService.CurrentLorebookText.Contains($"[{l.Name}]")` 형태로 부분 문자열 일치 여부를 매 턴 $O(N \times M)$으로 검사.
+* 이로 인해 인물 A의 본문 내용에 동료 B의 이름이 `[동료B]` 형태로 언급되어 있는 경우, 실제 해당 턴에 동료 B가 활성화되지 않았음에도 부분 문자열 검색에 걸려 활성 인물로 오인식(False-Positive)되어 동료 B의 로어북 정보가 TTS 음성 합성 프롬프트로 유입되는 결함 발생.
+
+### 2. 원인 (Root Cause)
+* Cognitive Core 3.0 하이브리드 RAG 전환 이전의 레거시 UI 바인딩/단일 텍스트 전달 인터페이스(`CurrentLorebookText`)가 잔존하여, 강타입 도메인 엔티티(`LorebookEntry`)를 비가역적 문자열로 병합했다가 다시 역추적하는 불필요한 연산 및 문자열 침범 위험 야기.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+1. **강타입 불변 컬렉션 전환 (`CurrentActiveLorebooks`)**:
+   - `IMemoryManagerService` 및 `MemoryManagerService`의 `string CurrentLorebookText`를 완전 퇴출하고 `IReadOnlyList<LorebookEntry> CurrentActiveLorebooks { get; }`로 교체.
+   - `BuildNarrativeRequestAsync` 완료 시 `CurrentActiveLorebooks = matchedLorebooks;`로 원자적 참조 스왑(Atomic Reference Swap).
+   - 세션 초기화(`Clear()`) 및 로드(`RestoreSession()`) 시 빈 리스트(`[]`)로 무결성 보장.
+2. **$O(\text{matched})$ 즉시 필터링 및 False-Positive 원천 차단**:
+   - `ChatViewModel`에서 프리셋 전체 순회를 제거하고, `_memoryService.CurrentActiveLorebooks?.Where(l => l.Category == "인물")`로 즉각 필터링하여 문자열 침범 결함 원천 방어.
+3. **가짜 목(Fake) 및 단위 테스트 동기화**:
+   - `ChatWorkflowServiceTests.cs`의 `FakeMemoryManagerService`에 `CurrentActiveLorebooks` 프로퍼티 구현.
+   - `MemoryManagerServiceTests.cs`에 `BuildNarrativeRequestAsync_PopulatesCurrentActiveLorebooks_WithMatchedLorebookObjects` 신규 단위 테스트 추가 및 동기화/초기화 라이프사이클 전수 검증.
+4. **의무 검증 (Ground Truth)**:
+   - 솔루션 전체 빌드(0 warning, 0 error) 및 Fast QA 178개 단위 테스트 100% 통과 (Exit Code 0).
+
