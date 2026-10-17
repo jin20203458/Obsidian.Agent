@@ -287,4 +287,78 @@ related:
 - **오름차순 정렬 원복**: `HybridLorebookRetriever.cs` L123-L125의 정렬식을 `OrderBy(e => e.Priority)`로 수정하여, UI 설명 및 레코드 기본값(`Priority = 0`)과 일치하도록 0이 가장 높은 1순위로 패킹되도록 정렬 규칙 확립.
 - **의무 검증 (Ground Truth)**: `HybridLorebookRetrieverTests`에 `Retrieve_SortsDirectMatches_ByPriorityAscending_ZeroIsHighestPriority` 신규 테스트를 추가하고 기존 테스트 케이스를 오름차순 명세로 정렬하여 전체 단위 테스트 131건 통과(Exit Code 0).
 
+---
+
+## 2026-10-17: [Resolved] LlmJsonParser의 전방 상태 머신, 인라인 주석/코드블록 격리 및 체크포인트 롤백을 통한 엣지 케이스 결함 전수 해결
+
+### 1. 현상 (Symptom)
+- `ExtractFirstValidJsonBlock`이 유효성 검사(`IsValidJson`)를 통과하지 못한 비-JSON 블록(예: 서두의 `[참고]`)을 반환하여 절단 복구 루틴 진입이 가로막힘.
+- 서두 사설에 닫히지 않은 `{`나 `[`가 있을 때 괄호 카운터가 0으로 복귀하지 못해 뒤따르는 정상 JSON 블록 추출 실패.
+- 주석(`//`, `/* */`) 내부에 포함된 따옴표나 괄호(`}`)로 인해 문자열/괄호 계수가 오염되거나, 주석 도중 절단 시 닫는 괄호가 주석에 삼켜지는 결함 발생.
+- 미완성 유니코드 이스케이프(`\u12`), 이스케이프 따옴표가 포함된 키(`"my\"key":`), 미완성 키(`"user_na`), 미완성 리터럴/숫자(`tru`, `12.`, `-`) 절단 시 유효하지 않은 JSON이 생성되어 역직렬화 예외 발생.
+- JSON 문자열 값 내부에 마크다운 백틱(` ```json {} ``` `)이 포함된 경우 코드블록 종료 위치로 오인되어 JSON이 중간에 절단되거나, 닫힌 코드블록 내부의 절단 JSON이 원본 텍스트 재탐색 시 하위 객체(`{"inner": 1}`)로 오추출되는 결함 발생.
+- `DeserializeSafe<List<T>>` 호출 시 배열 후보군 탐색 실패 후 배열 절단 복구를 시도하지 않고 객체 절단 복구만 호출하여 역직렬화 실패.
+
+### 2. 원인 (Root Cause)
+1. 수동 스캐너와 절단 복구기에 주석 상태(`CommentState`) 추적이 결여되어 주석 내부 문자가 JSON 제어 문자로 오인됨.
+2. `RepairTruncatedJson`의 역방향 문자열 조작(`CleanTrailingDanglingTokens`)이 이스케이프 따옴표(`\"`), 키/값 문맥(`ContainerKind`/`ContainerState`), 불완전 원시 토큰을 구별하지 못함.
+3. 단순 Sliding Start Scan 도입 시 절단된 루트 JSON(`{"outer": {"inner": 1}, "trunc`)에서 내부 완성 하위 객체(`{"inner": 1}`)만 오추출하여 루트 데이터가 침묵 유실되는 트랩 존재.
+4. `ExtractCodeFenceBlocks`가 단순 `IndexOf("```")`를 사용하여 JSON 문자열 리터럴 내부의 백틱을 코드블록 경계로 오인함.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+1. **전방 컨테이너 상태 머신 및 체크포인트 롤백 (`LlmJsonParser.cs`)**:
+   - `ContainerFrame` 스택을 통해 객체/배열 문맥을 추적하고, 직전 완결 요소 직후의 안전 롤백 인덱스(`SafeRollbackLength`)를 기록.
+   - EOF 도달 시 미완성 키, 콜론만 있는 프로퍼티, 미완성 리터럴/숫자(`tru`, `12.`)를 단일 인덱스 절삭(`sb.Length = top.SafeRollbackLength`)으로 $O(1)$ 안전 롤백.
+2. **주석 스트리핑, 코드블록 문자열 격리 및 서로게이트 정제**:
+   - 복구 버퍼 생성 시 문자열 외부 주석을 완전히 스트리핑하고, 리터럴/숫자 토큰 직후 공백 없이 주석이 시작될 때(`true//`, `42/*`) 토큰 완료 판정을 선행 수행.
+   - `FindNextCodeFence`로 JSON 컨테이너의 문자열 리터럴 내부에 위치한 ` ``` `를 무시하고, 1단계 코드블록 탐색 완료 구간(`fenceSpans`)을 2단계 원본 스캔에서 건너뛰어 닫힌 코드블록 내 절단 JSON의 하위 객체 오추출을 원천 차단.
+   - `RemoveIncompleteUnicodeEscape` 및 `RemoveTrailingUnpairedHighSurrogate`로 4자리 미달 `\u` 및 단독 상위 서로게이트(`\uD800`~`\uDBFF`)를 정제하여 UTF-8 트랜스코딩 크래시 방어.
+3. **절단 루트 선점 가드 (Root Truncation Guard) 및 스키마 매칭**:
+   - 미완성 블록 감지 시 현재 위치가 절단 복구 가능한 루트(`TryRepairFromIndex != null`)인지 검사하여, 하위 객체 오추출 및 $O(N^2)$ 스캔을 원천 차단.
+   - 다중 JSON 블록(사설 내 예시 스키마 + 실제 페이로드) 존재 시 `HasMatchingSchemaProperties`(`[JsonPropertyName]` 및 제네릭 `IDictionary<,>` 포함)로 대상 DTO 스키마와 일치하는 후보를 우선 채택.
+4. **의무 검증 (Ground Truth)**:
+   - `LlmJsonParserTests` 총 58개 단위/스트레스 테스트 100% 통과 및 솔루션 전체 174개 단위 테스트 통과(Exit Code 0).
+
+---
+
+## 2026-10-17: [Resolved] dotnet test 백그라운드 실행 시 솔루션 단위 평가로 인한 MSBuild/VSTest I/O 파이프 블로킹 해결 및 테스트 프로젝트 직접 타겟팅 규격 확립
+
+### 1. 현상 (Symptom)
+- 백그라운드 태스크로 `dotnet test GRC.sln --filter "Category!=Integration" --no-build` 실행 시 테스트 실행 자체는 0.4초 만에 모두 완료(151/151 통과)되었으나, 프로세스가 종료되지 않고 셸이 무한 대기(RUNNING)에 머무는 현상 발생.
+
+### 2. 원인 (Root Cause)
+- `dotnet build`와 달리 `dotnet test` CLI 규격에서는 `-nodeReuse:false`가 VSTest(`vstest.console.exe`) 및 솔루션 그래프를 평가하는 MSBuild 백그라운드 작업자 노드에 완벽히 상속되지 않음.
+- 자식 작업자 노드가 백그라운드 셸의 표준 출력(stdout) 스트림 핸들을 점유한 채 반환하지 않아 프로세스 종료 신호(EOF)가 셸에 전달되지 않음.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+- **테스트 프로젝트 직접 타겟팅 규격 확립**:
+  솔루션(`.sln`) 대신 테스트 프로젝트를 명시적으로 직접 지정하고 일반 상세도(`-v n`)를 적용하여 불필요한 솔루션 중계 노드 생성을 차단:
+  ```powershell
+  dotnet test tests/GRC.Tests/GRC.Tests.csproj --filter "Category!=Integration" --no-build -v n
+  ```
+- **불변식**: `dotnet test` 실행 시 솔루션 파일(`.sln`)을 타겟으로 지정하지 말고, 반드시 해당 테스트 프로젝트 파일(`tests/GRC.Tests/GRC.Tests.csproj`)을 직접 지정하여 VSTest/MSBuild 파이프 데드락을 방지할 것.
+
+---
+
+## 2026-10-17: [Resolved] FormatRule 문체 지침 누락(독백 낫표 「」, 마크다운 기호 배제, 퓨샷) 복원 및 스트리밍 실시간 별표(*) 필터링을 통한 UI 불일치 해결
+
+### 1. 현상 (Symptom)
+- Cognitive Core 3.0 개편 이후 LLM이 속마음/독백에 낫표(`「」`)를 쓰지 않고 서술문으로 뭉뚱그려 UI의 F2(속마음 전용 스타일) 연동이 무력화됨.
+- LLM이 간헐적으로 대사나 단어에 `**` 볼드를 출력할 때, 실시간 스트리밍 중에는 `**`가 화면에 그대로 노출되었다가 스트리밍 완료 후 정규식에 의해 기호가 툭 사라지거나 마크다운 서식으로 치환되는 시각적 깜빡임 및 파서 불일치 발생.
+
+### 2. 원인 (Root Cause)
+1. Cognitive Core 3.0 개편 커밋(`1796789`)에서 `MemoryManagerService.cs`에 존재하던 `<syntax_rules>`(독백 「 」, 마크다운/별표 금지)와 `<example>` 퓨샷이 `CognitivePromptAssembler.cs`로 이관되면서 단순 요약문으로 축약되어 세부 지침이 유실됨.
+2. `ChatWorkflowService.cs`에서 마크다운 찌꺼기 정제를 스트리밍이 100% 완료된 뒤 사후 정규식(`Regex.Replace`)으로만 처리하여, 스트리밍 수신 중에는 `*` 기호가 UI 채널로 그대로 바이패스됨.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+1. **프롬프트단 문체 및 서식 퓨샷 복원 (`CognitivePromptAssembler.cs`)**:
+   - `FormatRule`에 대사(`" "`), 독백 및 속마음(`「 」`), 행동/배경(기호 없는 평문)과 마크다운 강조(*별표* 등) 배제 지침을 명시하고, 직관적인 4줄 `<example>` 퓨샷을 복원.
+2. **스트리밍 수신 루프 실시간 별표 필터링 (`ChatWorkflowService.cs`)**:
+   - `producerTask` 스트리밍 청크 수신 루프(`foreach (char c in chunk)`)에서 `c == '*'` 감지 시 즉시 건너뛰도록(`continue`) 필터링하여, 스트리밍 화면과 완료 후 텍스트(`fullResponse`) 모두에서 별표 찌꺼기를 원천 차단하고 스트리밍 중/완료 후 텍스트를 100% 일치시킴.
+3. **의무 검증 (Ground Truth)**:
+   - `CognitivePromptAssemblerTests`에 `AssemblePrompt_SystemInstruction_ContainsDialogueThoughtAndMarkdownRulesWithExample` 테스트 추가.
+   - `ChatWorkflowServiceTests`에 `ProcessChatStreamAsync_FiltersMarkdownAsterisksFromStreamAndFinalText` 테스트 추가.
+   - 단위 테스트 170건 100% 통과(Exit Code 0, 541ms).
+
+
 
