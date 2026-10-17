@@ -155,6 +155,9 @@ related:
 
 ## 2026-10-15: [Resolved] Google text-embedding-004의 Vertex AI vs AI Studio API 엔드포인트 및 페이로드 스키마 비대칭 일원화
 
+> [!NOTE]
+> **[Superseded: 2026-10-18]** Google AI Studio의 `text-embedding-004` 서비스 종료(2026-01-14) 및 Vertex AI 레거시 지정에 따라, 본 엔드포인트 일원화 구조는 차세대 통합 모델 `gemini-embedding-001` (MRL 768차원)로 전면 대체되었습니다. (하단 2026-10-18 항목 참조)
+
 ### 1. 현상 (Symptom)
 * Google Cloud Vertex AI와 AI Studio 간의 REST 엔드포인트 URL, 인증 헤더(OAuth2 Bearer vs API Key), 요청/응답 JSON 스키마 비대칭으로 인한 역직렬화 실패 및 null 참조 예외 발생.
 
@@ -196,6 +199,9 @@ related:
 ---
 
 ## 2026-10-15: [Resolved] Vertex AI 한국어 임베딩의 토큰 길이 더미 벡터 침묵 결함 및 LLM(global) vs Embedding(asia-northeast3 서울) 리전 분리 규격
+
+> [!NOTE]
+> **[Superseded: 2026-10-18]** `text-multilingual-embedding-002`는 차세대 통일 모델 `gemini-embedding-001` (MRL 768차원, 서울 asia-northeast3 리전)로 전면 통합 교체되었습니다. 단, `LLM(global) vs Embedding(asia-northeast3 서울) vs TTS(us-central1)` 3분할 리전 규격 및 `UnsafeRelaxedJsonEscaping` 불변식은 그대로 유지됩니다. (하단 2026-10-18 항목 참조)
 
 ### 1. 현상 (Symptom)
 * **더미 벡터 침묵 실패**: Vertex AI `text-embedding-004`에 한국어 인입 시 에러 없이 `HTTP 200 OK`와 함께 토큰 길이에 비례하는 고정 더미 벡터가 반환되어 무관한 문장 간 유사도 `0.9995` 오판정 발생.
@@ -464,4 +470,57 @@ related:
    - `MemoryManagerServiceTests.cs`에 `BuildNarrativeRequestAsync_PopulatesCurrentActiveLorebooks_WithMatchedLorebookObjects` 신규 단위 테스트 추가 및 동기화/초기화 라이프사이클 전수 검증.
 4. **의무 검증 (Ground Truth)**:
    - 솔루션 전체 빌드(0 warning, 0 error) 및 Fast QA 178개 단위 테스트 100% 통과 (Exit Code 0).
+
+---
+
+## 2026-10-18: [Resolved] text-embedding-004(AI Studio EOL) 및 002(Vertex 레거시) 대응 차세대 통합 gemini-embedding-001(서울, 768 MRL) 전환 및 RAG 임계치(0.75f, 0.78f) 재보정
+
+### 1. 현상 및 배경 (Symptom & Background)
+* **구형 임베딩 모델의 서비스 종료 및 레거시 지정**:
+  - Google AI Studio에서 구형 `text-embedding-004`가 2026년 1월 14일부로 서비스 종료(HTTP 404 / Model not found)됨.
+  - Vertex AI의 `text-multilingual-embedding-002` 역시 구형 1세대 모델로 지정되어 향후 2027년 퇴역 예정 상태에 진입함.
+  - 차세대 모델 `gemini-embedding-2`는 Vertex AI 정식 predict 경로에서 아직 404를 반환하는 프리뷰 단계임.
+* **하이브리드 로어북의 이름 기반 누락 위험**:
+  - 로어북 엔트리(`LorebookEntry`)에서 키워드(`Keywords`)가 비어 있는 경우, 캐릭터 이름(`Name`)이 본문에 직접 언급되더라도 1차 스파스 정규식 매칭을 건너뛰고 2차 덴스(임베딩) 유사도에만 의존하여 0ms 즉각 인출이 누락될 위험 존재.
+* **임베딩 모델 교체 시 유사도 스케일 이동(Scale Shift)**:
+  - `gemini-embedding-001`은 한국어 및 다국어 의미론적 표현력이 비약적으로 향상되면서, 기존 002 모델 대비 코사인 유사도 점수 분포가 전반적으로 약 +0.07~+0.09 상향 이동함.
+  - 이에 따라 기존 임계치(로어북 0.68f, 렛저 0.71f)를 그대로 유지할 경우 하드 네거티브 및 무관한 일상 대화가 RAG로 과도하게 유입되는 오탐(False-Positive) 위험 발생.
+
+### 2. 실측 벤치마크 및 원인 분석 (Ground Truth Benchmarks & Root Cause)
+1. **엔드포인트 및 레이턴시 실측**:
+   - `gemini-embedding-001`은 서울(`asia-northeast3`) 리전에서 안정적으로 `HTTP 200 OK` (약 570ms)로 정상 응답함.
+   - Vertex AI와 Google AI Studio 양쪽 모두 `gemini-embedding-001` 단일 모델명으로 통일 지원됨.
+2. **MRL(Matryoshka Representation Learning) 차원 축소 손실률 검증**:
+   - `gemini-embedding-001`의 기본 3,072차원 대비 `outputDimensionality: 768` 지정 시, 코사인 유사도 차이는 `-0.006 ~ -0.010` (약 0.6%~1.1% 편차)에 불과하여 RAG 검색 품질의 손실 없이 C# 메모리 및 벡터 연산 효율(768-dim float)을 100% 보존함을 실측 입증.
+3. **10문장 정탐 vs 비교군 분리 마진(Margin) 정밀 측정**:
+   - **사건 불릿 렛저 RAG (부둣가 동맹 맹세)**:
+     - 구 002 모델: 정탐 최저 0.7093 vs 비교군 최고 0.6822 $\implies$ 마진 `+0.0271`
+     - 신 001 모델(768차원): 정탐 최저 0.7966 vs 비교군 최고 0.7488 $\implies$ 마진 `+0.0478` (마진 76% 대폭 향상)
+     - $\implies$ **신규 임계치: `0.78f`** (비교군 0.7488을 완벽 차단하고 정탐 0.7966 이상 전원 합격).
+   - **로어북 RAG (황녀 엘리시아)**:
+     - 구 002 모델: 정탐 최저 0.7061 vs 비교군 최고 0.6401 $\implies$ 마진 `+0.0660`
+     - 신 001 모델(768차원): 정탐 최저 0.7785 vs 비교군 최고 0.7196 $\implies$ 마진 `+0.0589`
+     - $\implies$ **신규 임계치: `0.75f`** (비교군 0.7196을 완벽 차단하고 정탐 0.7785 이상 전원 합격).
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+1. **차세대 통합 임베딩 모델 일원화 (`GeminiApiService.cs`, `GeminiApiDto.cs`)**:
+   - Vertex AI: `asia-northeast3` 리전 `publishers/google/models/gemini-embedding-001:predict` 엔드포인트에 `outputDimensionality: 768` 파라미터 주입.
+   - AI Studio: `v1beta/models/gemini-embedding-001:embedContent` 엔드포인트에 `outputDimensionality: 768` 주입.
+   - C# 인터페이스 계약(`IGeminiApiService.cs`): `gemini-embedding-001, MRL 768차원` 명시.
+2. **하이브리드 로어북 이름(Name) 1차 스파스 매칭 보강 (`HybridLorebookRetriever.cs`)**:
+   - `entry.Keywords`가 비어 있거나 누락되어도 `entry.Name`에 대한 정규식 단어 경계(`\b`) 매칭을 기본 수행하여, 이름 등장 시 0ms 즉각 인출 보장.
+   - 스파스와 덴스 양쪽에서 중복 인출된 경우 `entry.Name` 기준으로 자동 중복 제거(`DistinctBy`).
+3. **RAG 임계치 전면 재보정**:
+   - `GatedRAGRetriever.cs`: `SemanticSimilarityThreshold = 0.78f`
+   - `HybridLorebookRetriever.cs`: `DenseThreshold = 0.75f`
+4. **SSOT 문서 및 테스트 동기화**:
+   - 단위 테스트(`HybridLorebookRetrieverTests`, `GatedRAGRetrieverTests`, `VectorMathHelperTests`) 및 통합 테스트(`CognitiveCoreIntegrationTests`)의 단언문과 임계치를 0.75f / 0.78f로 전수 동기화.
+   - 기존 레거시 모델 탐색 스크래치 코드를 정리하고, 2대 핵심 RAG 20개 문장 실측 분리도 테스트(`RAG_SemanticSimilarity_RealEmbedding_EvaluationWithParaphrasedInputs`)를 100% 자동 통과하도록 보장.
+5. **불변식 (Invariants)**:
+   - **임베딩 모델은 반드시 `gemini-embedding-001` (서울 asia-northeast3 리전) 및 `outputDimensionality: 768`을 사용할 것.**
+   - **로어북 시맨틱 임계치는 `0.75f`, 사건 렛저 RAG 임계치는 `0.78f`를 유지할 것.**
+6. **의무 검증 (Ground Truth)**:
+   - 솔루션 전체 빌드: 경고 0개, 오류 0개 (Exit Code 0).
+   - Fast QA 180개 단위 테스트 100% 통과 (Exit Code 0, 1.98s).
+   - Vertex AI 실서버 통합 QA 10개 테스트 100% 통과 (Exit Code 0, 36.56s).
 
