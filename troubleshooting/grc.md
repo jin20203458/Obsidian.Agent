@@ -249,12 +249,12 @@ related:
 
 ### 2. 원인 (Root Cause)
 - `HybridLorebookRetriever.cs` 내 3단계 조건식이 `string.Equals(entry.Category, "인물", ...) || charNameSet.Contains(entry.Name)...`로 작성되어 논리합(`||`)에 의해 카테고리가 "인물"인 모든 항목이 `charNameSet` 포함 여부와 무관하게 무조건 참(True)으로 평가됨.
-- `MemoryManagerService.cs`에서 활성 인물 이름(`activeChars`)을 추출할 때 단기 기억 전체(`_shortTermMemory`)를 대상으로 검색하여 오래 전 퇴장한 인물까지 활성 상태로 간주함.
+- `MemoryManagerService.cs`에서 활성 인물 이름(`activeChars`)을 추출할 때 필터링 없이 상태창 `Chars` 딕셔너리 전체를 넘겨, 챕터 누적으로 인해 수십 턴 전 퇴장한 인물까지 활성 상태로 간주함.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
 - **오타 조건식 제거**: `HybridLorebookRetriever.cs` L108에서 무차별 `Category == "인물" ||` 조건을 제거하고, `charNameSet.Contains(entry.Name) || (entry.Keywords != null && entry.Keywords.Any(k => charNameSet.Contains(k)))`로 한정하여 상태창 인물과 실제 매칭될 때만 후보로 등록되도록 수정.
-- **최근 4개 메시지 슬라이싱**: `MemoryManagerService.cs`에서 `_shortTermMemory.TakeLast(4)` 및 현재 입력 텍스트에 이름이 직접 언급된 인물만 `activeChars`로 엄격히 필터링하여 프롬프트 예산 잠식 방지.
-- **의무 검증 (Ground Truth)**: `MemoryManagerServiceTests` 내 단위 테스트 12건(최근 4개 메시지 외 인물 배제 검증 신규 테스트 포함) 및 전체 단위 테스트 127건, 통합 테스트 9건 전원 통과(Exit Code 0).
+- **광역 단기 기억 및 팩트 불릿 스캔**: 단순 4개 메시지 슬라이싱 시 대명사/주어 생략 구간에서 동료 로어북이 증발하는 회귀를 방지하기 위해, `MemoryManagerService.cs`에서 `_shortTermMemory` 전체(18~25개 메시지) 및 최근 팩트 불릿 3개(`EventLedgers.TakeLast(3)`)를 광역 스캔하여 현장 동료의 서사 연속성 보장과 초장기 세션 퇴장 조연의 로어북 예산 잠식 방지를 동시에 달성.
+- **의무 검증 (Ground Truth)**: `MemoryManagerServiceTests` 내 단위 테스트(광역 단기 기억 및 팩트 불릿 기반 활성 인물 포함 및 퇴장 조연 배제 검증 신규 테스트 포함) 및 전체 단위 테스트 통과(Exit Code 0).
 
 ---
 
@@ -272,5 +272,19 @@ related:
 - **세션 활성 수명주기 앵커링**: `private bool _isSessionActive;` 플래그 및 `string targetFileName = _currentFileName;` 스냅샷을 캡처하고, `GoBack()` 호출 시 `_isSessionActive = false;`로 전환. 비동기 완료 후 `!_isSessionActive || _currentFileName != targetFileName`일 경우 즉시 작업을 폐기하여 파일 오염 차단.
 - **비파괴적 선택적 임베딩 병합(Selective Merge)**: 전체 리스트를 덮어쓰지 않고, 완료된 768차원 임베딩을 `(Name, Content)` 키 딕셔너리로 구축한 뒤 현재 `CurrentPreset.Lorebooks`의 항목 중 임베딩이 결여된 항목에만 선택적으로 주입. 백그라운드 실행 중 유저가 추가/수정한 로어북 무손실 보존.
 - **WPF STA 스레드 안전 디스패칭**: `Application.Current?.Dispatcher` 가드를 통해 UI 스레드 위반 없이 안전하게 상태를 반영하고 세션 파일과 동기화.
+
+---
+
+## 2026-10-17: [Resolved] 하이브리드 로어북 동적 패킹 시 우선순위(Priority 0 = 최우선) 역전 결함 해결
+
+### 1. 현상 (Symptom)
+- `EditLorebookWindow.xaml` UI 명세 및 툴팁에는 `"숫자가 낮을수록(0에 가까울수록) 스캔과 주입 우선순위가 높아집니다."`라고 정의되어 있고 기본값도 `Priority = 0`이었으나, 실제 인출 엔진(`HybridLorebookRetriever.cs`)에서는 기본값 0을 부여받은 최우선 로어북이 가장 후순위로 밀려 3,000토큰 예산 초과 시 조기 탈락하는 우선순위 역전 버그 발생.
+
+### 2. 원인 (Root Cause)
+- `HybridLorebookRetriever.cs`의 동적 패킹 4단계 정렬식에서 `OrderBy`가 아닌 `OrderByDescending(e => e.Priority)`를 호출하여, 숫자가 큰 항목(10, 9, 8...)이 먼저 패킹되고 0에 가까운 최우선 항목이 맨 뒤로 밀려남.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+- **오름차순 정렬 원복**: `HybridLorebookRetriever.cs` L123-L125의 정렬식을 `OrderBy(e => e.Priority)`로 수정하여, UI 설명 및 레코드 기본값(`Priority = 0`)과 일치하도록 0이 가장 높은 1순위로 패킹되도록 정렬 규칙 확립.
+- **의무 검증 (Ground Truth)**: `HybridLorebookRetrieverTests`에 `Retrieve_SortsDirectMatches_ByPriorityAscending_ZeroIsHighestPriority` 신규 테스트를 추가하고 기존 테스트 케이스를 오름차순 명세로 정렬하여 전체 단위 테스트 131건 통과(Exit Code 0).
 
 
