@@ -44,7 +44,8 @@ related:
 ### 3. 해결책 (Resolution)
 * **`LenientOptions` 정적 캐싱**: `AllowReadingFromString`, `AllowTrailingCommas`, `ReadCommentHandling = Skip`, `JsonStringEnumConverter`를 사전 구성하여 정적 캐싱하고 struct/record 역직렬화 지원.
 * **Index 0 기준 문자열 리터럴 추적 및 다중 후보 순차 검증**: 마크다운 ```` ```json ```` 블록을 우선 파싱하고, 따옴표/이스케이프를 추적하며 후보군 스키마를 순차 검증.
-* **`RepairTruncatedJson` 엔진 탑재**: 절단된 응답 감지 시 열린 따옴표를 닫고 dangling 키/콜론/쉼표를 정제한 후 스택에 보존된 여는 괄호의 짝(`]`, `}`)을 LIFO 역순으로 닫아 구조적 유효성 복원.
+* **`RepairTruncatedJson` 엔진 탑재 및 체크포인트 롤백**: 절단된 응답 감지 시 열린 따옴표를 닫고 dangling 키/콜론/쉼표를 정제한 후 스택에 보존된 여는 괄호의 짝(`]`, `}`)을 LIFO 역순으로 닫아 구조적 유효성 복원. 미완성 토큰 발생 시 `SafeRollbackLength` 기반 체크포인트 롤백 적용.
+* **핵심 부정 제약 (Never use X)**: **절대 LLM 스트리밍 응답 파싱 시 단순 정규식이나 `rawText.IndexOf('{')`, `IndexOf("```")`에 의존하지 말 것.** 반드시 `LlmJsonParser` 전용 엔진을 사용할 것.
 
 ---
 
@@ -153,23 +154,6 @@ related:
 
 ---
 
-## 2026-10-15: [Resolved] Google text-embedding-004의 Vertex AI vs AI Studio API 엔드포인트 및 페이로드 스키마 비대칭 일원화
-
-> [!NOTE]
-> **[Superseded: 2026-10-18]** Google AI Studio의 `text-embedding-004` 서비스 종료(2026-01-14) 및 Vertex AI 레거시 지정에 따라, 본 엔드포인트 일원화 구조는 차세대 통합 모델 `gemini-embedding-001` (MRL 768차원)로 전면 대체되었습니다. (하단 2026-10-18 항목 참조)
-
-### 1. 현상 (Symptom)
-* Google Cloud Vertex AI와 AI Studio 간의 REST 엔드포인트 URL, 인증 헤더(OAuth2 Bearer vs API Key), 요청/응답 JSON 스키마 비대칭으로 인한 역직렬화 실패 및 null 참조 예외 발생.
-
-### 2. 원인 (Root Cause)
-* AI Studio는 `content.parts` 구조 및 ApiKey 쿼리를 사용하나, Vertex AI는 `instances[].content` 구조 및 Bearer 토큰을 요구하여 단일 DTO로 역직렬화 불가.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-* **내부 분기 추상화 (`GeminiApiService.GetEmbeddingAsync`)**: `UseVertexAI` 설정에 따라 요청/응답 DTO를 분리 직렬화하고, 상위 계층에는 `Task<float[]> GetEmbeddingAsync(string text)` 단일 시그니처로 768차원 배열 투명 반환.
-* **불변식**: 외부 API 공급자 간 스키마 차이를 상위 도메인 서비스로 노출하지 말고 API 서비스 계층에서 단일 인터페이스로 격리할 것.
-
----
-
 ## 2026-10-15: [Resolved] Gemini API Part 빈 문자열 입력 시 HTTP 400 Bad Request 방어 및 Auto-Play 안전 Fallback
 
 ### 1. 현상 (Symptom)
@@ -181,82 +165,6 @@ related:
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
 * **다단계 안전 Fallback (`CognitivePromptAssembler`)**: `string.IsNullOrWhiteSpace` 감지 시 `PlotCatalyst` 지침을 우선 채택하고, 부재 시 `"(서사를 계속 진행하십시오.)"` 대체 텍스트를 강제 주입.
 * **핵심 부정 제약 (Never use X)**: **절대 검증되지 않은 빈 유저 입력을 검사 없이 `new Part(text)`에 직접 전달하지 말 것.**
-
----
-
-## 2026-10-15: [Resolved] MemoryManagerService V3 컷오버 시 metaDirective 합성 및 GenerationConfig/ThinkingAnchor 무손실 보존
-
-### 1. 현상 (Symptom)
-* 순수 DTO 프롬프트 조립기(`CognitivePromptAssembler`) 분리 후 상위 모델 파라미터(`GenerationConfig`, `ThinkingConfig(medium)`) 및 시스템 지침(`metaDirective`)이 유실되는 결함.
-
-### 2. 원인 (Root Cause)
-* 조립기는 프롬프트 텍스트 배치만 담당하므로 API 레벨 실행 설정 및 시스템 지침 합성은 상위 서비스(`MemoryManagerService`)의 명시적 재부착 책임임.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-* **지침 합성 및 C# `with` 식 재부착**: 유저 텍스트에 `metaDirective`를 합성하고, `assembledRequest with { SafetySettings = ..., GenerationConfig = ... }` 패턴으로 모델 실행 파라미터 재부착.
-* **불변식**: 프롬프트 조립기 분리 시 API 모델 실행 파라미터가 DTO 전환 과정에서 누락되지 않도록 상위 서비스에서 불변식으로 보존할 것.
-
----
-
-## 2026-10-15: [Resolved] Vertex AI 한국어 임베딩의 토큰 길이 더미 벡터 침묵 결함 및 LLM(global) vs Embedding(asia-northeast3 서울) 리전 분리 규격
-
-> [!NOTE]
-> **[Superseded: 2026-10-18]** `text-multilingual-embedding-002`는 차세대 통일 모델 `gemini-embedding-001` (MRL 768차원, 서울 asia-northeast3 리전)로 전면 통합 교체되었습니다. 단, `LLM(global) vs Embedding(asia-northeast3 서울) vs TTS(us-central1)` 3분할 리전 규격 및 `UnsafeRelaxedJsonEscaping` 불변식은 그대로 유지됩니다. (하단 2026-10-18 항목 참조)
-
-### 1. 현상 (Symptom)
-* **더미 벡터 침묵 실패**: Vertex AI `text-embedding-004`에 한국어 인입 시 에러 없이 `HTTP 200 OK`와 함께 토큰 길이에 비례하는 고정 더미 벡터가 반환되어 무관한 문장 간 유사도 `0.9995` 오판정 발생.
-* **LLM 리전 404 오류**: 최신 주력 LLM(`gemini-3.8-flash`, `gemini-4-argon`)을 로컬 리전(`us-central1`, `asia-northeast3`)으로 호출 시 `404 NotFound` 발생.
-
-### 2. 원인 (Root Cause)
-1. Vertex AI의 `text-embedding-004`는 영어/코드 전용 모델로 한글 인입 시 정적 더미 벡터를 조용히 반환함.
-2. 최신 Gemini LLM은 로컬 리전에 배포되지 않고 전역 프록시 엔드포인트(`locations/global`)에서만 서비스됨.
-3. `System.Text.Json` 기본 직렬화기의 한글 `\uXXXX` 유니코드 이스케이프 왜곡.
-
-### 3. 해결책 및 아키텍처 SSOT 규격 (Resolution & Invariants)
-1. **한국어 다국어 모델 전환**: **`text-multilingual-embedding-002`**로 교체하고 `JavaScriptEncoder.UnsafeRelaxedJsonEscaping` 적용.
-2. **리전 분리 아키텍처 불변식**:
-   * **최신 주력 LLM**: 반드시 `locations/global` 단일 엔드포인트 사용 (`us-central1`/`asia-northeast3` 호출 금지, 404 에러 방어).
-   * **임베딩 모델**: 반드시 `asia-northeast3` (서울 리전 물리 직결, 약 400~500ms로 2배 고속화).
-   * **TTS 모델**: `us-central1` 엔드포인트 유지.
-
----
-
-## 2026-10-16: [Resolved] 단일 불릿 원장(Single Event Ledger) 일원화 및 [제N장] 시간축 앵커 도입을 통한 서사 시간 왜곡, 81턴 불릿 증발 및 240턴 장기 기억 지연 결함 완전 해결
-
-### 1. 현상 (Symptom)
-* 챕터 전환(81턴) 시 `EventLedgers`가 빈 리스트로 초기화되어 최근 15개 불릿이 프롬프트에서 즉시 소멸하는 기억 단절 발생.
-* 3개 챕터(240턴) 대기 큐로 인해 2~4장 진행 중 장기 줄거리가 프롬프트 어디에도 존재하지 않는 거대한 기억 공백 발생.
-* 시스템 턴 번호(`[Turn X]`) 노출로 인한 서사 시간 괴리 및 행동 묘사(평서문) 시 RAG 검문소 오차단.
-
-### 2. 원인 (Root Cause)
-* v1.0 레거시 3챕터 대기 큐(`_mediumBuffers`)와 v3.0 불릿 시스템의 중복 및 상태창 단서 수집(`unresolvedClues`) 모델의 옥상옥 구조로 인한 파편화.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-1. **단일 불릿 원장(Single Event Ledger) 일원화**:
-   * 챕터 전환 시 `EventLedgers`를 무손실 누적 승계하고, 상시 15개는 언제나 `TakeLast(15)`, 과거 RAG 풀은 `Take(Count - 15)`로 단일 슬라이싱하여 81턴 불릿 증발 원천 차단.
-   * 1개 챕터(80턴) 완료 즉시 백그라운드 Pro 모델 장기 요약을 가동하여 기억 공백 해소.
-2. **시간축 앵커 및 RAG 인과 정렬**:
-   * 프롬프트 내 `[Turn X]`를 제거하고 장 번호 변경 시에만 `[제N장]` 그룹 헤더를 1회 출력. RAG 인출 결과는 `item.Turn` 오름차순으로 재정렬하여 인과 역전 방지.
-3. **핵심 부정 제약 (Never use X)**:
-   * **절대 매 턴 상태창 모델에 단서(`unresolvedClues`) 수집 슬롯을 두지 말 것(Never collect clues via turn status model).** 복선과 비밀은 잡음 생성과 우선순위 역전을 유발하므로 독자적 슬롯을 두지 말고 `EventLedger` 팩트 단일 원장으로 일원화하여 관리할 것.
-
----
-
-## 2026-10-16: [Resolved] 로어북 3순위 상태창 인물 인출 조건식 논리합(||) 오타 및 활성 인물 슬라이싱 최적화
-
-### 1. 현상 (Symptom)
-- 상태창에 인물이 1명이라도 존재할 경우 카테고리가 "인물"인 로어북 전체가 무차별 매칭되어 3,000토큰 예산이 조기 소진되는 결함 발생.
-- 챕터 누적으로 상태창 인물 사전(`Chars`)이 비대해졌을 때, 수십 턴 전 이미 퇴장한 조연 로어북까지 상시 인출되어 현재 장면의 로어북 인출을 저해함.
-
-### 2. 원인 (Root Cause)
-- `HybridLorebookRetriever.cs` 내 3단계 조건식이 `string.Equals(entry.Category, "인물", ...) || charNameSet.Contains(entry.Name)...`로 작성되어 논리합(`||`)에 의해 무조건 참(True)으로 평가됨.
-- `MemoryManagerService.cs`에서 활성 인물 추출 시 퇴장 여부 검증 없이 `Chars` 딕셔너리 전체를 전달함.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **논리곱 매칭 한정**: `Category == "인물" ||` 조건을 제거하고 `charNameSet.Contains(entry.Name) || (entry.Keywords != null && entry.Keywords.Any(k => charNameSet.Contains(k)))`로 한정하여 실제 매칭될 때만 후보로 등록되도록 수정.
-- **광역 단기 기억 및 팩트 불릿 스캔**: 대명사/주어 생략 구간의 로어북 누락을 방지하기 위해 `_shortTermMemory` 전체(18~25개 메시지) 및 최근 팩트 불릿 3개(`EventLedgers.TakeLast(3)`)를 광역 스캔하여 퇴장 조연의 예산 잠식 방지.
-- **로어북 패킹 정렬 불변식**: 동적 패킹 정렬 시 반드시 `OrderBy(e => e.Priority)`를 사용하여 기본값 `Priority = 0`이 최우선 순위로 패킹되도록 보장할 것.
-- **핵심 부정 제약 (Never use X)**: **절대 로어북 매칭 시 활성 인물 검증 없이 카테고리만으로 OR(`||`) 결합하지 말 것.** 로어북 인출 결과는 단일 문자열 `Contains`가 아닌 강타입 컬렉션(`CurrentActiveLorebooks`)으로 필터링할 것.
 
 ---
 
@@ -274,29 +182,6 @@ related:
 - **세션 수명주기 앵커링**: `_isSessionActive` 플래그 및 `string targetFileName = _currentFileName;` 스냅샷을 캡처하고, `GoBack()` 호출 시 `_isSessionActive = false;`로 전환. 비동기 완료 후 `!_isSessionActive || _currentFileName != targetFileName`일 경우 즉시 작업 폐기.
 - **비파괴적 선택적 임베딩 병합 (Selective Merge)**: 전체 리스트를 덮어쓰지 않고, 완료된 768차원 임베딩을 `(Name, Content)` 키 딕셔너리로 구축하여 임베딩이 결여된 항목에만 선택적으로 주입. 백그라운드 실행 중 유저가 수정한 로어북 무손실 보존.
 - **WPF STA 스레드 안전 디스패칭**: `Application.Current?.Dispatcher` 가드를 통해 UI 스레드 위반 없이 안전하게 상태를 반영하고 세션 파일과 동기화.
-
----
-
-## 2026-10-17: [Resolved] LlmJsonParser 전방 상태 머신, 인라인 주석/코드블록 격리 및 체크포인트 롤백을 통한 역직렬화 파서 충돌 방어
-
-### 1. 현상 (Symptom)
-- 유효하지 않은 비-JSON 블록 선행, 서두 미완결 괄호 잔존, 주석(`//`, `/* */`) 내 따옴표/괄호 포함 시 역직렬화 실패 또는 절단 복구 엔진 오작동.
-- 미완성 유니코드 이스케이프(`\u12`), 미완성 키/리터럴 절단 시 파싱 예외 발생 및 JSON 문자열 내 마크다운 백틱(` ``` `) 포함 시 코드블록 경계 오인식 발생.
-
-### 2. 원인 (Root Cause)
-1. 수동 스캐너에 주석 상태(`CommentState`) 추적이 결여되어 주석 내부 문자가 JSON 제어 문자로 오인됨.
-2. `RepairTruncatedJson`의 역방향 문자열 조작이 이스케이프 따옴표(`\"`), 키/값 문맥, 불완전 원시 토큰을 구별하지 못함.
-3. `ExtractCodeFenceBlocks`가 단순 `IndexOf("```")`를 사용하여 JSON 문자열 리터럴 내부 백틱을 코드블록 경계로 오인함.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-1. **전방 컨테이너 상태 머신 및 체크포인트 롤백 (`LlmJsonParser.cs`)**:
-   - `ContainerFrame` 스택으로 객체/배열 문맥을 추적하고 직전 완결 요소 직후의 안전 롤백 인덱스(`SafeRollbackLength`)를 기록하여, EOF 도달 시 미완성 토큰을 단일 인덱스 절삭(`sb.Length = top.SafeRollbackLength`)으로 $O(1)$ 안전 롤백.
-2. **주석 스트리핑 및 코드블록 문자열 격리**:
-   - 문자열 외부 주석을 완전히 스트리핑하고, `FindNextCodeFence`로 JSON 컨테이너 문자열 리터럴 내부의 ` ``` `를 무시하여 코드블록 경계 오인식을 차단.
-   - 4자리 미달 `\u` 및 단독 상위 서로게이트(`\uD800`~`\uDBFF`)를 정제하여 UTF-8 트랜스코딩 크래시 방어.
-3. **절단 루트 선점 가드 (Root Truncation Guard)**:
-   - 미완성 블록 감지 시 현재 위치가 절단 복구 가능한 루트(`TryRepairFromIndex != null`)인지 검사하여 하위 객체 오추출 및 $O(N^2)$ 스캔을 원천 차단.
-4. **핵심 부정 제약 (Never use X)**: **절대 코드블록 탐색 시 단순 `IndexOf("```")`를 사용하지 말 것.** 절단 복구 시 역방향 토큰 조작 대신 반드시 체크포인트 롤백(`SafeRollbackLength`)을 적용할 것.
 
 ---
 
