@@ -524,3 +524,41 @@ related:
    - Fast QA 180개 단위 테스트 100% 통과 (Exit Code 0, 1.98s).
    - Vertex AI 실서버 통합 QA 10개 테스트 100% 통과 (Exit Code 0, 36.56s).
 
+---
+
+## 2026-10-18: [Resolved] 동적 상태창 갱신 파이프라인의 4대 런타임 결함(아이템 삭제 불가, 서사 프롬프트 데이터 단절, 수치 클램핑 부재, 비동기 세이프가드 누수) 및 테스트 러너 데드락 해결
+
+### 1. 현상 (Symptom)
+1. **인벤토리 마지막 아이템 소모 시 삭제 불가**: 인벤토리에 남은 마지막 아이템을 소비하여 LLM이 `"items": []`를 반환할 때, `StatusPayload`의 컬렉션 기본값(`new()`)과 `Count > 0` 조건으로 인해 빈 배열 덮어쓰기가 무시되어 아이템이 영구 잔존함.
+2. **상태창 데이터와 메인 서사 AI의 단절**: `Chars`의 Key(인물명)와 `CustomStats`의 Key(스탯명)가 불일치하여 수치가 누락되고, 플레이어 스탯(`체력`, `골드` 등) 및 인벤토리(`Items`), 현재 위치(`Places`)가 메인 서사 프롬프트(`CognitivePromptAssembler`)에 전혀 주입되지 않음.
+3. **백엔드 물리적 수치 클램핑(Clamping) 부재**: Flash-Lite 모델이 산술 연산 실수로 `"120/100"`이나 `"-10/100"`을 반환할 때 백엔드가 이를 그대로 저장하여 영구 고착됨.
+4. **비동기 세이프가드 타이밍 공백 및 테스트 러너 데드락**: `ChatWorkflowService` 내 `_ = Task.Run(...)`이 완료를 보장하지 않아 유저가 빠르게 다음 턴을 입력하면 이전 턴 상태창 반영 전에 프롬프트가 조립되며, `ThemeResourceTests` 이후 `DialogService.RunOnUIThread` 호출 시 사망한 임시 STA 스레드의 디스패처 대기로 테스트 러너가 무한 행(Deadlock)에 빠짐.
+
+### 2. 원인 (Root Cause)
+1. `StatusPayload` DTO의 프로퍼티가 `new()`로 강제 초기화되어 부분 갱신과 전체 갱신(빈 배열)을 구분할 수 없었음.
+2. `BiTemporalEntityProjector`가 `Chars` 중심의 인물 관계만 투영하고, 세계관의 물리적 환경/소지품/플레이어 스탯에 대한 동적 태그가 `CognitiveContext`에 결여됨.
+3. C# 서비스 레이어에 `Math.Clamp` 게이지 파서가 부재함.
+4. `onStatusUpdated` 콜백이 동기 `Action`으로 선언되어 UI 디스패치 및 디스크 저장을 체이닝하지 못함.
+5. `DialogService.RunOnUIThread` 내 `dispatcher.Invoke`에 타임아웃이 없어 메시지 펌프가 없는 스레드 환경에서 영구 블로킹됨.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+1. **Nullable StatusPayload 컬렉션 전환 (`StatusPayload.cs`, `MemoryManagerService.cs`)**:
+   - `CustomStats`, `Chars`, `Items`, `Places`를 `? = null`로 전환.
+   - `UpdateContextStatus`에서 `payload.Items != null` 조건으로 빈 리스트(`[]`) 수신 시 인벤토리를 정상 소거.
+2. **물리적 게이지 클램핑 엔진 탑재 (`MemoryManagerService.ClampGaugeValue`)**:
+   - `X/Y` 형태의 문자열 파싱 시 `Math.Clamp(current, 0, max)` 적용하여 `[0, Y]` 수치 무결성 강제.
+3. **<current_state> 동적 컨텍스트 태그 신설 및 서사 AI 연동 (`CognitivePromptAssembler.cs`, `CognitiveMemoryModels.cs`, `MemoryManagerService.cs`)**:
+   - `lock (_shortTermMemory)` 내에서 `CustomStats`, `Items`, `Places`를 원자적으로 스냅샷하여 `CognitiveContext`에 공급.
+   - **인물 스탯 중복 출력 방지 및 엄격 일치**: `_currentContext.Chars` 순회 시 인물명과 100% 일치하는 스탯 키(`TryGetValue`)만 엔티티 슬롯에 바인딩하고, 바인딩된 키는 `remainingCustomStats`에서 자동 제외하여 `<entity_relationship>`과 `<current_state>` 간의 스탯 중복 출력을 원천 차단. 외자 이름 오매칭을 유발하던 단순 `Contains` 검색을 배제.
+   - `<entity_relationship>` 직후 `<current_state>` 블록을 동적 주입(`- 현재 위치:`, `- 주요 수치:`, `- 소지품:`). 데이터가 모두 비어있으면 토큰 0 소모(완전 생략).
+4. **완전 비동기 체이닝 및 세이프가드 확립 (`IChatWorkflowService.cs`, `ChatWorkflowService.cs`, `ChatViewModel.cs`)**:
+   - `onStatusUpdated`를 `Func<StatusPayload, Task>?`로 변경하고, `Action<Task>? onStatusTaskStarted`를 통해 태스크 시작 즉시 `_statusUpdateTask`에 바인딩.
+   - `statusTask` 내부에서 `await onStatusUpdated(payload)`를 통해 네트워크 통신~UI 디스패치(`Task.Unwrap()`)~디스크 영구 저장까지 단일 비동기 파이프라인으로 안전 대기.
+5. **UI 스레드 호출 타임아웃 가드 (`IDialogService.cs`)**:
+   - `RunOnUIThread`에 500ms 비동기 타임아웃(`dispatcher.InvokeAsync(action).Task.Wait(500)`)을 적용하고 `CloseAuxiliaryWindows`에 `try-catch`를 보강하여 단위 테스트 러너 무한 대기를 원천 방어.
+6. **<previous_state> 대괄호 오염 방지 및 키-값 일원화 (`ChapterContext.ToStatusSnapshotString`)**:
+   - `Items`와 `Places`에 강제 부여되던 대괄호(`[{i}]`) 래핑 및 구식 마크다운 헤더를 전면 제거하고, `StatusWindow` JSON 스키마 필드명(`uiBadges`, `characterConditionDesc`, `items`, `places`)에 1:1 대응하는 간결한 개조식 포맷으로 통일하여 토큰 절감 및 모델의 `[[아이템]]` 중첩 오염을 원천 차단.
+7. **의무 검증 (Ground Truth)**:
+   - 솔루션 전체 빌드: 경고 0개, 오류 0개 (Exit Code 0).
+   - Fast QA 184개 단위 테스트 전수 통과 (Exit Code 0, 2.21s 완료).
+
