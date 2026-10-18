@@ -328,3 +328,26 @@ related:
 
 ---
 
+## 2026-10-18: [Resolved] GRC 전역 프롬프트 아키텍처 및 문자열 리터럴 전면 표준화 (PICCO, C# 11 Raw String, 2계층 계약, 토큰 바운딩)
+
+### 1. 현상 (Symptom)
+- 구세대 C# 관용구(`@""`, `"..." +`)의 혼용으로 인해 C# 소스코드 들여쓰기 공백이 LLM 프롬프트에 그대로 유입되어 불필요한 토큰 낭비 및 어텐션 오염 발생.
+- 기능적 변환 태스크(`ReplySuggestionService`, `GeminiTtsService`)에 불필요한 2인칭 인격화("You are...", "전문가...")와 대괄호 비정형 마크다운(`[상황: ...] 출력:`)이 잔존하여 출력 일관성 저하.
+- `InjectInitialScenario` 호출 경로에서 `ChatViewModel`이 `[초기 상황]\n` 헤더를 붙여 전달하여 메모리 내부에 `<initial_scenario>\n[초기 상황]\n...`의 중복 헤더 결함 발생.
+- 단순 변환/추천 태스크(선택지 3개 추출, 번역 등)에 `MaxOutputTokens: 8192`가 과잉 할당되어 비정상 루프 및 통신 지연 리스크 잔존.
+
+### 2. 원인 (Root Cause)
+- 프롬프트 엔지니어링 표준 수립 이전 구현된 레거시 프롬프트들이 C# 버전 상승과 기능 추가 과정에서 세대별 파편화(Legacy Drift)를 겪음.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+1. **C# 11 원시 문자열 리터럴(`"""` / `$$"""`) 100% 전면 일원화**:
+   - 코드 들여쓰기 공백 컴파일 타임 자동 스트리핑(Stripping)으로 공백 토큰 누출을 원천 차단.
+2. **PICCO 구조화 및 무인격 기능 명세 확립**:
+   - 결정론적 태스크는 `Domain: ...`으로 무인격화하고, 비정형 마크다운 예시를 `<input>`, `<output>` 표준 XML 태그로 개편.
+3. **2계층 스키마 계약 및 토큰 상한 현실화**:
+   - `LorebookService`, `ReplySuggestionService`, `SessionArchitectService`에 `responseSchema`를 등록하여 디코딩 레벨에서 100% 문법 무결성 보장.
+   - 단발성 추천(1024), 번역(1024), 로어북 추출(2048)로 `MaxOutputTokens`를 바운딩하여 불필요한 지연과 비용 차단.
+4. **초기 시나리오 주입 멱등성 보장**:
+   - `ChatViewModel`에서 순수 시나리오 텍스트를 전달하고 `InjectInitialScenario`에서 `Trim()` 및 `IsNullOrWhiteSpace` 가드를 적용하여 중복 헤더 오염 차단.
+5. **핵심 부정 제약 (Never use X)**: **절대 프롬프트 문자열에 `@""` 축어적 리터럴을 사용하지 말 것.** C# 11 `"""` 및 `$$"""` 원시 문자열 리터럴만을 사용할 것.
+
