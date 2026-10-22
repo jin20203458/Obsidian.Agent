@@ -351,3 +351,23 @@ related:
    - `ChatViewModel`에서 순수 시나리오 텍스트를 전달하고 `InjectInitialScenario`에서 `Trim()` 및 `IsNullOrWhiteSpace` 가드를 적용하여 중복 헤더 오염 차단.
 5. **핵심 부정 제약 (Never use X)**: **절대 프롬프트 문자열에 `@""` 축어적 리터럴을 사용하지 말 것.** C# 11 `"""` 및 `$$"""` 원시 문자열 리터럴만을 사용할 것.
 
+---
+
+## 2026-10-19: [Resolved] AI 답변 추천(ReplySuggestionService)의 대화 슬라이싱 하드코딩 제거 및 미압축 단기 기억 전수 연동
+
+### 1. 현상 (Symptom)
+- `ChatViewModel`에서 AI 답변 추천 생성 시 `ChatHistory.TakeLast(9)`로 최근 4~5턴만 고정 슬라이싱하여 전달함에 따라, 4턴 단위 중기 기억(`Plot`) 압축 대기 중이던 6~8턴 전의 미압축 대화가 `Plot`과 슬라이싱 목록 양쪽에서 모두 누락되는 과도기 기억 사각지대(Transitional Gap) 발생.
+- `ReplySuggestionService` 프롬프트 본문에서 `<current_snapshot>` 태그 내부에 `ChapterContext.ToPromptString()`의 `<current_snapshot>`이 또다시 중첩되는 XML 태그 충돌 발생.
+
+### 2. 원인 (Root Cause)
+- 중기 기억 압축 임계치(18개 메시지)와 답변 추천의 고정 슬라이싱(`TakeLast(9)`) 간의 라이프사이클 불일치.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+1. **단기 기억 전수 스냅샷 인터페이스 확장 (`IMemoryManagerService.cs`, `MemoryManagerService.cs`)**:
+   - `IReadOnlyList<ChatMessage> GetCurrentShortTermMemory()`를 제공하여 스레드 안전하게 현재 `_shortTermMemory` 전수를 캡처.
+2. **UI 하드코딩 슬라이싱 제거 (`ChatViewModel.cs`)**:
+   - `ChatHistory.TakeLast(9)` 및 `TakeLast(10)`을 전면 제거하고, `_memoryService.GetCurrentShortTermMemory()`를 전달하여 `Plot`(이미 압축된 과거) + `_shortTermMemory`(아직 압축되지 않은 최근 대화 전부)의 무손실 톱니바퀴 결합 확립.
+3. **태그 계층 충돌 해소 (`ReplySuggestionService.cs`)**:
+   - 중복 `<current_snapshot>` 태그를 `<session_context>`로 변경하여 의미론적 XML 트리 무결성 확보.
+4. **핵심 부정 제약 (Never use X)**: **절대 단기 기억 대화를 UI 컬렉션(`ChatHistory`)에서 임의의 숫자(`TakeLast`)로 잘라내지 말 것.** 반드시 `_memoryService.GetCurrentShortTermMemory()`를 통해 메모리 라이프사이클과 직접 동기화할 것.
+
