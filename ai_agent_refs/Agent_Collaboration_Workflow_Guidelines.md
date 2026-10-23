@@ -76,7 +76,7 @@ flowchart TD
     G1 -- "Pass (승인)" --> S2_Code
     S2_Code --> S3_QA
     G2 -- "Fail (수정 필요)" --> S2_Code
-    G2 -- "3회 연속 실패" --> Rollback["🛑 Level 1 서킷 브레이커 & 원자적 롤백"]
+    G2 -- "3회 연속 실패" --> Rollback["Level 1 서킷 브레이커 & 원자적 롤백"]
     G2 -- "Pass (공인)" --> S4_Log
     S4_Log --> Done["[완료] 사용자 최종 보고"]
 ```

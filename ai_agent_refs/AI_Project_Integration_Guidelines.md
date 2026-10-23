@@ -75,7 +75,7 @@ related:
    * 모든 문서는 필수 YAML Frontmatter(`description` 및 상대경로 `related` 목록)를 포함하여 점진적 탐색(Progressive Disclosure)을 지원합니다.
 2. **트러블슈팅 로그 생성**:
    * `troubleshooting/<project_name>.md` 경로에 전용 로그 문서를 생성합니다 (파일명은 소문자 snake_case).
-   * 작성 서식 및 구조는 [Agent_Runtime_Operations_Protocol.md](./Agent_Runtime_Operations_Protocol.md) 제6.1조 및 [Troubleshooting_Pruning_Guidelines.md](./Troubleshooting_Pruning_Guidelines.md)의 표준 서식(H2 에피소드 + H3 `[Resolved]` / `[Unresolved]`)과 증류 체크포인트 블록(`<!-- PRUNING_CHECKPOINT: ... -->`)을 엄격히 준수합니다.
+   * 최초 작성 서식은 [Agent_Runtime_Operations_Protocol.md](./Agent_Runtime_Operations_Protocol.md)를, 사후 정제 및 기준선 규격은 [Troubleshooting_Pruning_Guidelines.md](./Troubleshooting_Pruning_Guidelines.md)를 단일 진실 공급원(SSOT)으로 준용합니다.
 
 ---
 

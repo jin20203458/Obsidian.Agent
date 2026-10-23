@@ -29,7 +29,7 @@ flowchart TD
     FailCount -- "실패 1~2회 (Count <= 2)" --> Retry["[재시도] 원인 정밀 분석 후 코드 재수정"]
     Retry --> QA
     
-    FailCount -- "실패 3회 연속 (Count >= 3)" --> CB["[4단계] 🛑 3-Strike 서킷 브레이커 발동<br/>추가 수정 즉각 강제 중단"]
+    FailCount -- "실패 3회 연속 (Count >= 3)" --> CB["[4단계] 3-Strike 서킷 브레이커 발동<br/>추가 수정 즉각 강제 중단"]
     
     CB --> Rollback["[4.1단계] 훼손된 코드 원자적 롤백 (Atomic Rollback)"]
     Rollback --> Log["[5단계] troubleshooting/ 프로젝트 로그 박제"]

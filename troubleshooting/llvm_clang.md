@@ -592,3 +592,20 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 > **[정제 완료 기준선]** 2026-10-06 이전 상위 항목은 정제 완료됨. 신규 인시던트는 이 아래에 추가됩니다.
 
 ---
+
+## 2026-10-23: [Resolved] NoOutOfRangeAssignmentCheck 및 NarrowingConversionChecker 내 DAPA 공통(변환) a, d, e 정밀 구분을 위한 비트폭 축소·음수 무부호 변환 메시지 고도화
+
+### 1. 현상 (Symptom)
+* `ast-no-out-of-range-assignment`와 `path-sensitive-arqa.NarrowingConversion`에서 음수 값을 무부호(unsigned) 타입으로 변환할 때, 비트폭이 실제로 축소되는 경우(`int` -> `unsigned char`, `a + d + e` 위반)와 동일/확장 비트폭인 경우(`int` -> `unsigned int`, `a + d` 위반)의 진단 메시지가 동일하게 방출되어 프론트엔드 `MessageSubRuleMappings`에서 `DAPA 공통(변환) e`(축소 형변환 금지) 위반 여부를 정밀하게 구분할 수 없는 문제.
+
+### 2. 원인 (Root Cause)
+* `NoOutOfRangeAssignmentCheck.cpp`에서 `IsUnsigned && CVal.isSigned() && CVal.isNegative()` 조건 만족 시 원본 식(`RHS`)의 비트폭(`SrcWidth`)과 대상 타입 비트폭(`M.Width`)을 비교하지 않고 일괄적으로 `" (음수 값의 unsigned 변환)"`만 부착함.
+* `NarrowingConversionChecker.cpp`의 `StNeg`(`SrcSigned && !DstSigned`) 분기에서 `DstBits < SrcBits` 여부를 구분하지 않고 단일 메시지(`"음수 값을 무부호(unsigned) 타입으로 변환 시 데이터 변형 가능성"`)만 방출함.
+
+### 3. 해결책 (Resolution)
+1. **`NoOutOfRangeAssignmentCheck.cpp` (`checkAssignLike`)**:
+   * `SrcWidth`(`Context.getIntWidth(SrcQT)`)와 `M.Width`를 비교하여 `IsNarrowing = (SrcWidth > M.Width)`와 `IsNegativeToUnsigned`를 각각 독립 판별.
+   * 두 조건을 모두 만족하면 `" (축소 형변환 및 음수 값의 unsigned 변환)"`, 음수->unsigned 변환만 해당하면 `" (음수 값의 unsigned 변환)"`, 양수 초과이면서 비트폭 축소이면 `" (축소 형변환)"`을 출력하도록 세분화.
+2. **`NarrowingConversionChecker.cpp` (`StNeg` 리포트)**:
+   * `DstBits < SrcBits`인 경우 `"음수 값을 무부호(unsigned) 타입으로 축소 형변환 시 표현 범위 초과 및 데이터 변형 가능성"`을, `DstBits >= SrcBits`인 경우 `"음수 값을 무부호(unsigned) 타입으로 변환 시 표현 범위 초과 및 데이터 변형 가능성"`을 방출하여 `DAPA 공통(변환) a, d, e` 각각의 메시지 키워드 매칭 정합성 확립.
+
