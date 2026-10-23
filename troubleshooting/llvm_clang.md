@@ -606,6 +606,7 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 1. **`NoOutOfRangeAssignmentCheck.cpp` (`checkAssignLike`)**:
    * `SrcWidth`(`Context.getIntWidth(SrcQT)`)와 `M.Width`를 비교하여 `IsNarrowing = (SrcWidth > M.Width)`와 `IsNegativeToUnsigned`를 각각 독립 판별.
    * 두 조건을 모두 만족하면 `" (축소 형변환 및 음수 값의 unsigned 변환)"`, 음수->unsigned 변환만 해당하면 `" (음수 값의 unsigned 변환)"`, 양수 초과이면서 비트폭 축소이면 `" (축소 형변환)"`을 출력하도록 세분화.
-2. **`NarrowingConversionChecker.cpp` (`StNeg` 리포트)**:
+2. **`NarrowingConversionChecker.cpp` (`StNeg` 리포트 및 AST 체커 중복 방지 가드)**:
+   * `isInAstAssignmentContext(CE, Ctx)` 및 `isEvaluatableByAstChecker(SubExpr, Ctx, Visited)`를 추가하여, `ast-no-out-of-range-assignment`가 담당하는 대입/초기화/반환 문맥의 불변 지역 변수(`isEffectivelyConstLocalVar`) 상수 대입식은 CSA에서 스킵함으로써 동일 라인 중복 경고를 차단(단, 재할당된 변수, 런타임 분기, 함수 인자 전달 `CallExpr`은 CSA 검출력 100% 보존).
    * `DstBits < SrcBits`인 경우 `"음수 값을 무부호(unsigned) 타입으로 축소 형변환 시 표현 범위 초과 및 데이터 변형 가능성"`을, `DstBits >= SrcBits`인 경우 `"음수 값을 무부호(unsigned) 타입으로 변환 시 표현 범위 초과 및 데이터 변형 가능성"`을 방출하여 `DAPA 공통(변환) a, d, e` 각각의 메시지 키워드 매칭 정합성 확립.
 
