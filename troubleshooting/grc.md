@@ -371,3 +371,23 @@ related:
    - 중복 `<current_snapshot>` 태그를 `<session_context>`로 변경하여 의미론적 XML 트리 무결성 확보.
 4. **핵심 부정 제약 (Never use X)**: **절대 단기 기억 대화를 UI 컬렉션(`ChatHistory`)에서 임의의 숫자(`TakeLast`)로 잘라내지 말 것.** 반드시 `_memoryService.GetCurrentShortTermMemory()`를 통해 메모리 라이프사이클과 직접 동기화할 것.
 
+---
+
+## 2026-10-23: [Resolved] SessionArchitect 2.0 전면 개편 (2축 서사 톤 설계, 로어북 마이크로 배치 병렬 생성, C# 슬롯 정제기 및 Turn 0 시딩)
+
+### 1. 현상 (Symptom)
+- 기존 `SessionArchitectService`가 전 단계를 `ModelTier.Flash` 및 짧은 요약 제약(`1~2줄 요약`, `4문단 이내`)으로 실행하여 세계관과 캐릭터 설정의 깊이가 얕고 평면적으로 생성됨.
+- 3단계(`LorebookGen`)에서 모든 로어북 항목을 단일 JSON 배열 호출 1회로 일괄 생성함에 따라 후반부 항목이 1~2문장으로 축약되는 출력 압축(Lazy Compression) 현상 발생.
+- 5단계(`ScenarioGen`)에서 로어북 본문(`Content`)을 누락하고 이름(`Name`)만 전달하여 오프닝 대사와 로어북 말투가 불일치하며, 세션 생성 시 `ChapterContext`의 `Chars`, `Places`, `Items`가 빈 컬렉션(`new()`)으로 방치되어 Turn 1에 `BiTemporalEntityProjector`와 `HybridLorebookRetriever`의 인물 기반 인출이 작동하지 않음.
+- 6단계(`PromptGen`)에서 메인 서사용 `SystemPrompt` 하단에 스탯/상태창 업데이트 가이드를 포함하도록 지시하여 `AI_Prompt_Engineering_Guidelines.md` 원칙 2(Zero-Numeric)를 위반하고, 자동 모드(`IsAutoMode`) 실행 중에도 채팅창에 세계관/로어북 심층 비밀 전문을 노출하여 플레이 시작 전 스포일러를 유발함.
+
+### 2. 원인 (Root Cause)
+- 세션당 1회성으로 실행되는 초기 설계 파이프라인에 하위 모델(`Flash`)과 단일 패스(Monolithic Single-Pass) 생성 방식을 적용하고, 런타임 주입 슬롯(`<master_setting>`, `<world_lore>`, `<system>`)의 포맷 제약 및 Cognitive Core 3.0의 Turn 0 초기 상태 요구사항을 반영하지 못함.
+
+### 3. 해결책 (Resolution)
+- **전 단계 `ModelTier.Pro` (`ThinkingLevel.high`) 격상, 2축 톤(`SurfaceTone` / `CoreWeight`) 설계 및 아키텍트 내부 프롬프트 표준화**: 일상 대화 호흡과 배경/갈등 무게감을 분리 설계하고, `SessionArchitectService` 내부 하드코딩 프롬프트 전수를 무인격 기능 명세(`Domain` & `Task` + `Output Language: Korean`), 2계층 스키마 계약(1계층 TypeScript `interface` + 2계층 `ResponseSchema`), 긍정 프레이밍(Affirmative Framing), `<final_instruction>` 종결 구조로 표준화.
+- **로어북 마이크로 배치 병렬 합성 및 구조적 1줄 명사구 압축 (`GenerateLorebooksInParallelAsync`)**: `LorebookPlan`을 최대 3개 단위의 마이크로 배치로 분할하여 `Task.WhenAll` + `ModelTier.Pro`로 병렬 생성함으로써 출력 압축을 원천 차단하고, 추론 예산을 낭비하는 명시적 글자 수(`N자 이내`) 숫자 강제 대신 **구조적 슬롯 바운딩(지정된 하위 불릿 × 각 불릿당 1줄 명사구 개조식) 및 Few-Shot 길이 앵커링**을 적용하여 토큰 소모량을 약 65% 절감함과 동시에 우선순위 오름차순 규격(`0~3`, `0`이 최우선) 및 인물 대표 대사 샘플(`"..."` 2개)을 강제.
+- **C# 결정론적 슬롯 정제기 및 코드 하이브리드 `SystemPrompt` 컴파일러**: `SanitizeWorldview`, `SanitizeLorebookContent`, `SanitizeStatusGuide`, `SanitizeScenario`를 통해 불필요한 XML 태그, 마크다운 헤더(`#`), 볼드(`**`) 오염을 물리적으로 제거하고, `CompileHybridSystemPrompt`에서 스탯 지침을 완전 배제(Zero-Numeric)한 채 코어 5대 행동 헌법과 장르 연출 디렉팅을 결합.
+- **Turn 0 `ChapterContext` 시딩 및 자동 모드 스포일러 프리 UX (`SessionArchitectViewModel.cs`)**: `StatusDesignPayload`를 통해 초기 등장인물(`InitialChars`, `[초기: ...]` 포맷), 시작 장소(`InitialPlaces`), 소지품(`InitialItems`)을 Turn 0에 즉시 시딩하고, `IsAutoMode`(기본값 `true`) 실행 시 채팅창에는 스포일러 없는 단계별 완료 요약만 표시하도록 개선 (`dotnet test GRC.sln` 단위 테스트 131/131 및 Pro 통합 테스트 통과).
+
+
