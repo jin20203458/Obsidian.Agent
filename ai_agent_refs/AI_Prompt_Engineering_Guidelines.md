@@ -1,5 +1,5 @@
 ---
-description: 2024-2026 학술 연구 및 최신 프론티어 특화 모델(Gemini 3.8 Flash, Claude 5.5) 공식 가이드 기반 AI 프롬프트 엔지니어링 통합 표준 지침서.
+description: 2024-2026 학술 연구 및 최신 프론티어 특화 모델(Gemini 3.8 Flash, Gemini 4 Argon, Claude 5.5) 공식 가이드 기반 AI 프롬프트 엔지니어링 통합 표준 지침서.
 related:
   - ../README.md
   - ./AI_Prompt_Engineering_References.md
@@ -144,26 +144,28 @@ LLM은 텍스트 추론 기반 산술 연산에서 2~15%의 체계적 오류를 
 * **핵심 규칙 (Omit or Lock to `1.0`)**:
   * **API 페이로드에서 샘플링 파라미터 생략(Omit) 또는 `temperature: 1.0` 기본값 유지**: `temperature`, `top_p`, `top_k`, `presence_penalty`, `frequency_penalty` 등 레거시 샘플링 파라미터는 API 요청 시 아예 등록하지 않거나(Omit) 기본값(`1.0`)으로 두어야 합니다. (서드파티 SDK/프레임워크가 기본값으로 `temperature: 0.0` 등을 자동 주입하지 않도록 주의).
 * **벤더별 공식 제약 및 기술적 근거**:
-  * **Google Gemini (Gemini 3 / 3.8 패밀리)**: 내부 추론(Thinking process) 경로가 `temperature: 1.0`에 맞춰 최적화되어 있으며, 결정론적 출력을 얻겠다며 `1.0` 미만(`0.0` 등)으로 낮추면 복합 과제에서 **추론 성능 급락 및 무한 토큰 생성 루프(Infinite Loop)**가 발생합니다.
+  * **Google Gemini (Gemini 3.8 Flash / Gemini 4 Argon 패밀리)**: 내부 추론(Thinking process) 경로가 기본 엔트로피(`temperature: 1.0`)에 맞춰 설계되었으며, 최신 API에서는 `temperature`, `top_p`, `top_k` 등 레거시 샘플링 파라미터가 백엔드에서 무시(Deprecated/Ignored)되거나 `1.0` 미만(`0.0` 등) 강제 시 복합 과제에서 **추론 성능 급락 및 무한 토큰 생성 루프(Infinite Loop)**가 발생합니다.
   * **Anthropic Claude (Extended / Adaptive Thinking)**: 추론 활성화 시 `temperature`, `top_p`, `top_k`에 비기본값을 전달하면 API 레벨에서 즉시 **`400 Invalid Request Error`**를 반환합니다(반드시 생략하거나 `temperature: 1.0` 유지).
-  * **대체 제어 수단**: 출력의 엄밀성과 탐색 깊이는 샘플링 온도가 아니라 제2.3절의 **스키마 계약(Structured Outputs)** 및 제2.8절의 **사고 예산 파라미터(`thinking_level`, `budget_tokens`)**로만 제어합니다.
+  * **대체 제어 수단**: 출력의 엄밀성과 탐색 깊이는 샘플링 온도가 아니라 제2.3절의 **스키마 계약(Structured Outputs)** 및 제2.8절의 **사고 깊이/예산 파라미터(`thinking_level`, `output_config.effort`, `reasoning_effort`)**로만 제어합니다.
 
-### 2.8 원칙 8: 하이브리드 추론(Thinking) 모델 프롬프트 전략 & Thinking Budget 제어
+### 2.8 원칙 8: 하이브리드 추론(Thinking) 모델 프롬프트 전략 & Thinking Effort 제어
 사고 과정 메커니즘이 내장된 모델에게는 **"어떻게 생각할 것인가(HOW)"를 지시하지 말고, "달성 목표(WHAT)"와 "검증 기준(Verification Criteria)"을 명확히 제시**해야 합니다.
 
 * **실전 규칙**:
   * **Zero-shot 우선 원칙**: 추론 모델에게는 장황한 Few-shot 대신, 명확한 목표와 제약 조건(Constraints)만 전달하는 것이 가장 높은 벤치마크 점수를 기록.
   * **수동 CoT 문구 전면 제거 및 비간섭 경계**: "단계별로 차근차근 생각하세요" 문구 완전 배제. 단, 공식 가이드(OpenAI/Anthropic)의 "Don't micromanage"는 추론 경로(CoT)의 자율성 보장을 의미하며, 서사/스타일 방향성 통제(제2.16절)를 포기하라는 의미가 아님에 유의.
   * **검증 기준(Verification Criteria) 제시**: 사고 방식을 규정하는 대신, "최종 출력을 내놓기 전에 제약조건 A, B, C를 만족하는지 자체 검증하십시오"와 같은 검증 지침 부여.
-  * **모델별 사고 예산 제어 (Thinking Budget & Level)**:
-    - **Google (Gemini 3.8 Flash)**:
-      * `thinking_level` 파라미터 제어: `"LOW"` (단순 내비게이션/텍스트 추출), `"MEDIUM"` (기본값: 다단계 웹 탐색 및 코딩), `"HIGH"` (복합 트랜잭션/보안/심층 에이전트).
-      * *(주의: 레거시 3.7 시절의 `"MINIMAL"`은 폐기되었으므로 사용 금지).*
+  * **모델별 사고 깊이/예산 제어 (Thinking Level & Effort)**:
+    - **Google (Gemini 3.8 Flash & Gemini 4 Argon)**:
+      * `thinking_level` 파라미터 제어: `"LOW"` (단순 내비게이션/텍스트 추출/저지연 처리), `"MEDIUM"` (기본값: 표준 코딩 및 다단계 에이전트 워크플로우), `"HIGH"` (심층 소프트웨어 엔지니어링, 아키텍처 설계, 복합 논리/보안 감사).
+      * **Gemini 4 Argon 출력 토큰 헤드룸(`max_output_tokens`) 보장**: Gemini 4 Argon(`"HIGH"` 모드 등)은 심층 문제 해결 시 대규모 내부 추론 토큰을 소모하므로, `max_output_tokens`를 너무 낮게 설정하면 추론 중 예산이 고갈되어 빈 응답(Empty response)이 반환될 수 있습니다(복합 과제 시 최소 32,768 이상 또는 충분한 출력 한도 확보 필수).
+      * *(주의: 레거시 3.7 시절의 `"MINIMAL"`은 폐기되었으므로 사용 시 API 검증 에러가 발생함).*
     - **Anthropic (Claude Sonnet 5.5 / Opus 5.5)**:
-      * Adaptive Thinking 기본 지원 및 API 레벨 `budget_tokens` (1,024 ~ 128,000) 바운딩:
-        - 단순/경량 작업: 1,024 토큰
-        - 코딩/복합 논리: 4,096 ~ 8,192 토큰
-        - 시스템 아키텍처/심층 연구: 16,384+ 토큰
+      * **Adaptive Thinking 기본 활성화 (`thinking: { type: "adaptive" }`)** 및 `output_config.effort` 파라미터 기반 추론 깊이 제어:
+        - `"low"`: 단순 분류, 포맷 변환, 경량 작업
+        - `"medium"`: 일반 다단계 추론 및 표준 코딩 작업
+        - `"high"` / `"xhigh"` / `"max"`: 복잡한 시스템 아키텍처 설계, 심층 보안 감사, 장기 에이전트 워크플로우
+      * *(주의: Claude 5.5 패밀리에서는 레거시 3.7~4.x 시절의 수동 예산 설정인 `thinking: { type: "enabled", budget_tokens: N }`이 완전히 폐기되어 전달 시 즉시 `400 invalid_request_error`가 발생함).*
 
 ### 2.9 원칙 9: 프롬프트 캐싱(Prompt Caching / KV Cache) 아키텍처 및 정적 접두사 설계
 프롬프트의 물리적 배치는 단순한 어텐션 집중뿐 아니라 **API 비용 및 지연시간을 50~90% 절감하는 프롬프트 캐싱(KV Cache)**의 성패를 결정짓는 핵심 아키텍처 요소입니다.
@@ -176,7 +178,7 @@ LLM은 텍스트 추론 기반 산술 연산에서 2~15%의 체계적 오류를 
   5. **누적 대화 맥락 (`<conversation_history>`)**: 이전 턴들의 대화 기록 (턴 단위로 캐시 연장).
   6. **동적 사용자 현재 입력 및 최종 지시 (`<user_input>`, `<final_instruction>`)**: 매 턴마다 새로 유입되는 동적 데이터는 반드시 **프롬프트 맨 마지막**에 배치.
 * **Cache-Busting (캐시 무효화) 방지 절대 규칙**:
-  * 상단 정적 접두사 영역에 현재 시간(Timestamp), 임의의 세션 고유 ID, 랜덤 시드, 또는 딕셔너리 직렬화 시 키 순서가 바뀌는 가변 텍스트를 절대 삽입하지 말 것. 단 1글자나 공백 1개가 달라져도 뒤따르는 수만 토큰의 캐시가 전면 무효화됩니다.
+  * 상단 정적 접두사 영역에 현재 시간(Timestamp), 임의의 세션 고유 ID, 랜덤 시드, 또는 딕셔너리 직렬화 시 키 순서가 바뀌는 가변 텍스트를 절대 삽입하지 말 것. 단 1글자나 공백 1개가 달라져도 뒤따르는 수만 토큰의 캐시가 전면 무효화됩니다(Gemini 3.8 Flash 및 Gemini 4 Argon의 자동 암묵적 캐싱(Implicit Caching, 최소 4,096 토큰 임계치) 역시 상단 정적 접두사 일치를 전제로 최대 90% 비용 절감이 작동함).
 
 ### 2.10 원칙 10: 부정 지시문 처리 원칙 (Negative Prompting & Affirmative Framing)
 "~하지 마시오" 형태의 금지 명령은 모델의 어텐션을 금지 대상에 집중시켜 오히려 실수를 유발(흰 곰 효과 / Pink Elephant Problem)하므로, 실행 가능한 **긍정 지시문(Affirmative Framing: ~하시오)**으로 변환해야 합니다.
@@ -372,7 +374,7 @@ LLM은 텍스트 추론 기반 산술 연산에서 2~15%의 체계적 오류를 
 + </user_input>
 ```
 
-* **원리 및 근거**: 마크다운 헤더(`#`)나 수평선(`---`)은 텍스트 파싱 수준의 기호에 불과하여 사용자 입력값 속에 `--- \n # 새로운 시스템 명령` 같은 문자열이 포함될 경우 모델이 시스템 지시로 오인(20% 이상 침투 취약성)합니다. 반면 XML 태그는 인젝션 방어율 100%를 보여 시스템 경계 분리에 필수적입니다.
+* **원리 및 근거**: 마크다운 헤더(`#`)나 수평선(`---`)은 닫힌 경계 쌍(Paired boundary)이 없는 열린 기호에 불과하여, 사용자 입력값 속에 `--- \n # 새로운 시스템 명령` 같은 트로이 목마 구분자가 주입될 경우 취약 모델(예: MiniMax M2.5 스트레스 테스트에서 20% 침투 실패율 실측)이 시스템 지시로 오인할 위험이 있습니다. 반면 닫힌 구조인 XML 태그는 전 모델에서 인젝션 방어율 100%를 달성하므로 시스템 경계 분리에 필수적입니다.
 
 ---
 
