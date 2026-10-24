@@ -440,5 +440,40 @@ related:
 - **핵심 부정 제약 (Never use X)**:
   - **절대 시스템 프롬프트의 GM 연출 지침(`genreDirectives`, `worldviewOutline`)에 유저 캐릭터(PC)의 성격, 태도, 감정, 살기 표출, 무력 사용 여부를 기정사실화하는 명령문을 포함하지 말 것.**
 
+---
+
+## 2026-10-24: [Resolved] Session Architect 2.0 5대 잔여 구조·토큰·런타임 바인딩 결함 정밀 교정
+
+### 1. 현상 (Symptom)
+1. **`<master_setting>`(`worldviewOutline`) 평탄화**: LLM이 JSON 문자열 내에서 4대 번호 섹션과 하위 하이픈 불릿을 줄바꿈(`\n`) 없이 공백으로 이어붙여 1,100자 단일 줄로 평탄화하여 서사 GM 가독성 저하.
+2. **`BiTemporalEntityProjector` 인물-수치 바인딩 실패**: `<entity_relationship>`에 인물 호감도/신뢰도가 결합되지 않고 `<current_state>`의 `주요 수치`에 고립 잔류 (예: `Chars["엘레나 발렌타인"]` vs `CustomStats["엘레나 발렌타인 신뢰도"]` 키 불일치).
+3. **`<master_setting>` vs `lorebookPlan` 토큰 이중 주입**: 거시 세계관 법칙이 상시 주입되는 `<master_setting>`에 이미 존재함에도, `Priority 0~1`의 `세계관` 로어북으로 중복 생성되어 매 턴 약 750토큰 이상 이중 낭비.
+4. **비단일 개체 복합 명칭 및 비휴대 무구의 인벤토리 등록**: 로어북에 `"봉인된 흑철 대검과 은빛 알껍질"`처럼 2개 개체가 묶이고, 오프닝 씬에서 지하실에 봉인되어 꺼낼 수 없는 무구가 Turn 0 `initialItems`에 포함됨.
+5. **Turn 0 인물 상태 태도 장문 중복**: `initialChars`의 `value`에 40자 이상의 장문 서사 설명이 작성되어 `<world_lore>`의 `* PC 관계` 프로필과 중복 토큰 낭비.
+
+### 2. 원인 (Root Cause)
+- 프롬프트 지시문의 `"1줄 개조식"` 표현을 모델이 단일 줄 평탄화로 오인했으며 C# 정제기에 줄바꿈 복원 정규식이 부재함.
+- `MemoryManagerService.cs`가 `CustomStats.TryGetValue(charName)` 단일 일치만 수행하고 `CustomStats`, `Items`, `Places`를 `CognitiveContext`로 온전히 전달하지 못함.
+- 프롬프트에서 상시 제공되는 `<master_setting>`과 조건부 인출되는 `lorebookPlan`의 명확한 역할 분리 및 단일 개체 원칙이 결여됨.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+1. **`SanitizeWorldview` 결정론적 줄바꿈 복원 엔진 (`SessionArchitectService.cs`)**:
+   - `(?<!^)(?<!\r?\n)\s+(?=[1-9]\.\s+[가-힣a-zA-Z])` $\to$ `\n\n` (번호 섹션 헤더 앞 줄바꿈 강제)
+   - `(?<!^)(?<!\r?\n)\s+-\s+(?=[가-힣a-zA-Z0-9()·/_\s]{2,35}:\s)` $\to$ `\n- ` (하이픈 불릿 앞 줄바꿈 강제)
+2. **인물-수치 2단계 프리픽스 매칭 및 중복 제거 (`MemoryManagerService.cs`)**:
+   - 1단계 Exact Match 실패 시 2단계 Prefix Match(`charName` 또는 `firstWord` 접두사 검사)를 통해 `"엘레나 발렌타인 신뢰도"`에서 접미사 `"신뢰도"`를 추출하여 `(신뢰도: 60/100)`으로 엔티티 슬롯에 직결.
+   - 바인딩된 스탯 키를 `matchedStatKeys`로 추적하여 `remainingCustomStats`에서 제외함으로써 `<current_state>`의 `주요 수치` 내 중복 노출을 100% 제거.
+   - `remainingCustomStats`, `itemsSnapshot`, `placesSnapshot`을 `new CognitiveContext(...)`로 무손실 전달.
+3. **거시 법칙 vs 미시 개체 역할 분리 및 1개체 1항목 원칙 (`GeneratePlanAsync`)**:
+   - `worldviewOutline`(`<master_setting>`)이 세계 거시 법칙을 상시 전담하므로 `lorebookPlan`에서 중복 '세계관' 작성을 금지하고 조건부 인출 대상(인물, 단일 장소, 단일 무구, 고유 세부 사건)만을 전담하도록 분리.
+   - 1항목 1개체 원칙을 강제하여 `"A와 B"` 식의 복합 명칭 엄격 금지.
+4. **현장 휴대 소지품 한정 및 감정 키워드 압축 (`StatusGen`)**:
+   - `initialItems`는 오프닝 현장에서 몸에 직접 휴대/착용 중인 물품으로만 한정(지하실/창고 등 격리 보관물 제외).
+   - `initialChars.value`의 태도 기술을 2~4어절의 핵심 감정 키워드로 압축(`초기 태도(경계와 호기심)`)하여 마이크로 토큰 낭비 제거.
+5. **수치 클램핑 및 가이드 XML 순수화 (`MemoryManagerService.cs`)**:
+   - `UpdateContextStatus`에서 `"120/100"`, `"-15/100"` 등 범위형 게이지를 `0~max`로 즉시 클램핑(`ClampGaugeValue`).
+   - `BuildStatusRequest`의 `statusUpdateGuide`를 순수 XML 태그(`<custom_rules>...</custom_rules>`)로 주입하고 구형 `[CUSTOM_RULES]` 의사 태그 완전 제거.
+
+
 
 
