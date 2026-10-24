@@ -137,10 +137,10 @@ flowchart TB
 
 `[IMPLEMENTED]` 6단계 스테이트 머신은 [SessionArchitectService.cs](../../../GRC/GRC/Services/SessionArchitectService.cs)에 구현되어 있습니다.
 
-*   **상태 기계(State Machine)**: 기획(Planning) → 세계관 → 로어북 → 스탯 → 초기 시나리오 → GM 지시문으로 이어지는 단계별 컨텍스트 상속 모델을 구축했습니다.
+*   **상태 기계(State Machine)**: 기획(그물망 청사진) → 세계관 → 로어북(2-Wave 인과 생성: 무대/장소 선행 후 인물/상호 관계망 후행) → 초기 시나리오(선행 집필) → 스탯 및 Turn 0 컨텍스트(오프닝 기반 정밀 추출 및 인물 Key 정규화) → GM 지시문(전수 컨텍스트 통합 컴파일)으로 이어지는 단방향 인과 누적 파이프라인을 구축했습니다. 세션 최종 적용 시 [LorebookService.cs](../../../GRC/GRC/Services/LorebookService.cs)는 런타임 쿼리와 동일한 대칭 공간(`SEMANTIC_SIMILARITY`)으로 768차원 임베딩을 순서 보장형 병렬 발급합니다.
 *   **AI 감사관 자가 검수(Self-Review)**:
     자동 모드를 켜면, 매 단계가 끝날 때마다 또 다른 내부 AI(Auditor)가 생성된 JSON 규격과 개연성을 검사합니다.
-    오류가 발견되면 `{ "pass": false, "issues": "문제 사유" }`를 반환하며, 이 사유를 바탕으로 `ReviseContentAsync`를 호출해 인간의 개입 없이 코드를 스스로 수정하고 다음 단계로 전진합니다.
+    오류가 발견되면 `{ "pass": false, "issues": "문제 사유", "targetNames": ["항목명"] }`를 반환하며, 로어북의 경우 전체 배열 재작성으로 인한 밀도 손실(Lazy Compression)을 막기 위해 지목된 항목만 마이크로 배치(`batchSize = 3`)로 재생성·병합하는 외과수술식 보정(`ReviseLorebooksSurgicallyAsync`)을 수행하고 다음 단계로 전진합니다.
 
 </session_architect>
 

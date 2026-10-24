@@ -390,4 +390,30 @@ related:
 - **C# 결정론적 슬롯 정제기 및 코드 하이브리드 `SystemPrompt` 컴파일러**: `SanitizeWorldview`, `SanitizeLorebookContent`, `SanitizeStatusGuide`, `SanitizeScenario`를 통해 불필요한 XML 태그, 마크다운 헤더(`#`), 볼드(`**`) 오염을 물리적으로 제거하고, `CompileHybridSystemPrompt`에서 스탯 지침을 완전 배제(Zero-Numeric)한 채 코어 5대 행동 헌법과 장르 연출 디렉팅을 결합.
 - **Turn 0 `ChapterContext` 시딩 및 자동 모드 스포일러 프리 UX (`SessionArchitectViewModel.cs`)**: `StatusDesignPayload`를 통해 초기 등장인물(`InitialChars`, `[초기: ...]` 포맷), 시작 장소(`InitialPlaces`), 소지품(`InitialItems`)을 Turn 0에 즉시 시딩하고, `IsAutoMode`(기본값 `true`) 실행 시 채팅창에는 스포일러 없는 단계별 완료 요약만 표시하도록 개선 (`dotnet test GRC.sln` 단위 테스트 131/131 및 Pro 통합 테스트 통과).
 
+---
+
+## 2026-10-24: [Resolved] Session Architect 2.0 유기적 그물망(Mesh) 파이프라인 및 코어 3대 GM 수칙 개편
+
+### 1. 현상 (Symptom)
+- **그물망 결속력 단절**: 로어북 항목들이 서로를 모른 채 병렬 생성되어 인물 간 상호작용 및 무대 배경 참조가 누락되고, 오프닝 시나리오 작성 전에 상태창/초기 배치가 먼저 생성되어 본문 내용과 Turn 0 시딩 데이터(`initialChars`, `initialPlaces`) 간 괴리가 발생. 로어북 검수 반려 시 전체 배열을 재작성하여 오히려 밀도가 떨어지는 현상 발생.
+- **반플레이어 편향(Anti-Player Bias) 및 마이크로 스톨링**: 구버전 프롬프트 수칙 4번("작위적 성공 배제. 인물의 가치관에 어긋날 시 거절·경계 반응을 보일 것")으로 인해 일반인 NPC가 살인마 빌런 PC를 물리적으로 제압해버리는 등 세계관 무력/역량 격차를 무시한 억지 실패 유발. 또한 수칙 3번("시간 임의 요약 금지. 단일 사건 직후 즉시 멈출 것")으로 인해 유저가 명시적으로 시간 경과를 요구해도 대화가 정체되는 마이크로 스톨링 발생.
+
+### 2. 원인 (Root Cause)
+- **단방향 인과 순서 역전**: 시나리오보다 상태창이 선행 집필되었고, 배경 인프라 확정 전에 인물이 병렬 생성되어 무대 묘사를 흡수하지 못함.
+- **구형 가드레일의 역효과**: 초기 LLM의 무조건적 예스맨 현상을 막기 위해 삽입했던 적대적 가드레일이 고성능 추론 모델(Gemini Pro)에서 '유저 행동 무조건 방해 및 억지 실패'로 과보정됨.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+1. **단방향 인과 누적 6단계 그물망 파이프라인 구축 (`SessionArchitectService.cs`)**:
+   - 1단계(청사진 `connectedEntities` 명시) → 2단계(세계관) → 3단계(2-Wave 인과 로어북: Wave 1 배경 선행 확정 후 Wave 2 인물 후행 생성) → 4단계(오프닝 시나리오 선행 집필) → 5단계(오프닝 기반 Turn 0 상태창 정밀 추출 및 `NormalizeInitialCharKeys` 키 정규화) → 6단계(전수 통합 시스템 지시문).
+2. **외과수술식 로어북 핀포인트 보정 (`ReviseLorebooksSurgicallyAsync`)**:
+   - 감사관이 지목한 결함 항목(`targetNames`)만 마이크로 배치(`batchSize = 3`)로 정밀 재생성하여 기존 배열에 병합함으로써 무손실 정합성 보장.
+3. **불변 코어 GM 헌법 3대 수칙 통합 및 역량 기반 현실적 인과율 정립 (`CoreSystemDirectivesHeader`)**:
+   - 1번(오감 중심 물리적 객관 서술)
+   - 2번(PC 대사·행동 대신 서술 금지 및 자연스러운 턴 양도 — 마이크로 스톨링 해소)
+   - 3번(작위적 주인공 보정과 억지 실패 보정을 모두 배제하고, 당사자 간의 실제 역량·무력·상황 격차와 인물 가치관에 부합하는 현실적 인과율 판정 — 반플레이어 편향 원천 차단)
+   - 6단계 세션 특화 수칙 번호를 4번·5번으로 정렬하고 `CompileHybridSystemPrompt` 정규식 필터(`^[1-3]`) 및 시작 번호(`nextNumber = 4`) 동기화.
+4. **핵심 부정 제약 (Never use X)**:
+   - **절대 NPC에게 무조건적인 적대나 억지 저항을 지시하는 인위적 실패 가드레일을 주입하지 말 것.**
+   - **절대 로어북 수정 시 전체 배열을 단일 프롬프트로 재작성하지 말 것.** 반드시 `ReviseLorebooksSurgicallyAsync`를 통해 지목된 항목만 마이크로 배치로 수정할 것.
+
 
