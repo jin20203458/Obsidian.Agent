@@ -133,14 +133,17 @@ flowchart TB
 
 ## 4. AI Session Architect (자율 저작 에이전트)
 
-유저가 기획서를 작성할 필요 없이, 키워드 한 줄만으로 TRPG 세션을 빌드해 주는 6단계 에이전트입니다.
+유저가 기획서를 작성할 필요 없이, 키워드 한 줄만으로 TRPG 세션을 빌드해 주는 `Gemini 4 Argon` (`ThinkingLevel.high`, `ArchitectMaxOutputTokens = 32768`) 최적화 4단계(총 5회 API 호출) 에이전트입니다.
 
-`[IMPLEMENTED]` 6단계 스테이트 머신은 [SessionArchitectService.cs](../../../GRC/GRC/Services/SessionArchitectService.cs)에 구현되어 있습니다.
+`[IMPLEMENTED]` 4단계 통합 스테이트 머신은 [SessionArchitectService.cs](../../../GRC/GRC/Services/SessionArchitectService.cs) 및 [SessionArchitectViewModel.cs](../../../GRC/GRC/ViewModels/SessionArchitectViewModel.cs)에 구현되어 있습니다.
 
-*   **상태 기계(State Machine)**: 기획(그물망 청사진) → 세계관 → 로어북(2-Wave 인과 생성: 무대/장소 선행 후 인물/상호 관계망 후행) → 초기 시나리오(선행 집필) → 스탯 및 Turn 0 컨텍스트(오프닝 기반 정밀 추출 및 인물 Key 정규화) → GM 지시문(전수 컨텍스트 통합 컴파일)으로 이어지는 단방향 인과 누적 파이프라인을 구축했습니다. 세션 최종 적용 시 [LorebookService.cs](../../../GRC/GRC/Services/LorebookService.cs)는 런타임 쿼리와 동일한 대칭 공간(`SEMANTIC_SIMILARITY`)으로 768차원 임베딩을 순서 보장형 병렬 발급합니다.
-*   **AI 감사관 자가 검수(Self-Review)**:
-    자동 모드를 켜면, 매 단계가 끝날 때마다 또 다른 내부 AI(Auditor)가 생성된 JSON 규격과 개연성을 검사합니다.
-    오류가 발견되면 `{ "pass": false, "issues": "문제 사유", "targetNames": ["항목명"] }`를 반환하며, 로어북의 경우 전체 배열 재작성으로 인한 밀도 손실(Lazy Compression)을 막기 위해 지목된 항목만 마이크로 배치(`batchSize = 3`)로 재생성·병합하는 외과수술식 보정(`ReviseLorebooksSurgicallyAsync`)을 수행하고 다음 단계로 전진합니다.
+*   **4단계 통합 상태 기계(4-Stage Consolidated State Machine)**:
+    1. **1단계 (청사진 및 마스터 세계관 통합 — 1회 호출)**: `<master_setting>` 전용 4대 번호 섹션 개조식 마스터 세계관(`worldviewOutline`)과 8~15개 그물망 로어북 기획(`connectedEntities`)을 단일 추론 공간에서 공동 설계(Co-Design)합니다.
+    2. **2단계 (2-Wave 통합 앙상블 로어북 — 2회 호출)**: 인위적인 마이크로 배치 분할(`batchSize = 3`) 없이, Wave 1에서 모든 비인물(장소·세계관·아이템) 무대 인프라를 1회 통합 호출로 먼저 확정한 뒤, Wave 2에서 확정된 무대 전문(`<established_world_lore>`) 위에서 모든 등장인물 전원을 1회 통합 앙상블 캐스팅 호출로 동시 생성하여 말투 스펙트럼 대비와 양방향 관계망을 직조합니다.
+    3. **3단계 (오프닝 시나리오 선행 집필 — 1회 호출)**: JSON 이스케이프 및 개조식 문체 전이(Style Bleed)를 차단하기 위해 독립된 `text/plain` 문학 산문 모드로 첫 직면 장면을 집필합니다.
+    4. **4단계 (상태창·Turn 0 시딩 및 시스템 지시문 통합 — 1회 호출 + C# 하이브리드 컴파일러)**: 완성된 오프닝 본문(`<opening_scenario>`)을 기반으로 초기 스탯(`stats`), 수치 갱신 가이드(`guide`), Turn 0 초기 컨텍스트(`initialChars`/`initialPlaces`/`initialItems`, 인물 Key 정규화 포함), 그리고 세션 특화 비수치 GM 수칙 4·5번(`genreDirectives`)을 단일 JSON으로 추출하고 `CompileHybridSystemPrompt`를 통해 코어 3대 헌법(`CoreSystemDirectivesHeader`)과 즉시 결합합니다. 세션 최종 적용 시 [LorebookService.cs](../../../GRC/GRC/Services/LorebookService.cs)는 런타임 쿼리와 동일한 대칭 공간(`SEMANTIC_SIMILARITY`)으로 768차원 임베딩을 순서 보장형 병렬 발급합니다.
+*   **100% C# 결정론적 무결성 관문 및 외과수술식 보정(`ReviewStepContentAsync` & `ReviseLorebooksSurgicallyAsync`)**:
+    기존 단계별 LLM 자가 감사 재호출로 인한 자기강화 환각 및 토큰 낭비를 전면 제거하고, C# 파서와 정규식 기반의 즉시 결정론적 검수 관문(API 호출 0회)을 가동합니다. 기획된 로어북 항목 누락이나 인물 필수 대사(`"..."`) 누락 등 객관적 구조 결함이 적발되었을 때만 `[수정 대상: 항목명]` 태그를 생성하여 해당 항목만 핀포인트로 재생성·병합합니다.
 
 </session_architect>
 

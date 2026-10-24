@@ -392,28 +392,29 @@ related:
 
 ---
 
-## 2026-10-24: [Resolved] Session Architect 2.0 유기적 그물망(Mesh) 파이프라인 및 코어 3대 GM 수칙 개편
+## 2026-10-24: [Resolved] Session Architect 2.0 4단계 통합 파이프라인, Gemini 4 Argon 최적화 및 코어 3대 GM 수칙 개편
 
 ### 1. 현상 (Symptom)
-- **그물망 결속력 단절**: 로어북 항목들이 서로를 모른 채 병렬 생성되어 인물 간 상호작용 및 무대 배경 참조가 누락되고, 오프닝 시나리오 작성 전에 상태창/초기 배치가 먼저 생성되어 본문 내용과 Turn 0 시딩 데이터(`initialChars`, `initialPlaces`) 간 괴리가 발생. 로어북 검수 반려 시 전체 배열을 재작성하여 오히려 밀도가 떨어지는 현상 발생.
+- **Flash 시절 6단계 파이프라인 및 레거시 병목 잔존**: 과거 `Flash` 모델의 출력 한계를 보완하기 위해 만든 6단계 분할 구조(1단계 기획과 2단계 세계관 중복, 5단계 상태창과 6단계 2줄 GM 수칙 분리), `maxOutputTokens: 8192` 하드코딩, `batchSize = 3` 인위적 로어북 조각 분할, 단계별 LLM 감사관 재호출이 `Gemini 4 Argon` (`ThinkingLevel.high`)의 거시적 통합 추론과 앙상블 캐스팅을 저해하고 불필요한 API 왕복(11~13회)을 유발.
 - **반플레이어 편향(Anti-Player Bias) 및 마이크로 스톨링**: 구버전 프롬프트 수칙 4번("작위적 성공 배제. 인물의 가치관에 어긋날 시 거절·경계 반응을 보일 것")으로 인해 일반인 NPC가 살인마 빌런 PC를 물리적으로 제압해버리는 등 세계관 무력/역량 격차를 무시한 억지 실패 유발. 또한 수칙 3번("시간 임의 요약 금지. 단일 사건 직후 즉시 멈출 것")으로 인해 유저가 명시적으로 시간 경과를 요구해도 대화가 정체되는 마이크로 스톨링 발생.
 
 ### 2. 원인 (Root Cause)
-- **단방향 인과 순서 역전**: 시나리오보다 상태창이 선행 집필되었고, 배경 인프라 확정 전에 인물이 병렬 생성되어 무대 묘사를 흡수하지 못함.
-- **구형 가드레일의 역효과**: 초기 LLM의 무조건적 예스맨 현상을 막기 위해 삽입했던 적대적 가드레일이 고성능 추론 모델(Gemini Pro)에서 '유저 행동 무조건 방해 및 억지 실패'로 과보정됨.
+- **현상 유지 편향(Status-Quo Bias) 및 레거시 제약**: `gemini-4-argon` (`ThinkingLevel.high`)은 내부 추론 토큰을 `max_output_tokens` 예산에서 차감하므로 `32,768` 이상의 헤드룸이 필요함에도 `8192`로 묶여 있었고, 4~6명의 등장인물을 3명씩 쪼개어 병렬 호출함에 따라 전체 인물의 말투 대비와 다각 관계망을 한 번에 조망하지 못함. 또한 동일 모델에게 자가 검수를 맡기는 LLM 재호출이 자기강화 환각과 지연을 유발.
+- **구형 가드레일의 역효과**: 초기 LLM의 무조건적 예스맨 현상을 막기 위해 삽입했던 적대적 가드레일이 고성능 추론 모델에서 '유저 행동 무조건 방해 및 억지 실패'로 과보정됨.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-1. **단방향 인과 누적 6단계 그물망 파이프라인 구축 (`SessionArchitectService.cs`)**:
-   - 1단계(청사진 `connectedEntities` 명시) → 2단계(세계관) → 3단계(2-Wave 인과 로어북: Wave 1 배경 선행 확정 후 Wave 2 인물 후행 생성) → 4단계(오프닝 시나리오 선행 집필) → 5단계(오프닝 기반 Turn 0 상태창 정밀 추출 및 `NormalizeInitialCharKeys` 키 정규화) → 6단계(전수 통합 시스템 지시문).
-2. **외과수술식 로어북 핀포인트 보정 (`ReviseLorebooksSurgicallyAsync`)**:
-   - 감사관이 지목한 결함 항목(`targetNames`)만 마이크로 배치(`batchSize = 3`)로 정밀 재생성하여 기존 배열에 병합함으로써 무손실 정합성 보장.
+1. **4단계 통합 파이프라인 개편 (`SessionArchitectService.cs`, `SessionArchitectViewModel.cs`, `SessionArchitectWindow.xaml`)**:
+   - **1단계 (청사진 및 마스터 세계관 통합 — 1회 호출)**: `AgentPlan.WorldviewOutline`에 `<master_setting>`용 4대 번호 섹션 개조식 레퍼런스를 직접 작성하도록 통합하여 거시 세계관과 8~15개 미시 로어북 기획(`connectedEntities`)을 단일 추론 공간에서 공동 설계.
+   - **2단계 (2-Wave 통합 앙상블 로어북 — 2회 호출)**: `batchSize = 3` 분할을 폐기하고, Wave 1에서 비인물 무대 인프라 전체를 1회 호출로 확정한 뒤, Wave 2에서 확정된 무대 전문(`<established_world_lore>`) 위에서 모든 등장인물 전원을 1회 통합 앙상블 캐스팅 호출로 동시 생성.
+   - **3단계 (오프닝 시나리오 선행 집필 — 1회 호출)**: JSON 이스케이프 및 개조식 문체 전이(Style Bleed) 방지를 위해 독립된 `text/plain` 산문 모드로 집필.
+   - **4단계 (상태창·Turn 0 시딩 및 시스템 지시문 통합 — 1회 호출 + C# 컴파일러)**: 오프닝 본문 기반 초기 스탯(`stats`), 수치 갱신 가이드(`guide`), Turn 0 컨텍스트(`initialChars`/`initialPlaces`/`initialItems`, `NormalizeInitialCharKeys` 키 정규화), 그리고 세션 특화 비수치 GM 수칙 4·5번(`genreDirectives`)을 단일 `StatusDesignPayload` JSON으로 추출 후 `CompileHybridSystemPrompt`로 즉시 결합 (총 API 호출 11~13회 $\to$ 5회로 단축).
+2. **`ArchitectMaxOutputTokens = 32768` 상수 일원화 및 100% C# 결정론적 검수 관문 (`ReviewStepContentAsync`)**:
+   - 아키텍트 전 단계의 `maxOutputTokens`를 `32768`로 상향하여 `ThinkingLevel.high` 추론 깊이 확보.
+   - LLM 자가 감사 호출 및 `ReviewResponseSchema`를 전면 삭제하고, C# 파서·정규식 기반의 결정론적 무결성 관문(API 호출 0회)으로 전환하여 결함 적발 시에만 `ReviseLorebooksSurgicallyAsync` 핀포인트 재생성 수행.
 3. **불변 코어 GM 헌법 3대 수칙 통합 및 역량 기반 현실적 인과율 정립 (`CoreSystemDirectivesHeader`)**:
-   - 1번(오감 중심 물리적 객관 서술)
-   - 2번(PC 대사·행동 대신 서술 금지 및 자연스러운 턴 양도 — 마이크로 스톨링 해소)
-   - 3번(작위적 주인공 보정과 억지 실패 보정을 모두 배제하고, 당사자 간의 실제 역량·무력·상황 격차와 인물 가치관에 부합하는 현실적 인과율 판정 — 반플레이어 편향 원천 차단)
-   - 6단계 세션 특화 수칙 번호를 4번·5번으로 정렬하고 `CompileHybridSystemPrompt` 정규식 필터(`^[1-3]`) 및 시작 번호(`nextNumber = 4`) 동기화.
+   - 1번(오감 중심 물리적 객관 서술), 2번(PC 대사·행동 대신 서술 금지 및 자연스러운 턴 양도), 3번(작위적 주인공 보정과 억지 실패 보정을 모두 배제하고 당사자 간 실제 역량·무력·상황 격차와 인물 가치관에 부합하는 현실적 인과율 판정)으로 통합하고 세션 특화 수칙을 4·5번 슬롯에 매핑.
 4. **핵심 부정 제약 (Never use X)**:
    - **절대 NPC에게 무조건적인 적대나 억지 저항을 지시하는 인위적 실패 가드레일을 주입하지 말 것.**
-   - **절대 로어북 수정 시 전체 배열을 단일 프롬프트로 재작성하지 말 것.** 반드시 `ReviseLorebooksSurgicallyAsync`를 통해 지목된 항목만 마이크로 배치로 수정할 것.
+   - **절대 아키텍트 단계마다 LLM 감사관을 재호출하거나 등장인물 로어북을 인위적 마이크로 배치(`batchSize = 3`)로 쪼개어 앙상블 조망을 끊지 말 것.**
 
 
