@@ -61,7 +61,7 @@ flowchart TB
 *   세계관, 시스템 페르소나, 불변 지시문을 `SystemInstruction`에 완전히 격리하여 고정합니다.
 *   **서술 기본 원칙(`FormatRule`) 및 퓨샷 규격**: 대사는 큰따옴표(`" "`), 독백 및 속마음은 낫표(`「 」`), 행동/배경은 기호 없는 평문 소설체로 명시하고, 마크다운 강조(*별표* 등) 배제 지침과 4줄 직관적 `<example>` 퓨샷을 고정 주입하여 UI 파서와의 일관성을 유지합니다.
 *   동적으로 변하는 로어북, 사건 렛저, 대서사 연대기는 최신 유저 메시지 직전의 **동적 컨텍스트 슬롯(Dynamic Context Slot)**에 주입함으로써, LLM 엔진의 프롬프트 캐시 적중률을 극대화하고 문체 오염을 방지합니다.
-*   **메타 지시문 독립 격리 및 벡터 희석 방지**: 챕터 전환, 빠른 진행, 자동 이어쓰기 등 유저 명시적 의도 기반 개입 명령(`metaDirective`)은 `userMessage.Text`에 합성하지 않고 `CognitiveContext.MetaDirective`를 통해 `<current_action>` 외부의 독립 상위 태그로만 조건부 렌더링(미발생 시 완전 생략)합니다. 이를 통해 768차원 유저 쿼리 임베딩의 시맨틱 순도를 100% 보존하고 유저 데이터-시스템 지시문 역전을 방지합니다.
+*   **메타 지시문 독립 격리 및 벡터 희석 방지**: 빠른 진행(`fast_forward`), 자동 이어쓰기(`auto_continue`) 등 유저 명시적 의도 기반 개입 명령(`metaDirective`)은 `userMessage.Text`에 합성하지 않고 `CognitiveContext.MetaDirective`를 통해 `<current_action>` 외부의 독립 상위 태그로만 조건부 렌더링(미발생 시 완전 생략)합니다. 이를 통해 768차원 유저 쿼리 임베딩의 시맨틱 순도를 100% 보존하고 유저 데이터-시스템 지시문 역전을 방지합니다. (강제 챕터 전환 메타지시문 `chapter_transition`은 진행 중이던 장면을 급발진시키는 부작용을 원천 차단하기 위해 폐기하고, 아래의 사건 해결 변수 기반 `<story_seeds>` 엔진으로 통합되었습니다.)
 *   **Thinking 모델 자가 검증 기준(Verification Criteria)**: `<final_instruction>`에 최종 출력 전 직전 턴 인과 관계 및 배경 맥락과 상충되지 않는지 내부 추론 단계에서 자체 검증하도록 기준을 명시하여 서사 일관성을 극대화합니다.
 
 ### 2) 단기 기억 (Raw History)
@@ -82,7 +82,11 @@ flowchart TB
 ### 5) 보조 인지 엔진 (2-Core RAG & Relational Projector)
 *   **하이브리드 로어북 RAG (`HybridLorebookRetriever`)**: 정규식 1차 이름/키워드 스캔(엔트리 이름 완전 일치 및 직전 `model` 응답 + 현재 유저 입력 결합 키워드 스캔)과 시맨틱 임베딩 2차 유사도 검색(벡터 희석 방지를 위해 현재 유저 입력 단독 임베딩 사용, 임계치 `0.75f`, 3턴 잔존 Sticky)을 결합하여 설정집을 누락 없이 인출합니다. 또한 단기 기억 버퍼 전체(18~25개 메시지) 및 최근 사건 불릿(3개)에 등장하는 활성 인물(`activeChars`)을 광역 스캔하며, 각 단계 내부는 `Priority` 오름차순(`0 = 최우선순위`)으로 동적 패킹(최대 3,000토큰)하여 대명사 구간의 로어북 유지와 초장기 세션 퇴장 조연의 예산 잠식 방지를 동시에 달성합니다.
 *   **사건 불릿포인트 RAG (`GatedRAGRetriever`)**: 레거시 키워드 게이팅 데드코드를 전면 적출하고, 매 턴 계산된 768차원 유저 쿼리 임베딩을 실측 기반 순수 코사인 유사도(**$\ge 0.78f$**) 스캔에 직결하여 상위 2개를 핀포인트 인출합니다. 인출 결과는 단일 원장 인덱스(`Index`) 발생 시간순으로 정렬하여 선후 인과 역전을 차단하며, 헤더에 `[떠오른 과거의 기억 - 현재 상태와 상충 시 현재 상태가 우선함]`을 명시하여 현재 상태 오판을 원천 방어합니다.
-*   **엔티티 상태 투영기 (`BiTemporalEntityProjector`) 및 동적 환경 태그 (`<current_state>`)**: 불필요한 필드 및 중복 상태 텍스트 버그를 제거하고, `- 인물(이름): 상태 (수치)` 또는 `- 인물(이름): 상태` 형태로 간결하고 명확하게 투영합니다. 또한 상태창의 현재 위치(`Places`), 플레이어 주요 수치(`CustomStats`), 인벤토리(`Items`)를 `<entity_relationship>` 직후의 `<current_state>` 태그로 서사 AI에 동적 공급하여 인지 단절을 원천 해소합니다.
+*   **엔티티 상태 투영기 (`BiTemporalEntityProjector`) 및 동적 환경 태그 (`<current_state>`)**: 불필요한 필드 및 중복 상태 텍스트 버그를 제거하고, `- 인물(이름): 상태 (수치)` 또는 `- 인물(이름): 상태` 형태로 간결하고 명확하게 투영합니다. 또한 상태창의 현재 위치(`Places`), 플레이어 주요 수치(`CustomStats`), 인벤토리(`Items`)를 `<entity_relationship>` 직후의 `<current_state>` 태그로 서사 AI에 동적 공급하여 인지 단절을 원천 해소합니다. 런타임 상태창 갱신(`UpdateContextStatus`) 시 약칭으로 유입된 인물 Key를 로어북 표준 명칭(`NormalizeInitialCharKeys`)으로 자동 정규화하여 중복 엔티티 및 로어북 매칭 누락을 방지합니다.
+*   **사건 해결 변수 기반 서브컬처 에피소드 & 시드 엔진 (`<story_seeds>` & `isSceneResolved`)**:
+    - **변수 트리거(`StatusPayload.IsSceneResolved`)**: 상태창 추적 API(`BuildStatusRequest`)가 최근 2턴 맥락(`<recent_context>`)과 직전 턴(`<latest_turn>`)을 종합하여 당면 사건(전투, 협상, 위기 등)이 일단락된 막간(Interlude/Lull) 상태인지를 `isSceneResolved: boolean`으로 판별합니다.
+    - **조건부 3대 풀 시드 주입 (평상시 오염 0 토큰)**: 오직 `_currentContext.IsSceneResolved == true`이거나 유저가 명시적으로 `[빠른 진행]`(`fast_forward`)을 켰을 때만 로어북과 상태창을 교차 대조하여 ① `[미등장 인물 조우]`(1턴 로어북 인출 딜레이 방지를 위해 분류·외양·첫 번째 일상 대사 샘플 및 초기 접점 포함), ② `[장소/사건 훅]`(미방문 장소/세력/아이템의 `* 서사 훅`), ③ `[동료 유대 심화]`(호감도/신뢰도 $\ge 30$ 달성 동료의 2단계 유대 심화 사건 및 $\ge 60$ 달성 시 내면 단서 해금) 최대 3개 시드를 `<story_seeds>` 및 추천 답변용 `<available_story_seeds>`로 주입합니다.
+    - **자동 소모(`ConsumedSeeds`) 및 쿨다운**: 서사 응답에 시드 엔티티가 등장하면 즉시 `ConsumedSeeds`에 영구 등록하고 `IsSceneResolved = false`로 리셋하며, 최소 2턴의 재발동 쿨다운(`LastSeedTriggeredTurn`)을 적용하여 장면 급발진(Seed Baiting)을 원천 차단합니다.
 
 </memory_pipeline>
 

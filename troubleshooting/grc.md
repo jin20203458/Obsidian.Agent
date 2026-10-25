@@ -509,6 +509,31 @@ related:
 5. **다국어 글리치 스크립트 정제기 (`StripForeignGlitchScripts`)**:
    - 데바나가리, 아랍, 태국, 키릴, 히브리 등 한국어 RP 텍스트에 사용되지 않는 유니코드 블록(`[\u0400-\u06FF\u0900-\u0E7F]+`)을 일괄 제거하는 헬퍼를 추가하여 모든 `Sanitize*` 파이프라인에 공통 적용.
 
+---
+
+## 13. 서브컬처 에피소드 & 시드 엔진 (`<story_seeds>`) 스키마 정합성 및 동시성/오탐 방어
+
+### 증상 및 잠재적 결함 (Root Cause)
+1. **세션 아키텍트 스키마와 시드 파서 정규식 간 불일치**:
+   - `SessionArchitectService`가 생성하는 인물 로어북은 첫 줄에 `분류(인물): ...` (선행 `*` 없음) 및 `* 표면/내면: 표면(...) / 내면(...)` 포맷을 사용하나, `MemoryManagerService`의 초기 정규식이 `^\*\s*분류\s*:`와 `^\*\s*내면\s*:`만 매칭하여 AI 생성 세션에서 분류 및 60+ 내면 단서가 누락될 수 있었음.
+2. **일반 명사 키워드 및 일상 동료 대사에 의한 시드 오탐 소모 (False-Positive Consumption)**:
+   - `ConsumeMatchedSeedsLocked`에서 로어북의 모든 `Keywords`(예: `"수습생"`, `"마탑"`)를 소모 트리거로 포함할 경우, 한 수습생 캐릭터가 등장했을 때 동일 키워드를 공유하는 다른 미등장 캐릭터 시드까지 연쇄 소모되거나, 동행 중인 동료가 일상 대사를 한 것만으로 `[동료 유대 심화]` 시드가 즉시 소모되는 결함이 있었음.
+3. **동료 유대 심화 2단계(호감도 30+ vs 60+) 단일 키 잠금 문제**:
+   - 호감도 30+ 구간의 유대 심화 에피소드와 60+ 구간의 내면 비밀 해금이 동일한 `BOND:{Name}` 키를 공유할 경우, 30+에서 유대 에피소드를 한 번 소모하면 이후 호감도가 60+에 도달해도 내면 비밀 시드가 영구 차단됨.
+4. **세션 저장/복원 시 `Lorebooks = null` 슬림화 및 백그라운드 상태창 태스크 경합**:
+   - `ExportSession`이 디스크 중복 방지를 위해 `Preset with { Lorebooks = null }`로 직렬화하므로, 세션 로드 시 `savedSession`을 그대로 `RestoreSession`에 넘기면 첫 턴 전까지 `_cachedLorebooks`가 비어 있게 됨. 또한 `ChatDelay == 0` 환경에서 `AddModelResponse`와 `onDownloadComplete`/`BuildStatusRequest` 간 메시지 타이밍 경합이 발생할 수 있었음.
+
+### 해결책 (Resolution)
+1. **양방향 호환 정규식 및 내면 파서 (`MemoryManagerService.cs`)**:
+   - `CategoryFieldRegex`가 `^\*\s*분류(?:\([^)]*\))?\s*:`와 `^분류(?:\([^)]*\))?\s*:`를 모두 지원하고, `InnerThoughtFieldRegex` + `ExtractInnerThoughtText`가 `* 표면/내면: 표면(...) / 내면(...)`에서 `내면(...)` 구간만 정확히 분리 추출하도록 개선.
+2. **고유명사/유대 핵심어 이원화 매칭 (`OfferedSeedCandidate`)**:
+   - Pool A/B(인물 조우·장소 훅)는 `ExtractProperNameKeywords(entry.Name)` 고유명사 매칭으로만 소모 판정하고, Pool C(동료 유대 심화)는 동료 이름(`PrimaryKeywords`)과 유대/내면 본문에서 추출한 핵심 명사(`SecondaryKeywords`, `ExtractBondContentKeywords`)가 **동시에** 등장할 때만 소모되도록 강화.
+3. **`BOND:{Name}` (30+) 및 `BOND_SECRET:{Name}` (60+) 키 분리**:
+   - 호감도 30~59 구간(`BOND:`)과 60+ 내면 비밀 해금 구간(`BOND_SECRET:`)의 소모 키를 분리하여 단계별 서사 보상이 모두 정상 작동하도록 보장.
+4. **`ChapterContext.Clone()` 스냅샷 격리 및 `AwaitPendingStatusTaskAsync` 동기화 (`ChatViewModel.cs`)**:
+   - 세션 로드 및 아키텍트 편집 복원 시 `savedSession with { Preset = sessionPreset }`을 전달하여 `_cachedLorebooks`를 즉시 초기화하고, `ExportSession`/`RestoreSession`에서 `ChapterContext.Clone()` 깊은 복사로 백그라운드 JSON 직렬화 중 컬렉션 변경 예외를 원천 차단.
+
+
 
 
 
