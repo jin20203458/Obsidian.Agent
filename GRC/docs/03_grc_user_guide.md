@@ -5,6 +5,7 @@ related:
   - ./00_project_overview.md
   - ./01_grc_architecture.md
   - ./02_user_quickstart_guide.md
+  - ./04_implementation_roadmap.md
 ---
 # GRC 사용자 기능 매뉴얼 (GRC User Feature Guide)
 

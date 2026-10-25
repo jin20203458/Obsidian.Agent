@@ -5,6 +5,8 @@ related:
   - ./01_grc_architecture.md
   - ./02_user_quickstart_guide.md
   - ./03_grc_user_guide.md
+  - ./04_implementation_roadmap.md
+  - ./05_session_architect_agent_template.md
 ---
 # Project Overview
 
@@ -101,3 +103,5 @@ graph TB
 | [01_grc_architecture](./01_grc_architecture.md) | Cognitive Core 3.0 메모리 파이프라인, O(1) 로거, 비차단 스트리밍 및 MVVM 구현 딥다이브 |
 | [02_user_quickstart_guide](./02_user_quickstart_guide.md) | 비개발자 무설치 포터블 실행, SmartScreen 우회, API 키 가이드 |
 | [03_grc_user_guide](./03_grc_user_guide.md) | GRC 7대 핵심 기능 사용자 사용설명서 및 활용 가이드 |
+| [04_implementation_roadmap](./04_implementation_roadmap.md) | GRC 세션 아키텍트 외과수술식 부분 수정(Surgical Edit) 고도화 및 차기 엔지니어링 로드맵 |
+| [05_session_architect_agent_template](./05_session_architect_agent_template.md) | GRC 세션 아키텍트의 안티그래비티 멀티 에이전트 오케스트레이션 템플릿 및 자동화 명세 |

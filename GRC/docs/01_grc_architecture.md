@@ -5,6 +5,7 @@ related:
   - ./00_project_overview.md
   - ./02_user_quickstart_guide.md
   - ./03_grc_user_guide.md
+  - ./04_implementation_roadmap.md
   - ../../troubleshooting/grc.md
 ---
 # GRC Architecture & Deep Dive

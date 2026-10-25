@@ -9,6 +9,7 @@ related:
   - ./Agent_Collaboration_Workflow_Guidelines.md
   - ./Independent_Audit_Protocol_Guidelines.md
   - ./AI_Prompt_Engineering_Guidelines.md
+  - ../GRC/docs/05_session_architect_agent_template.md
 ---
 # AI Agent Architecture Paradigms Guidelines (에이전트 협동 메타 아키텍처 설계도 - Meta-Architecture Blueprint)
 
