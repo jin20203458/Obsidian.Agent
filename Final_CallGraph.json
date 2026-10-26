@@ -1,0 +1,1198 @@
+[
+  {
+    "caller": "i2cInit",
+    "callee": "vI2CISRCreateQueues"
+  },
+  {
+    "caller": "i2cInit",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "i2cInit",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "i2cMessage",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "i2cMessage",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "i2cMessage",
+    "callee": "xQueueGenericSend"
+  },
+  {
+    "caller": "i2cMessage",
+    "callee": "xQueueReceive"
+  },
+  {
+    "caller": "lProcessConnection",
+    "callee": "i2cMessage"
+  },
+  {
+    "caller": "lProcessConnection",
+    "callee": "prvReadRegister"
+  },
+  {
+    "caller": "lProcessConnection",
+    "callee": "prvSendSamplePage"
+  },
+  {
+    "caller": "lProcessConnection",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "lProcessConnection",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "lProcessConnection",
+    "callee": "vTCPHardReset"
+  },
+  {
+    "caller": "lProcessConnection",
+    "callee": "vTaskDelay"
+  },
+  {
+    "caller": "lProcessConnection",
+    "callee": "xQueueReceive"
+  },
+  {
+    "caller": "lTCPCreateSocket",
+    "callee": "i2cMessage"
+  },
+  {
+    "caller": "lTCPCreateSocket",
+    "callee": "prvReadRegister"
+  },
+  {
+    "caller": "lTCPCreateSocket",
+    "callee": "vTaskDelay"
+  },
+  {
+    "caller": "lTCPCreateSocket",
+    "callee": "xQueueSemaphoreTake"
+  },
+  {
+    "caller": "lTCPSoftReset",
+    "callee": "i2cMessage"
+  },
+  {
+    "caller": "lTCPSoftReset",
+    "callee": "prvReadRegister"
+  },
+  {
+    "caller": "lTCPSoftReset",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "lTCPSoftReset",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "lTCPSoftReset",
+    "callee": "vTaskDelay"
+  },
+  {
+    "caller": "main",
+    "callee": "prvSetupHardware"
+  },
+  {
+    "caller": "main",
+    "callee": "vStartBlockingQueueTasks"
+  },
+  {
+    "caller": "main",
+    "callee": "vStartDynamicPriorityTasks"
+  },
+  {
+    "caller": "main",
+    "callee": "vStartIntegerMathTasks"
+  },
+  {
+    "caller": "main",
+    "callee": "vStartLEDFlashTasks"
+  },
+  {
+    "caller": "main",
+    "callee": "vStartPolledQueueTasks"
+  },
+  {
+    "caller": "main",
+    "callee": "vStartSemaphoreTasks"
+  },
+  {
+    "caller": "main",
+    "callee": "vTaskStartScheduler"
+  },
+  {
+    "caller": "main",
+    "callee": "xTaskCreate"
+  },
+  {
+    "caller": "prvAddCurrentTaskToDelayedList",
+    "callee": "uxListRemove"
+  },
+  {
+    "caller": "prvAddCurrentTaskToDelayedList",
+    "callee": "vListInsert"
+  },
+  {
+    "caller": "prvAddNewTaskToReadyList",
+    "callee": "prvInitialiseTaskLists"
+  },
+  {
+    "caller": "prvAddNewTaskToReadyList",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "prvAddNewTaskToReadyList",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "prvCheckTasksWaitingTermination",
+    "callee": "prvDeleteTCB"
+  },
+  {
+    "caller": "prvCheckTasksWaitingTermination",
+    "callee": "uxListRemove"
+  },
+  {
+    "caller": "prvCheckTasksWaitingTermination",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "prvCheckTasksWaitingTermination",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "prvCreateIdleTasks",
+    "callee": "xTaskCreate"
+  },
+  {
+    "caller": "prvCreateTask",
+    "callee": "prvInitialiseNewTask"
+  },
+  {
+    "caller": "prvCreateTask",
+    "callee": "pvPortMalloc"
+  },
+  {
+    "caller": "prvCreateTask",
+    "callee": "vPortFree"
+  },
+  {
+    "caller": "prvDeleteTCB",
+    "callee": "vPortFree"
+  },
+  {
+    "caller": "prvErrorChecks",
+    "callee": "prvMainCheckOtherTasksAreStillRunning"
+  },
+  {
+    "caller": "prvErrorChecks",
+    "callee": "prvToggleOnBoardLED"
+  },
+  {
+    "caller": "prvErrorChecks",
+    "callee": "vTaskDelay"
+  },
+  {
+    "caller": "prvFlushBuffer",
+    "callee": "i2cMessage"
+  },
+  {
+    "caller": "prvFlushBuffer",
+    "callee": "vTaskDelay"
+  },
+  {
+    "caller": "prvFlushBuffer",
+    "callee": "xQueueSemaphoreTake"
+  },
+  {
+    "caller": "prvIdleTask",
+    "callee": "prvCheckTasksWaitingTermination"
+  },
+  {
+    "caller": "prvInitialiseNewQueue",
+    "callee": "xQueueGenericReset"
+  },
+  {
+    "caller": "prvInitialiseNewTask",
+    "callee": "pxPortInitialiseStack"
+  },
+  {
+    "caller": "prvInitialiseNewTask",
+    "callee": "vListInitialiseItem"
+  },
+  {
+    "caller": "prvInitialiseTaskLists",
+    "callee": "vListInitialise"
+  },
+  {
+    "caller": "prvIsQueueEmpty",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "prvIsQueueEmpty",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "prvIsQueueFull",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "prvIsQueueFull",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "prvMainCheckOtherTasksAreStillRunning",
+    "callee": "xAreBlockingQueuesStillRunning"
+  },
+  {
+    "caller": "prvMainCheckOtherTasksAreStillRunning",
+    "callee": "xAreDynamicPriorityTasksStillRunning"
+  },
+  {
+    "caller": "prvMainCheckOtherTasksAreStillRunning",
+    "callee": "xAreIntegerMathsTaskStillRunning"
+  },
+  {
+    "caller": "prvMainCheckOtherTasksAreStillRunning",
+    "callee": "xArePollingQueuesStillRunning"
+  },
+  {
+    "caller": "prvMainCheckOtherTasksAreStillRunning",
+    "callee": "xAreSemaphoreTasksStillRunning"
+  },
+  {
+    "caller": "prvReadRegister",
+    "callee": "i2cMessage"
+  },
+  {
+    "caller": "prvReadRegister",
+    "callee": "xQueueSemaphoreTake"
+  },
+  {
+    "caller": "prvSemaphoreTest",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "prvSemaphoreTest",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "prvSemaphoreTest",
+    "callee": "vTaskDelay"
+  },
+  {
+    "caller": "prvSemaphoreTest",
+    "callee": "xQueueGenericSend"
+  },
+  {
+    "caller": "prvSemaphoreTest",
+    "callee": "xQueueSemaphoreTake"
+  },
+  {
+    "caller": "prvSendSamplePage",
+    "callee": "prvFlushBuffer"
+  },
+  {
+    "caller": "prvSendSamplePage",
+    "callee": "prvReadRegister"
+  },
+  {
+    "caller": "prvSendSamplePage",
+    "callee": "prvWriteString"
+  },
+  {
+    "caller": "prvSendSamplePage",
+    "callee": "ultoa"
+  },
+  {
+    "caller": "prvSendSamplePage",
+    "callee": "uxTaskGetNumberOfTasks"
+  },
+  {
+    "caller": "prvSendSamplePage",
+    "callee": "vTaskDelay"
+  },
+  {
+    "caller": "prvSendSamplePage",
+    "callee": "xTaskGetTickCount"
+  },
+  {
+    "caller": "prvSetupHardware",
+    "callee": "i2cInit"
+  },
+  {
+    "caller": "prvSetupHardware",
+    "callee": "vParTestInitialise"
+  },
+  {
+    "caller": "prvUnlockQueue",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "prvUnlockQueue",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "prvUnlockQueue",
+    "callee": "vTaskMissedYield"
+  },
+  {
+    "caller": "prvUnlockQueue",
+    "callee": "xTaskRemoveFromEventList"
+  },
+  {
+    "caller": "prvWriteString",
+    "callee": "i2cMessage"
+  },
+  {
+    "caller": "prvWriteString",
+    "callee": "xQueueSemaphoreTake"
+  },
+  {
+    "caller": "pvPortCalloc",
+    "callee": "pvPortMalloc"
+  },
+  {
+    "caller": "pvPortMalloc",
+    "callee": "prvHeapInit"
+  },
+  {
+    "caller": "pvPortMalloc",
+    "callee": "vTaskSuspendAll"
+  },
+  {
+    "caller": "pvPortMalloc",
+    "callee": "xTaskResumeAll"
+  },
+  {
+    "caller": "ulTaskGenericNotifyTake",
+    "callee": "prvAddCurrentTaskToDelayedList"
+  },
+  {
+    "caller": "ulTaskGenericNotifyTake",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "ulTaskGenericNotifyTake",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "ulTaskGenericNotifyTake",
+    "callee": "vTaskSuspendAll"
+  },
+  {
+    "caller": "ulTaskGenericNotifyTake",
+    "callee": "xTaskResumeAll"
+  },
+  {
+    "caller": "ulTaskGenericNotifyValueClear",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "ulTaskGenericNotifyValueClear",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "uxQueueMessagesWaiting",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "uxQueueMessagesWaiting",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "uxQueueSpacesAvailable",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "uxQueueSpacesAvailable",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "uxTaskPriorityGet",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "uxTaskPriorityGet",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "vBlockingQueueConsumer",
+    "callee": "xQueueReceive"
+  },
+  {
+    "caller": "vBlockingQueueProducer",
+    "callee": "xQueueGenericSend"
+  },
+  {
+    "caller": "vCompeteingIntMathTask",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "vCompeteingIntMathTask",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "vContinuousIncrementTask",
+    "callee": "uxTaskPriorityGet"
+  },
+  {
+    "caller": "vContinuousIncrementTask",
+    "callee": "vTaskPrioritySet"
+  },
+  {
+    "caller": "vCounterControlTask",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "vCounterControlTask",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "vCounterControlTask",
+    "callee": "vTaskDelay"
+  },
+  {
+    "caller": "vCounterControlTask",
+    "callee": "vTaskResume"
+  },
+  {
+    "caller": "vCounterControlTask",
+    "callee": "vTaskSuspend"
+  },
+  {
+    "caller": "vCounterControlTask",
+    "callee": "vTaskSuspendAll"
+  },
+  {
+    "caller": "vCounterControlTask",
+    "callee": "xTaskResumeAll"
+  },
+  {
+    "caller": "vHTTPServerTask",
+    "callee": "lProcessConnection"
+  },
+  {
+    "caller": "vHTTPServerTask",
+    "callee": "lTCPCreateSocket"
+  },
+  {
+    "caller": "vHTTPServerTask",
+    "callee": "lTCPSoftReset"
+  },
+  {
+    "caller": "vHTTPServerTask",
+    "callee": "vTCPHardReset"
+  },
+  {
+    "caller": "vHTTPServerTask",
+    "callee": "vTCPListen"
+  },
+  {
+    "caller": "vHTTPServerTask",
+    "callee": "vTaskDelay"
+  },
+  {
+    "caller": "vLEDFlashTask",
+    "callee": "vParTestToggleLED"
+  },
+  {
+    "caller": "vLEDFlashTask",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "vLEDFlashTask",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "vLEDFlashTask",
+    "callee": "xTaskDelayUntil"
+  },
+  {
+    "caller": "vLEDFlashTask",
+    "callee": "xTaskGetTickCount"
+  },
+  {
+    "caller": "vLimitedIncrementTask",
+    "callee": "vTaskSuspend"
+  },
+  {
+    "caller": "vPolledQueueConsumer",
+    "callee": "uxQueueMessagesWaiting"
+  },
+  {
+    "caller": "vPolledQueueConsumer",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "vPolledQueueConsumer",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "vPolledQueueConsumer",
+    "callee": "vTaskDelay"
+  },
+  {
+    "caller": "vPolledQueueConsumer",
+    "callee": "xQueueReceive"
+  },
+  {
+    "caller": "vPolledQueueProducer",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "vPolledQueueProducer",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "vPolledQueueProducer",
+    "callee": "vTaskDelay"
+  },
+  {
+    "caller": "vPolledQueueProducer",
+    "callee": "xQueueGenericSend"
+  },
+  {
+    "caller": "vPortFree",
+    "callee": "vTaskSuspendAll"
+  },
+  {
+    "caller": "vPortFree",
+    "callee": "xTaskResumeAll"
+  },
+  {
+    "caller": "vQueueDelete",
+    "callee": "vPortFree"
+  },
+  {
+    "caller": "vQueueReceiveWhenSuspendedTask",
+    "callee": "vTaskSuspendAll"
+  },
+  {
+    "caller": "vQueueReceiveWhenSuspendedTask",
+    "callee": "xQueueReceive"
+  },
+  {
+    "caller": "vQueueReceiveWhenSuspendedTask",
+    "callee": "xTaskResumeAll"
+  },
+  {
+    "caller": "vQueueSendWhenSuspendedTask",
+    "callee": "vTaskDelay"
+  },
+  {
+    "caller": "vQueueSendWhenSuspendedTask",
+    "callee": "vTaskSuspendAll"
+  },
+  {
+    "caller": "vQueueSendWhenSuspendedTask",
+    "callee": "xQueueGenericSend"
+  },
+  {
+    "caller": "vQueueSendWhenSuspendedTask",
+    "callee": "xTaskResumeAll"
+  },
+  {
+    "caller": "vStartBlockingQueueTasks",
+    "callee": "pvPortMalloc"
+  },
+  {
+    "caller": "vStartBlockingQueueTasks",
+    "callee": "xQueueGenericCreate"
+  },
+  {
+    "caller": "vStartBlockingQueueTasks",
+    "callee": "xTaskCreate"
+  },
+  {
+    "caller": "vStartDynamicPriorityTasks",
+    "callee": "xQueueGenericCreate"
+  },
+  {
+    "caller": "vStartDynamicPriorityTasks",
+    "callee": "xTaskCreate"
+  },
+  {
+    "caller": "vStartIntegerMathTasks",
+    "callee": "xTaskCreate"
+  },
+  {
+    "caller": "vStartLEDFlashTasks",
+    "callee": "xTaskCreate"
+  },
+  {
+    "caller": "vStartPolledQueueTasks",
+    "callee": "xQueueGenericCreate"
+  },
+  {
+    "caller": "vStartPolledQueueTasks",
+    "callee": "xTaskCreate"
+  },
+  {
+    "caller": "vStartSemaphoreTasks",
+    "callee": "pvPortMalloc"
+  },
+  {
+    "caller": "vStartSemaphoreTasks",
+    "callee": "xQueueGenericCreate"
+  },
+  {
+    "caller": "vStartSemaphoreTasks",
+    "callee": "xQueueGenericSend"
+  },
+  {
+    "caller": "vStartSemaphoreTasks",
+    "callee": "xTaskCreate"
+  },
+  {
+    "caller": "vTCPHardReset",
+    "callee": "i2cMessage"
+  },
+  {
+    "caller": "vTCPHardReset",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "vTCPHardReset",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "vTCPHardReset",
+    "callee": "vTaskDelay"
+  },
+  {
+    "caller": "vTCPHardReset",
+    "callee": "xQueueGenericCreate"
+  },
+  {
+    "caller": "vTCPHardReset",
+    "callee": "xQueueGenericSend"
+  },
+  {
+    "caller": "vTCPHardReset",
+    "callee": "xQueueSemaphoreTake"
+  },
+  {
+    "caller": "vTCPListen",
+    "callee": "i2cMessage"
+  },
+  {
+    "caller": "vTCPListen",
+    "callee": "vTaskDelay"
+  },
+  {
+    "caller": "vTCPListen",
+    "callee": "xQueueReceive"
+  },
+  {
+    "caller": "vTCPListen",
+    "callee": "xQueueSemaphoreTake"
+  },
+  {
+    "caller": "vTaskDelay",
+    "callee": "prvAddCurrentTaskToDelayedList"
+  },
+  {
+    "caller": "vTaskDelay",
+    "callee": "vTaskSuspendAll"
+  },
+  {
+    "caller": "vTaskDelay",
+    "callee": "xTaskResumeAll"
+  },
+  {
+    "caller": "vTaskDelete",
+    "callee": "prvDeleteTCB"
+  },
+  {
+    "caller": "vTaskDelete",
+    "callee": "prvResetNextTaskUnblockTime"
+  },
+  {
+    "caller": "vTaskDelete",
+    "callee": "uxListRemove"
+  },
+  {
+    "caller": "vTaskDelete",
+    "callee": "vListInsertEnd"
+  },
+  {
+    "caller": "vTaskDelete",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "vTaskDelete",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "vTaskEndScheduler",
+    "callee": "prvCheckTasksWaitingTermination"
+  },
+  {
+    "caller": "vTaskEndScheduler",
+    "callee": "vPortDisableInterruptsFromThumb"
+  },
+  {
+    "caller": "vTaskEndScheduler",
+    "callee": "vPortEndScheduler"
+  },
+  {
+    "caller": "vTaskEndScheduler",
+    "callee": "vTaskDelete"
+  },
+  {
+    "caller": "vTaskPlaceOnEventList",
+    "callee": "prvAddCurrentTaskToDelayedList"
+  },
+  {
+    "caller": "vTaskPlaceOnEventList",
+    "callee": "vListInsert"
+  },
+  {
+    "caller": "vTaskPlaceOnUnorderedEventList",
+    "callee": "prvAddCurrentTaskToDelayedList"
+  },
+  {
+    "caller": "vTaskPrioritySet",
+    "callee": "uxListRemove"
+  },
+  {
+    "caller": "vTaskPrioritySet",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "vTaskPrioritySet",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "vTaskResume",
+    "callee": "prvTaskIsTaskSuspended"
+  },
+  {
+    "caller": "vTaskResume",
+    "callee": "uxListRemove"
+  },
+  {
+    "caller": "vTaskResume",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "vTaskResume",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "vTaskSetTimeOutState",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "vTaskSetTimeOutState",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "vTaskStartScheduler",
+    "callee": "prvCreateIdleTasks"
+  },
+  {
+    "caller": "vTaskStartScheduler",
+    "callee": "vPortDisableInterruptsFromThumb"
+  },
+  {
+    "caller": "vTaskStartScheduler",
+    "callee": "xPortStartScheduler"
+  },
+  {
+    "caller": "vTaskSuspend",
+    "callee": "prvResetNextTaskUnblockTime"
+  },
+  {
+    "caller": "vTaskSuspend",
+    "callee": "uxListRemove"
+  },
+  {
+    "caller": "vTaskSuspend",
+    "callee": "vListInsertEnd"
+  },
+  {
+    "caller": "vTaskSuspend",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "vTaskSuspend",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "vTaskSuspend",
+    "callee": "vTaskSwitchContext"
+  },
+  {
+    "caller": "xPortStartScheduler",
+    "callee": "prvSetupTimerInterrupt"
+  },
+  {
+    "caller": "xPortStartScheduler",
+    "callee": "vPortISRStartFirstTask"
+  },
+  {
+    "caller": "xQueueGenericCreate",
+    "callee": "prvInitialiseNewQueue"
+  },
+  {
+    "caller": "xQueueGenericCreate",
+    "callee": "pvPortMalloc"
+  },
+  {
+    "caller": "xQueueGenericReset",
+    "callee": "vListInitialise"
+  },
+  {
+    "caller": "xQueueGenericReset",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "xQueueGenericReset",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "xQueueGenericReset",
+    "callee": "xTaskRemoveFromEventList"
+  },
+  {
+    "caller": "xQueueGenericSend",
+    "callee": "prvCopyDataToQueue"
+  },
+  {
+    "caller": "xQueueGenericSend",
+    "callee": "prvIsQueueFull"
+  },
+  {
+    "caller": "xQueueGenericSend",
+    "callee": "prvUnlockQueue"
+  },
+  {
+    "caller": "xQueueGenericSend",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "xQueueGenericSend",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "xQueueGenericSend",
+    "callee": "vTaskInternalSetTimeOutState"
+  },
+  {
+    "caller": "xQueueGenericSend",
+    "callee": "vTaskPlaceOnEventList"
+  },
+  {
+    "caller": "xQueueGenericSend",
+    "callee": "vTaskSuspendAll"
+  },
+  {
+    "caller": "xQueueGenericSend",
+    "callee": "xTaskCheckForTimeOut"
+  },
+  {
+    "caller": "xQueueGenericSend",
+    "callee": "xTaskRemoveFromEventList"
+  },
+  {
+    "caller": "xQueueGenericSend",
+    "callee": "xTaskResumeAll"
+  },
+  {
+    "caller": "xQueueGenericSendFromISR",
+    "callee": "prvCopyDataToQueue"
+  },
+  {
+    "caller": "xQueueGenericSendFromISR",
+    "callee": "uxTaskGetNumberOfTasks"
+  },
+  {
+    "caller": "xQueueGenericSendFromISR",
+    "callee": "xTaskRemoveFromEventList"
+  },
+  {
+    "caller": "xQueueGiveFromISR",
+    "callee": "uxTaskGetNumberOfTasks"
+  },
+  {
+    "caller": "xQueueGiveFromISR",
+    "callee": "xTaskRemoveFromEventList"
+  },
+  {
+    "caller": "xQueuePeek",
+    "callee": "prvCopyDataFromQueue"
+  },
+  {
+    "caller": "xQueuePeek",
+    "callee": "prvIsQueueEmpty"
+  },
+  {
+    "caller": "xQueuePeek",
+    "callee": "prvUnlockQueue"
+  },
+  {
+    "caller": "xQueuePeek",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "xQueuePeek",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "xQueuePeek",
+    "callee": "vTaskInternalSetTimeOutState"
+  },
+  {
+    "caller": "xQueuePeek",
+    "callee": "vTaskPlaceOnEventList"
+  },
+  {
+    "caller": "xQueuePeek",
+    "callee": "vTaskSuspendAll"
+  },
+  {
+    "caller": "xQueuePeek",
+    "callee": "xTaskCheckForTimeOut"
+  },
+  {
+    "caller": "xQueuePeek",
+    "callee": "xTaskRemoveFromEventList"
+  },
+  {
+    "caller": "xQueuePeek",
+    "callee": "xTaskResumeAll"
+  },
+  {
+    "caller": "xQueuePeekFromISR",
+    "callee": "prvCopyDataFromQueue"
+  },
+  {
+    "caller": "xQueueReceive",
+    "callee": "prvCopyDataFromQueue"
+  },
+  {
+    "caller": "xQueueReceive",
+    "callee": "prvIsQueueEmpty"
+  },
+  {
+    "caller": "xQueueReceive",
+    "callee": "prvUnlockQueue"
+  },
+  {
+    "caller": "xQueueReceive",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "xQueueReceive",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "xQueueReceive",
+    "callee": "vTaskInternalSetTimeOutState"
+  },
+  {
+    "caller": "xQueueReceive",
+    "callee": "vTaskPlaceOnEventList"
+  },
+  {
+    "caller": "xQueueReceive",
+    "callee": "vTaskSuspendAll"
+  },
+  {
+    "caller": "xQueueReceive",
+    "callee": "xTaskCheckForTimeOut"
+  },
+  {
+    "caller": "xQueueReceive",
+    "callee": "xTaskRemoveFromEventList"
+  },
+  {
+    "caller": "xQueueReceive",
+    "callee": "xTaskResumeAll"
+  },
+  {
+    "caller": "xQueueReceiveFromISR",
+    "callee": "prvCopyDataFromQueue"
+  },
+  {
+    "caller": "xQueueReceiveFromISR",
+    "callee": "uxTaskGetNumberOfTasks"
+  },
+  {
+    "caller": "xQueueReceiveFromISR",
+    "callee": "xTaskRemoveFromEventList"
+  },
+  {
+    "caller": "xQueueSemaphoreTake",
+    "callee": "prvIsQueueEmpty"
+  },
+  {
+    "caller": "xQueueSemaphoreTake",
+    "callee": "prvUnlockQueue"
+  },
+  {
+    "caller": "xQueueSemaphoreTake",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "xQueueSemaphoreTake",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "xQueueSemaphoreTake",
+    "callee": "vTaskInternalSetTimeOutState"
+  },
+  {
+    "caller": "xQueueSemaphoreTake",
+    "callee": "vTaskPlaceOnEventList"
+  },
+  {
+    "caller": "xQueueSemaphoreTake",
+    "callee": "vTaskSuspendAll"
+  },
+  {
+    "caller": "xQueueSemaphoreTake",
+    "callee": "xTaskCheckForTimeOut"
+  },
+  {
+    "caller": "xQueueSemaphoreTake",
+    "callee": "xTaskRemoveFromEventList"
+  },
+  {
+    "caller": "xQueueSemaphoreTake",
+    "callee": "xTaskResumeAll"
+  },
+  {
+    "caller": "xTaskCatchUpTicks",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "xTaskCatchUpTicks",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "xTaskCatchUpTicks",
+    "callee": "vTaskSuspendAll"
+  },
+  {
+    "caller": "xTaskCatchUpTicks",
+    "callee": "xTaskResumeAll"
+  },
+  {
+    "caller": "xTaskCheckForTimeOut",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "xTaskCheckForTimeOut",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "xTaskCheckForTimeOut",
+    "callee": "vTaskInternalSetTimeOutState"
+  },
+  {
+    "caller": "xTaskCreate",
+    "callee": "prvAddNewTaskToReadyList"
+  },
+  {
+    "caller": "xTaskCreate",
+    "callee": "prvCreateTask"
+  },
+  {
+    "caller": "xTaskDelayUntil",
+    "callee": "prvAddCurrentTaskToDelayedList"
+  },
+  {
+    "caller": "xTaskDelayUntil",
+    "callee": "vTaskSuspendAll"
+  },
+  {
+    "caller": "xTaskDelayUntil",
+    "callee": "xTaskResumeAll"
+  },
+  {
+    "caller": "xTaskGenericNotify",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "xTaskGenericNotify",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "xTaskGenericNotifyStateClear",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "xTaskGenericNotifyStateClear",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "xTaskGenericNotifyWait",
+    "callee": "prvAddCurrentTaskToDelayedList"
+  },
+  {
+    "caller": "xTaskGenericNotifyWait",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "xTaskGenericNotifyWait",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "xTaskGenericNotifyWait",
+    "callee": "vTaskSuspendAll"
+  },
+  {
+    "caller": "xTaskGenericNotifyWait",
+    "callee": "xTaskResumeAll"
+  },
+  {
+    "caller": "xTaskGetTickCount",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "xTaskGetTickCount",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "xTaskIncrementTick",
+    "callee": "prvResetNextTaskUnblockTime"
+  },
+  {
+    "caller": "xTaskResumeAll",
+    "callee": "prvResetNextTaskUnblockTime"
+  },
+  {
+    "caller": "xTaskResumeAll",
+    "callee": "vPortEnterCritical"
+  },
+  {
+    "caller": "xTaskResumeAll",
+    "callee": "vPortExitCritical"
+  },
+  {
+    "caller": "xTaskResumeAll",
+    "callee": "xTaskIncrementTick"
+  },
+  {
+    "caller": "xTaskResumeFromISR",
+    "callee": "prvTaskIsTaskSuspended"
+  },
+  {
+    "caller": "xTaskResumeFromISR",
+    "callee": "uxListRemove"
+  },
+  {
+    "caller": "xTaskResumeFromISR",
+    "callee": "vListInsertEnd"
+  }
+]

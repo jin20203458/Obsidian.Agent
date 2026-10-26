@@ -1,0 +1,2510 @@
+[
+  {
+    "symbol": "cSamplePageFirstPart",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/html_pages.h",
+        "line": 32,
+        "type": "const char *const",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "cSamplePageSecondPart",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/html_pages.h",
+        "line": 49,
+        "type": "const char *const",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "i2cInit",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/i2c.h",
+        "line": 50,
+        "type": "void (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/i2c.c",
+        "line": 174,
+        "type": "void (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "i2cMessage",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/i2c.h",
+        "line": 77,
+        "type": "void (const unsigned char *, long, unsigned char, unsigned short, unsigned long, struct QueueDefinition *, unsigned int)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/i2c.c",
+        "line": 84,
+        "type": "void (const unsigned char *, long, unsigned char, unsigned short, unsigned long, struct QueueDefinition *, unsigned int)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "lErrorInTask",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/main.c",
+        "line": 130,
+        "type": "long",
+        "is_def": true
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 670,
+        "type": "long",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "lProcessConnection",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/tcp.h",
+        "line": 36,
+        "type": "long (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 437,
+        "type": "long (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "lTCPCreateSocket",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/tcp.h",
+        "line": 34,
+        "type": "long (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 358,
+        "type": "long (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "lTCPListen",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/tcp.h",
+        "line": 35,
+        "type": "long (void)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "lTCPSoftReset",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/tcp.h",
+        "line": 33,
+        "type": "long (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 310,
+        "type": "long (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "lTransactionCompleted",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 313,
+        "type": "volatile long",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 440,
+        "type": "volatile long",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "main",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/main.c",
+        "line": 136,
+        "type": "int (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "pcTaskGetName",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 1757,
+        "type": "char *(struct tskTaskControlBlock *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 4237,
+        "type": "char *(struct tskTaskControlBlock *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "pcTimerGetName",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/timers.h",
+        "line": 1257,
+        "type": "const char *(struct tmrTimerControl *)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "prvToggleOnBoardLED",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/main.c",
+        "line": 110,
+        "type": "void (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/main.c",
+        "line": 251,
+        "type": "void (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "pvPortCalloc",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/portable.h",
+        "line": 190,
+        "type": "void *(unsigned int, unsigned int)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/portable/MemMang/heap_2.c",
+        "line": 352,
+        "type": "void *(unsigned int, unsigned int)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "pvPortMalloc",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/portable.h",
+        "line": 189,
+        "type": "void *(unsigned int)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/portable/MemMang/heap_2.c",
+        "line": 156,
+        "type": "void *(unsigned int)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "pvTaskIncrementMutexHeldCount",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3705,
+        "type": "struct tskTaskControlBlock *(void)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "pvTimerGetTimerID",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/timers.h",
+        "line": 388,
+        "type": "void *(struct tmrTimerControl *)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "pxCurrentMessage",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/i2c.c",
+        "line": 86,
+        "type": "volatile struct AN_I2C_MESSAGE *",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "pxCurrentTCB",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 463,
+        "type": "struct tskTaskControlBlock *volatile",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "pxPortInitialiseStack",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/portable.h",
+        "line": 141,
+        "type": "unsigned int *(unsigned int *, void (*)(void *), void *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/portable/GCC/ARM7_LPC2000/port.c",
+        "line": 82,
+        "type": "unsigned int *(unsigned int *, void (*)(void *), void *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataClearInterrupt",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 174,
+        "type": "const unsigned char[1]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataDisableISR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 173,
+        "type": "const unsigned char[1]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataDisconnect",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 171,
+        "type": "const unsigned char[1]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataEnableISR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 172,
+        "type": "const unsigned char[1]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataGAR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 152,
+        "type": "const unsigned char[4]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataInit",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 159,
+        "type": "const unsigned char[1]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataListen",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 166,
+        "type": "const unsigned char[1]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataMSR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 153,
+        "type": "const unsigned char[4]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataPort",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 161,
+        "type": "const unsigned char[2]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataProtocol",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 160,
+        "type": "const unsigned char[1]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataReceiveCmd",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 167,
+        "type": "const unsigned char[1]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataReset",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 158,
+        "type": "const unsigned char[1]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataSHAR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 155,
+        "type": "const unsigned char[6]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataSIPR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 154,
+        "type": "const unsigned char[4]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataSend",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 170,
+        "type": "const unsigned char[1]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataSetRxBufSize",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 169,
+        "type": "const unsigned char[1]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataSetTxBufSize",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 168,
+        "type": "const unsigned char[1]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataSockInit",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 162,
+        "type": "const unsigned char[1]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataTxAckPointer",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 164,
+        "type": "const unsigned char[4]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataTxReadPointer",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 165,
+        "type": "const unsigned char[4]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ucDataTxWritePointer",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 163,
+        "type": "const unsigned char[4]",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ulNextFreeMessage",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/i2c.c",
+        "line": 75,
+        "type": "unsigned long",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ulTaskGenericNotifyTake",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3200,
+        "type": "unsigned int (unsigned long, long, unsigned int)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 7702,
+        "type": "unsigned int (unsigned long, long, unsigned int)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ulTaskGenericNotifyValueClear",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3330,
+        "type": "unsigned int (struct tskTaskControlBlock *, unsigned long, unsigned int)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 8391,
+        "type": "unsigned int (struct tskTaskControlBlock *, unsigned long, unsigned int)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "ultoa",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 192,
+        "type": "void (unsigned long, char *, long)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 196,
+        "type": "void (unsigned long, char *, long)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "uxListRemove",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/list.h",
+        "line": 503,
+        "type": "unsigned long (struct xLIST_ITEM *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/list.c",
+        "line": 217,
+        "type": "unsigned long (struct xLIST_ITEM *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "uxQueueGetQueueItemSize",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 1873,
+        "type": "unsigned long (struct QueueDefinition *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 2346,
+        "type": "unsigned long (struct QueueDefinition *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "uxQueueGetQueueLength",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 1874,
+        "type": "unsigned long (struct QueueDefinition *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 2356,
+        "type": "unsigned long (struct QueueDefinition *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "uxQueueMessagesWaiting",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 932,
+        "type": "unsigned long (struct QueueDefinition *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 2200,
+        "type": "unsigned long (struct QueueDefinition *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "uxQueueMessagesWaitingFromISR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 1477,
+        "type": "unsigned long (struct QueueDefinition *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 2241,
+        "type": "unsigned long (struct QueueDefinition *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "uxQueueSpacesAvailable",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 951,
+        "type": "unsigned long (struct QueueDefinition *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 2220,
+        "type": "unsigned long (struct QueueDefinition *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "uxTaskBasePriorityGet",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 1056,
+        "type": "unsigned long (struct tskTaskControlBlock *)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "uxTaskBasePriorityGetFromISR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 1066,
+        "type": "unsigned long (struct tskTaskControlBlock *)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "uxTaskGetNumberOfTasks",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 1742,
+        "type": "unsigned long (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 4225,
+        "type": "unsigned long (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "uxTaskPriorityGet",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 1025,
+        "type": "unsigned long (struct tskTaskControlBlock *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 2651,
+        "type": "unsigned long (struct tskTaskControlBlock *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "uxTaskPriorityGetFromISR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 1035,
+        "type": "unsigned long (struct tskTaskControlBlock *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 2679,
+        "type": "unsigned long (struct tskTaskControlBlock *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "uxTaskResetEventItemValue",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3608,
+        "type": "unsigned int (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 7657,
+        "type": "unsigned int (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "uxTimerGetReloadMode",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/timers.h",
+        "line": 1303,
+        "type": "unsigned long (struct tmrTimerControl *)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vEINT0_ISR_Wrapper",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 294,
+        "type": "void (void)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vHTTPServerTask",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/HTTP_Serv.c",
+        "line": 48,
+        "type": "void (void *)",
+        "is_def": true
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/HTTP_Serv.h",
+        "line": 30,
+        "type": "void (void *)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vI2CISRCreateQueues",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/i2c.c",
+        "line": 72,
+        "type": "void (unsigned long, struct QueueDefinition **, unsigned long **)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vI2C_ISR_Wrapper",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/i2c.c",
+        "line": 176,
+        "type": "void (void)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vListInitialise",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/list.h",
+        "line": 441,
+        "type": "void (struct xLIST *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/list.c",
+        "line": 49,
+        "type": "void (struct xLIST *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vListInitialiseItem",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/list.h",
+        "line": 452,
+        "type": "void (struct xLIST_ITEM *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/list.c",
+        "line": 89,
+        "type": "void (struct xLIST_ITEM *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vListInsert",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/list.h",
+        "line": 465,
+        "type": "void (struct xLIST *, struct xLIST_ITEM *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/list.c",
+        "line": 139,
+        "type": "void (struct xLIST *, struct xLIST_ITEM *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vListInsertEnd",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/list.h",
+        "line": 487,
+        "type": "void (struct xLIST *, struct xLIST_ITEM *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/list.c",
+        "line": 105,
+        "type": "void (struct xLIST *, struct xLIST_ITEM *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vParTestInitialise",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/partest.h",
+        "line": 32,
+        "type": "void (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/ARM7_LPC2106_GCC/ParTest/ParTest.c",
+        "line": 45,
+        "type": "void (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vParTestSetLED",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/partest.h",
+        "line": 33,
+        "type": "void (unsigned long, long)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/ARM7_LPC2106_GCC/ParTest/ParTest.c",
+        "line": 55,
+        "type": "void (unsigned long, long)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vParTestToggleLED",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/partest.h",
+        "line": 35,
+        "type": "void (unsigned long)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/ARM7_LPC2106_GCC/ParTest/ParTest.c",
+        "line": 78,
+        "type": "void (unsigned long)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vPortDefineHeapRegions",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/portable.h",
+        "line": 178,
+        "type": "void (const struct HeapRegion *)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vPortDisableInterruptsFromThumb",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/../../Source/portable/GCC/ARM7_LPC2000/portmacro.h",
+        "line": 189,
+        "type": "void (void)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vPortEnableInterruptsFromThumb",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/../../Source/portable/GCC/ARM7_LPC2000/portmacro.h",
+        "line": 190,
+        "type": "void (void)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vPortEndScheduler",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/portable.h",
+        "line": 236,
+        "type": "void (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/portable/GCC/ARM7_LPC2000/port.c",
+        "line": 173,
+        "type": "void (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vPortEnterCritical",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/../../Source/portable/GCC/ARM7_LPC2000/portmacro.h",
+        "line": 215,
+        "type": "void (void)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vPortExitCritical",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/../../Source/portable/GCC/ARM7_LPC2000/portmacro.h",
+        "line": 216,
+        "type": "void (void)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vPortFree",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/portable.h",
+        "line": 192,
+        "type": "void (void *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/portable/MemMang/heap_2.c",
+        "line": 295,
+        "type": "void (void *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vPortGetHeapStats",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/portable.h",
+        "line": 184,
+        "type": "void (struct xHeapStats *)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vPortHeapResetState",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/portable.h",
+        "line": 210,
+        "type": "void (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/portable/MemMang/heap_2.c",
+        "line": 401,
+        "type": "void (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vPortISRStartFirstTask",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/portable/GCC/ARM7_LPC2000/port.c",
+        "line": 72,
+        "type": "void (void)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vPortInitialiseBlocks",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/portable.h",
+        "line": 193,
+        "type": "void (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/portable/MemMang/heap_2.c",
+        "line": 346,
+        "type": "void (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vQueueDelete",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 967,
+        "type": "void (struct QueueDefinition *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 2257,
+        "type": "void (struct QueueDefinition *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vQueueWaitForMessageRestricted",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 1854,
+        "type": "void (struct QueueDefinition *, unsigned int, long)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vSerialClose",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/serial.h",
+        "line": 106,
+        "type": "void (void *)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vSerialPutString",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/serial.h",
+        "line": 96,
+        "type": "void (void *, const signed char *, unsigned short)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vStartBlockingQueueTasks",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/BlockQ.h",
+        "line": 30,
+        "type": "void (unsigned long)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/Minimal/BlockQ.c",
+        "line": 95,
+        "type": "void (unsigned long)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vStartDynamicPriorityTasks",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/dynamic.h",
+        "line": 30,
+        "type": "void (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/Minimal/dynamic.c",
+        "line": 149,
+        "type": "void (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vStartIntegerMathTasks",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/integer.h",
+        "line": 30,
+        "type": "void (unsigned long)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/Minimal/integer.c",
+        "line": 68,
+        "type": "void (unsigned long)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vStartLEDFlashTasks",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/flash.h",
+        "line": 30,
+        "type": "void (unsigned long)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/Minimal/flash.c",
+        "line": 64,
+        "type": "void (unsigned long)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vStartPolledQueueTasks",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/PollQ.h",
+        "line": 30,
+        "type": "void (unsigned long)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/Minimal/PollQ.c",
+        "line": 87,
+        "type": "void (unsigned long)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vStartSemaphoreTasks",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/semtest.h",
+        "line": 30,
+        "type": "void (unsigned long)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/Minimal/semtest.c",
+        "line": 88,
+        "type": "void (unsigned long)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTCPHardReset",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/tcp.h",
+        "line": 32,
+        "type": "void (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 250,
+        "type": "void (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTCPListen",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/tcp.h",
+        "line": 37,
+        "type": "void (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 403,
+        "type": "void (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskDelay",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 863,
+        "type": "void (unsigned int)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 2469,
+        "type": "void (unsigned int)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskDelete",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 809,
+        "type": "void (struct tskTaskControlBlock *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 2224,
+        "type": "void (struct tskTaskControlBlock *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskEndScheduler",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 1582,
+        "type": "void (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 3805,
+        "type": "void (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskGenericNotifyGiveFromISR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3094,
+        "type": "void (struct tskTaskControlBlock *, unsigned long, long *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 8220,
+        "type": "void (struct tskTaskControlBlock *, unsigned long, long *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskInternalSetTimeOutState",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3711,
+        "type": "void (struct xTIME_OUT *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 5586,
+        "type": "void (struct xTIME_OUT *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskMissedYield",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3624,
+        "type": "void (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 5667,
+        "type": "void (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskPlaceOnEventList",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3541,
+        "type": "void (struct xLIST *, unsigned int)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 5307,
+        "type": "void (struct xLIST *, unsigned int)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskPlaceOnEventListRestricted",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3558,
+        "type": "void (struct xLIST *, unsigned int, long)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskPlaceOnUnorderedEventList",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3543,
+        "type": "void (struct xLIST *, unsigned int, unsigned int)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 5336,
+        "type": "void (struct xLIST *, unsigned int, unsigned int)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskPriorityDisinheritAfterTimeout",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3652,
+        "type": "void (struct tskTaskControlBlock *, unsigned long)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskPrioritySet",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 1195,
+        "type": "void (struct tskTaskControlBlock *, unsigned long)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 2807,
+        "type": "void (struct tskTaskControlBlock *, unsigned long)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskRemoveFromUnorderedEventList",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3587,
+        "type": "void (struct xLIST_ITEM *, unsigned int)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 5498,
+        "type": "void (struct xLIST_ITEM *, unsigned int)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskResetState",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3480,
+        "type": "void (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 8821,
+        "type": "void (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskResume",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 1300,
+        "type": "void (struct tskTaskControlBlock *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 3393,
+        "type": "void (struct tskTaskControlBlock *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskSetTimeOutState",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3352,
+        "type": "void (struct xTIME_OUT *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 5570,
+        "type": "void (struct xTIME_OUT *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskStartScheduler",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 1524,
+        "type": "void (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 3700,
+        "type": "void (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskSuspend",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 1249,
+        "type": "void (struct tskTaskControlBlock *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 3160,
+        "type": "void (struct tskTaskControlBlock *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskSuspendAll",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 1635,
+        "type": "void (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 3848,
+        "type": "void (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTaskSwitchContext",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/../../Source/portable/GCC/ARM7_LPC2000/portmacro.h",
+        "line": 172,
+        "type": "void (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3599,
+        "type": "void (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 5120,
+        "type": "void (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "vTickISR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/portable/GCC/ARM7_LPC2000/port.c",
+        "line": 187,
+        "type": "void (void)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vTimerResetState",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/timers.h",
+        "line": 1427,
+        "type": "void (void)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vTimerSetReloadMode",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/timers.h",
+        "line": 1274,
+        "type": "void (struct tmrTimerControl *, long)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "vTimerSetTimerID",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/timers.h",
+        "line": 409,
+        "type": "void (struct tmrTimerControl *, void *)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xAreBlockingQueuesStillRunning",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/BlockQ.h",
+        "line": 31,
+        "type": "long (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/Minimal/BlockQ.c",
+        "line": 275,
+        "type": "long (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xAreDynamicPriorityTasksStillRunning",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/dynamic.h",
+        "line": 31,
+        "type": "long (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/Minimal/dynamic.c",
+        "line": 450,
+        "type": "long (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xAreIntegerMathsTaskStillRunning",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/integer.h",
+        "line": 31,
+        "type": "long (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/Minimal/integer.c",
+        "line": 140,
+        "type": "long (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xArePollingQueuesStillRunning",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/PollQ.h",
+        "line": 31,
+        "type": "long (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/Minimal/PollQ.c",
+        "line": 197,
+        "type": "long (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xAreSemaphoreTasksStillRunning",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/semtest.h",
+        "line": 31,
+        "type": "long (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/Minimal/semtest.c",
+        "line": 255,
+        "type": "long (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xPortGetFreeHeapSize",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/portable.h",
+        "line": 194,
+        "type": "unsigned int (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/portable/MemMang/heap_2.c",
+        "line": 340,
+        "type": "unsigned int (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xPortGetMinimumEverFreeHeapSize",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/portable.h",
+        "line": 195,
+        "type": "unsigned int (void)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xPortResetHeapMinimumEverFreeHeapSize",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/portable.h",
+        "line": 196,
+        "type": "void (void)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xPortStartScheduler",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/portable.h",
+        "line": 229,
+        "type": "long (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/portable/GCC/ARM7_LPC2000/port.c",
+        "line": 159,
+        "type": "long (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xQueueCreateMutex",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 1510,
+        "type": "struct QueueDefinition *(unsigned char)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xQueueGenericCreate",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 1616,
+        "type": "struct QueueDefinition *(unsigned long, unsigned long, unsigned char)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 502,
+        "type": "struct QueueDefinition *(unsigned long, unsigned long, unsigned char)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xQueueGenericReset",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 1857,
+        "type": "long (struct QueueDefinition *, long)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 303,
+        "type": "long (struct QueueDefinition *, long)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xQueueGenericSend",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 686,
+        "type": "long (struct QueueDefinition *, const void *, unsigned int, long)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 949,
+        "type": "long (struct QueueDefinition *, const void *, unsigned int, long)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xQueueGenericSendFromISR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 1369,
+        "type": "long (struct QueueDefinition *, const void *, long *, long)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 1167,
+        "type": "long (struct QueueDefinition *, const void *, long *, long)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xQueueGiveFromISR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 1373,
+        "type": "long (struct QueueDefinition *, long *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 1338,
+        "type": "long (struct QueueDefinition *, long *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xQueueGiveMutexRecursive",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 1542,
+        "type": "long (struct QueueDefinition *)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xQueueIsQueueEmptyFromISR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 1475,
+        "type": "long (struct QueueDefinition *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 2638,
+        "type": "long (struct QueueDefinition *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xQueueIsQueueFullFromISR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 1476,
+        "type": "long (struct QueueDefinition *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 2683,
+        "type": "long (struct QueueDefinition *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xQueuePeek",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 784,
+        "type": "long (struct QueueDefinition *, void *, unsigned int)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 1884,
+        "type": "long (struct QueueDefinition *, void *, unsigned int)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xQueuePeekFromISR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 820,
+        "type": "long (struct QueueDefinition *, void *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 2139,
+        "type": "long (struct QueueDefinition *, void *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xQueueReceive",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 913,
+        "type": "long (struct QueueDefinition *, void *, unsigned int)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 1509,
+        "type": "long (struct QueueDefinition *, void *, unsigned int)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xQueueReceiveFromISR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 1467,
+        "type": "long (struct QueueDefinition *, void *, long *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 2039,
+        "type": "long (struct QueueDefinition *, void *, long *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xQueueSemaphoreTake",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 1528,
+        "type": "long (struct QueueDefinition *, unsigned int)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/queue.c",
+        "line": 1659,
+        "type": "long (struct QueueDefinition *, unsigned int)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xQueueTakeMutexRecursive",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/queue.h",
+        "line": 1540,
+        "type": "long (struct QueueDefinition *, unsigned int)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xSerialGetChar",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/serial.h",
+        "line": 99,
+        "type": "long (void *, signed char *, unsigned int)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xSerialPortInit",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/serial.h",
+        "line": 90,
+        "type": "void *(eCOMPort, eBaud, eParity, eDataBits, eStopBits, unsigned long)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xSerialPortInitMinimal",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/serial.h",
+        "line": 88,
+        "type": "void *(unsigned long, unsigned long)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xSerialPutChar",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/serial.h",
+        "line": 102,
+        "type": "long (void *, signed char, unsigned int)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xSerialWaitForSemaphore",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/Common/include/serial.h",
+        "line": 105,
+        "type": "long (void *)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xTCPISRQueue",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Demo/WizNET_DEMO_GCC_ARM7/TCP.c",
+        "line": 177,
+        "type": "struct QueueDefinition *",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskCatchUpTicks",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3466,
+        "type": "long (unsigned int)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 4612,
+        "type": "long (unsigned int)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskCheckForTimeOut",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3437,
+        "type": "long (struct xTIME_OUT *, unsigned int *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 5598,
+        "type": "long (struct xTIME_OUT *, unsigned int *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskCreate",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 389,
+        "type": "long (void (*)(void *), const char *, unsigned int, void *, unsigned long, struct tskTaskControlBlock **)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 1741,
+        "type": "long (void (*)(void *), const char *, unsigned int, void *, unsigned long, struct tskTaskControlBlock **)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskDelayUntil",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 931,
+        "type": "long (unsigned int *, unsigned int)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 2377,
+        "type": "long (unsigned int *, unsigned int)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskGenericNotify",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 2629,
+        "type": "long (struct tskTaskControlBlock *, unsigned long, unsigned int, eNotifyAction, unsigned int *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 7918,
+        "type": "long (struct tskTaskControlBlock *, unsigned long, unsigned int, eNotifyAction, unsigned int *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskGenericNotifyFromISR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 2784,
+        "type": "long (struct tskTaskControlBlock *, unsigned long, unsigned int, eNotifyAction, unsigned int *, long *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 8038,
+        "type": "long (struct tskTaskControlBlock *, unsigned long, unsigned int, eNotifyAction, unsigned int *, long *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskGenericNotifyStateClear",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3265,
+        "type": "long (struct tskTaskControlBlock *, unsigned long)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 8352,
+        "type": "long (struct tskTaskControlBlock *, unsigned long)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskGenericNotifyWait",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 2928,
+        "type": "long (unsigned long, unsigned int, unsigned int, unsigned int *, unsigned int)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 7804,
+        "type": "long (unsigned long, unsigned int, unsigned int, unsigned int *, unsigned int)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskGetCurrentTaskHandle",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3613,
+        "type": "struct tskTaskControlBlock *(void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 6550,
+        "type": "struct tskTaskControlBlock *(void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskGetCurrentTaskHandleForCore",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3618,
+        "type": "struct tskTaskControlBlock *(long)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 6585,
+        "type": "struct tskTaskControlBlock *(long)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskGetSchedulerState",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3630,
+        "type": "long (void)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskGetTickCount",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 1708,
+        "type": "unsigned int (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 4171,
+        "type": "unsigned int (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskGetTickCountFromISR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 1726,
+        "type": "unsigned int (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 4190,
+        "type": "unsigned int (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskIncrementTick",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3508,
+        "type": "long (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 4736,
+        "type": "long (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskPriorityDisinherit",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3642,
+        "type": "long (struct tskTaskControlBlock *)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskPriorityInherit",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3636,
+        "type": "long (struct tskTaskControlBlock *)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskRemoveFromEventList",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 3586,
+        "type": "long (const struct xLIST *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 5405,
+        "type": "long (const struct xLIST *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskResumeAll",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 1691,
+        "type": "long (void)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 4022,
+        "type": "long (void)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xTaskResumeFromISR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/task.h",
+        "line": 1331,
+        "type": "long (struct tskTaskControlBlock *)",
+        "is_def": false
+      },
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/tasks.c",
+        "line": 3454,
+        "type": "long (struct tskTaskControlBlock *)",
+        "is_def": true
+      }
+    ]
+  },
+  {
+    "symbol": "xTimerCreate",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/timers.h",
+        "line": 230,
+        "type": "struct tmrTimerControl *(const char *, unsigned int, long, void *, void (*)(struct tmrTimerControl *))",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xTimerCreateTimerTask",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/timers.h",
+        "line": 1355,
+        "type": "long (void)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xTimerGenericCommandFromISR",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/timers.h",
+        "line": 1369,
+        "type": "long (struct tmrTimerControl *, long, unsigned int, long *, unsigned int)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xTimerGenericCommandFromTask",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/timers.h",
+        "line": 1363,
+        "type": "long (struct tmrTimerControl *, long, unsigned int, long *, unsigned int)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xTimerGetExpiryTime",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/timers.h",
+        "line": 1329,
+        "type": "unsigned int (struct tmrTimerControl *)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xTimerGetPeriod",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/timers.h",
+        "line": 1314,
+        "type": "unsigned int (struct tmrTimerControl *)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xTimerGetReloadMode",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/timers.h",
+        "line": 1289,
+        "type": "long (struct tmrTimerControl *)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xTimerGetTimerDaemonTaskHandle",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/timers.h",
+        "line": 455,
+        "type": "struct tskTaskControlBlock *(void)",
+        "is_def": false
+      }
+    ]
+  },
+  {
+    "symbol": "xTimerIsTimerActive",
+    "decls": [
+      {
+        "file": "C:/FreeRTOS/FreeRTOS/Source/include/timers.h",
+        "line": 447,
+        "type": "long (struct tmrTimerControl *)",
+        "is_def": false
+      }
+    ]
+  }
+]
