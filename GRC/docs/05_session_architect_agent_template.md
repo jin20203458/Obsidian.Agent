@@ -17,7 +17,7 @@ related:
 
 > [!IMPORTANT]
 > **기술 종속성 및 런타임 파서 계약 계승**
-> 본 템플릿은 GRC 전용 데이터 규격([CharacterPreset.cs](../../../GRC/GRC/Models/CharacterPreset.cs), [ChatSession.cs](../../../GRC/GRC/Models/ChatSession.cs), [ChapterContext.cs](../../../GRC/GRC/Models/ChapterContext.cs), [SessionArchitectModels.cs](../../../GRC/GRC/Models/SessionArchitectModels.cs)), [SessionArchitectService.cs](../../../GRC/GRC/Services/SessionArchitectService.cs)의 결정론적 정제기(Sanitizers), 그리고 [MemoryManagerService.cs](../../../GRC/GRC/Services/MemoryManagerService.cs)의 3대 스토리 시드 정규식 파서(`Pool A/B/C`)에 바이트 단위로 종속됩니다. 에이전트 팀 토폴로지와 계쇄 거버넌스는 [AI_Agent_Architecture_Paradigms_Guidelines.md](../../ai_agent_refs/AI_Agent_Architecture_Paradigms_Guidelines.md) 및 [AI_Prompt_Engineering_Guidelines.md](../../ai_agent_refs/AI_Prompt_Engineering_Guidelines.md)를 단일 진실 공급원(SSOT)으로 준용합니다.
+> 본 템플릿은 GRC 전용 데이터 규격([CharacterPreset.cs](../../../GRC/GRC/Models/CharacterPreset.cs), [ChatSession.cs](../../../GRC/GRC/Models/ChatSession.cs), [ChapterContext.cs](../../../GRC/GRC/Models/ChapterContext.cs), [SessionArchitectModels.cs](../../../GRC/GRC/Models/SessionArchitectModels.cs)), [SessionArchitectService.cs](../../../GRC/GRC/Services/SessionArchitectService.cs)의 결정론적 정제기(Sanitizers), [EntityNameResolver.cs](../../../GRC/GRC/Helpers/EntityNameResolver.cs)의 엔티티 명칭·별칭·경계 판정 엔진, [NarrativeContract.cs](../../../GRC/GRC/Services/Cognitive/NarrativeContract.cs)의 서사 문장부호·정규식 SSOT 계약, 그리고 [MemoryManagerService.cs](../../../GRC/GRC/Services/MemoryManagerService.cs)의 3대 스토리 시드 파서(`Pool A/B/C`)에 바이트 단위로 종속됩니다. 에이전트 팀 토폴로지와 계쇄 거버넌스는 [AI_Agent_Architecture_Paradigms_Guidelines.md](../../ai_agent_refs/AI_Agent_Architecture_Paradigms_Guidelines.md) 및 [AI_Prompt_Engineering_Guidelines.md](../../ai_agent_refs/AI_Prompt_Engineering_Guidelines.md)를 단일 진실 공급원(SSOT)으로 준용합니다.
 
 ---
 
@@ -262,10 +262,10 @@ GRC 클라이언트는 세션을 열 때 `FullHistory.json`을 역직렬화하�
          * 말투/대사: 어조 특징 요약. "일상 대표 대사 샘플" / "본심·감정 노출 시 대사 샘플"
        ```
      * **서브컬처 메타 은어의 세계관 내 번역(In-Universe Translation)**: 유저 컨셉에 `쿨데레`, `츤데레`, `얀데레`, `갭 모에`, `키잡/역키잡`, `히로인` 등의 서브컬처 메타 용어가 포함되더라도, 로어북 본문과 `StatusUpdateGuide`에는 메타 단어를 직접 노출하지 말고 세계관에 어울리는 구체적인 행동·심리·관계 주도권 묘사로 풀어서 작성합니다(문체 오염 방지).
-  3. **우선순위(`Priority`) 및 키워드(`Keywords`) 정규화 (오탐 방지 수칙)**:
+  3. **우선순위(`Priority`) 및 키워드(`Keywords`) 정규화 ([EntityNameResolver.DeriveAliases](../../../GRC/GRC/Helpers/EntityNameResolver.cs) 오탐 방지 수칙)**:
      * `Priority`는 오름차순 스케일(`0`=최우선 핵심 주연/거점, `1`=주요 조연/장소, `2`=일반, `3`=배경)로 부여합니다.
-     * `Keywords`는 ① 엔트리 정식 `Name`, ② **고유 인명**(예: `"클라라 로웬"` -> `"클라라"`) 또는 **고유 지명**(예: `"그레이하버 변경 장터"` -> `"그레이하버"`)에 해당하는 첫 어절, ③ 한국어 조사가 제거된 복합 고유명사·직함·별칭을 합쳐 최대 8개로 구성합니다.
-     * **[일반명사 단독 키워드 금지]**: `"지하 경매장 붉은 쇠사슬"`에서 `"지하"`, `"그림자 사냥개 길드"`에서 `"그림자"`, `"흑철 각인 구속구"`에서 `"흑철"`처럼 일상 묘사에 흔히 등장하는 2글자 보통명사·수식어를 단독 키워드로 등록하면 `HybridLorebookRetriever`의 정규식 스캔이 매 턴 오탐(False Positive)을 일으키므로, 반드시 2어절 이상의 고유 복합명사(`"지하 경매장"`, `"붉은 쇠사슬"`, `"그림자 사냥개"`) 형태로만 등록합니다.
+     * `Keywords`는 ① 엔트리 정식 `Name`, ② **`인물` 카테고리에 한하여** 고유 인명 첫 어절(예: `"클라라 로웬"` -> `"클라라"`), ③ 한국어 조사가 제거된 2어절 이상의 복합 고유명사·직함·별칭을 합쳐 최대 8개로 구성합니다.
+     * **[비인물 첫 어절 및 일반명사 단독 키워드 금지]**: 비인물(`장소`, `아이템`, `세계관`) 복합 명칭의 첫 어절 수식어(예: `"지하 경매장 붉은 쇠사슬"`의 `"지하"`, `"그림자 사냥개 길드"`의 `"그림자"`, `"흑철 각인 구속구"`의 `"흑철"`)나 일상 묘사에 흔히 등장하는 보통명사를 단독 키워드로 등록하면 `HybridLorebookRetriever` 정규식 스캔과 `Pool B` 시드 소모가 매 턴 오탐(False Positive)을 일으킵니다. 비인물 키워드는 반드시 정식 명칭, 후행 고유 핵심 명사(예: `"카타콤"`), 또는 2어절 이상의 고유 복합명사(`"지하 경매장"`, `"붉은 쇠사슬"`, `"그림자 사냥개"`) 형태로만 등록합니다.
 
 ### Stage 3: 오프닝 시나리오 선행 집필 (Scenario-First Prose Authoring)
 * **주체**: Scenario Director Subagent
