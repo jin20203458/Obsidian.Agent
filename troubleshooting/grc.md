@@ -533,7 +533,35 @@ related:
 4. **`ChapterContext.Clone()` 스냅샷 격리 및 `AwaitPendingStatusTaskAsync` 동기화 (`ChatViewModel.cs`)**:
    - 세션 로드 및 아키텍트 편집 복원 시 `savedSession with { Preset = sessionPreset }`을 전달하여 `_cachedLorebooks`를 즉시 초기화하고, `ExportSession`/`RestoreSession`에서 `ChapterContext.Clone()` 깊은 복사로 백그라운드 JSON 직렬화 중 컬렉션 변경 예외를 원천 차단.
 
+---
 
+## 2026-10-26: [Resolved] EntityNameResolver 및 NarrativeContract SSOT 도입 (상태창 인물 덮어쓰기 차단, 비인물 첫 어절 오염 제거, Turn 1 오프닝 로어북 스캔)
 
+### 1. 현상 (Symptom)
+1. **비인물 로어북 첫 어절 일반 수식어 자동 주입 및 Pool B(`HOOK:`) 시드 오탐 소모**:
+   - `SessionArchitectService.NormalizeKeywords`가 카테고리를 구분하지 않고 모든 복합 명칭의 첫 어절(`nameParts[0]`)을 키워드에 무조건 추가하여, `"지하 유적 제단"`에서 `"지하"`, `"그림자 사냥개 길드"`에서 `"그림자"`가 단독 키워드로 등록됨.
+   - `MemoryManagerService.ExtractProperNameKeywords` 역시 첫 어절을 `PrimaryKeywords`에 추가하여, 서사 응답에 `"지하 창고"`나 `"그림자가 드리웠다"`만 등장해도 미방문 장소/세력 시드(`HOOK:`)가 오탐 소모(`ConsumedSeeds`)됨.
+2. **런타임 상태창 갱신(`UpdateContextStatus`) 시 일반 직함 키워드 충돌로 인한 기존 인물 상태 덮어쓰기**:
+   - `NormalizeInitialCharKeys`가 `entry.Keywords` 전체에 대해 부분 문자열 포함(`cleanKey.Contains(kw)`)을 검사함에 따라, `"성녀"` 키워드를 가진 `"세실리아 본 로젠버그"`가 있는 세션에서 단역 `"성녀 호위대장"`이 등장하면 `"세실리아 본 로젠버그"`의 상태창 슬롯을 덮어쓰는 상태 오염 버그 존재.
+3. **Turn 1 오프닝 장면의 장소·소품·세력 로어북 인출 공백**:
+   - `InjectInitialScenario`가 Turn 0를 `[User: <initial_scenario>...]` + `[Model: "상황을 파악했습니다. 당신의 행동을 기다립니다."]`로 구성하고 `BuildNarrativeRequestAsync`는 직전 `model` 응답만 스캔하여, Turn 1에 오프닝 시나리오 본문 속 시작 장소/소품/배경 세력 로어북이 1차 키워드 스캔에서 누락됨.
+4. **오프닝 시나리오 고유명사 낫표(`「...」`) 오염 및 서브컬처 메타 은어("갭 모에") 혼입**:
+   - `ScenarioGen` 지시문의 `"독백/속마음 및 강조용은 낫표(「...」)"` 문구가 런타임 `CognitivePromptAssembler.FormatRule`과 상충하여 고유명사에 `「...」`가 남용되고, `GeneratePlanAsync`의 `"갭 모에"` 지시어가 다크 판타지 마스터 세계관에 노출됨.
 
+### 2. 원인 (Root Cause)
+- 엔티티 명칭·별칭 파생, 동일 엔티티 판정, 시드 소모 경계 매칭, 서사 문장부호 계약이 `SessionArchitectService`, `MemoryManagerService`, `CognitivePromptAssembler` 3개 클래스에 각각 다른 휴리스틱으로 파편화되어 있었음.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+1. **`EntityNameResolver` (`GRC/Helpers/EntityNameResolver.cs`) SSOT 도입**:
+   - `DeriveAliases(entryName, rawKeywords, category)`: 복합 명칭의 첫 어절 자동 추출은 오직 `인물` 카테고리에서만 수행하며, 비인물(`장소`, `아이템`, `세계관`)에서는 첫 어절 수식어가 단독 키워드로 등록되는 것을 원천 차단.
+   - `ResolveCharacterKey(rawKey, characterLorebooks)`: 일반 `Keywords`(직함·소속) 부분 문자열 매칭을 전면 배제하고, 오직 전체 엔트리명 일치 또는 고유 이름 첫 어절(`GetCharacterGivenName`) 완전 일치 시에만 정규화하여 단역 NPC에 의한 주연 상태 덮어쓰기 차단.
+   - `DeriveHookPrimaryKeywords` 및 `ContainsEntityMention`: Pool B(`HOOK:`) 시드는 전체 엔트리명 등장(Tier 1) 또는 2어절 이상 핵심 구분자 + `* 서사 훅` 본문 핵심어 동시 등장(Tier 2) 시에만 소모되도록 이원화하고, 한국어 조사 경계 정규식을 적용하여 합성어 부분 일치 오탐 차단.
+2. **`NarrativeContract` (`GRC/Services/Cognitive/NarrativeContract.cs`) SSOT 도입 및 `SanitizeScenario` 정제**:
+   - 런타임과 아키텍트의 문장부호 규칙(`""` 대사, `「」` 속마음/독백 전용, 고유명사/강조용 `「」` 금지)과 로어북 필드 정규식을 단일 정적 계약으로 통합하고, `SanitizeScenario(raw, lorebooks)`에서 로어북 고유명사를 감싼 강조용 `「...」`를 결정론적으로 스트리핑.
+   - `GeneratePlanAsync` 및 `GetLorebookBatchSystemInstruction`에서 `"갭 모에"` 등 메타 은어를 `"반전 면모"` 및 세계관 내 서술어로 치환하고, 오프닝 등장 예정 인물의 `* PC 관계: 초기 접점(...)`이 오프닝 직면 상황과 일치하도록 제약 명시.
+3. **Turn 1 `<initial_scenario>` 자동 스캔 연동 (`MemoryManagerService.cs`)**:
+   - `lastModelMessage.Text == NarrativeContract.InitialScenarioAckText`인 Turn 1에는 직전 `<initial_scenario>` 원문을 `loreScanQuery`에 결합하여 오프닝 현장의 장소·소품·세력 로어북이 첫 턴부터 즉시 인출되도록 보장.
+4. **핵심 부정 제약 (Never use X)**:
+   - **절대 비인물(`장소`, `아이템`, `세계관`) 복합 명칭의 첫 어절을 단독 키워드나 시드 소모 트리거로 자동 추출하지 말 것.**
+   - **절대 상태창 인물 Key 정규화(`ResolveCharacterKey`)에 일반 직함/소속 `Keywords` 부분 문자열 포함 검사(`.Contains`)를 사용하지 말 것.**
 

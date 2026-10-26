@@ -23,6 +23,8 @@ related:
 `[IMPLEMENTED]` 메모리 파이프라인 및 인지 모듈 구현체:
 - 파이프라인 총괄: [MemoryManagerService.cs](../../../GRC/GRC/Services/MemoryManagerService.cs)
 - 인지 프롬프트 조립기: [CognitivePromptAssembler.cs](../../../GRC/GRC/Services/Cognitive/CognitivePromptAssembler.cs)
+- 서사 문장부호·스키마 SSOT 계약: [NarrativeContract.cs](../../../GRC/GRC/Services/Cognitive/NarrativeContract.cs)
+- 엔티티 명칭·별칭·경계 판정 엔진: [EntityNameResolver.cs](../../../GRC/GRC/Helpers/EntityNameResolver.cs)
 - 사건 렛저 추출기: [EventLedgerExtractor.cs](../../../GRC/GRC/Services/Cognitive/EventLedgerExtractor.cs)
 - 하이브리드 로어북 인출기: [HybridLorebookRetriever.cs](../../../GRC/GRC/Services/Cognitive/HybridLorebookRetriever.cs)
 - 살리언스 게이티드 RAG: [GatedRAGRetriever.cs](../../../GRC/GRC/Services/Cognitive/GatedRAGRetriever.cs)
@@ -81,13 +83,13 @@ flowchart TB
 *   **살리언스 증발(Salience Evaporation)** 기법을 적용하여 1,500자 이내의 대서사 산문 연대기(`_longTermSummary`)로 즉시 병합 보존하여 서사의 거시적 대의명분 공백을 완전히 해소합니다.
 
 ### 5) 보조 인지 엔진 (2-Core RAG & Relational Projector)
-*   **하이브리드 로어북 RAG (`HybridLorebookRetriever`)**: 정규식 1차 이름/키워드 스캔(엔트리 이름 완전 일치 및 직전 `model` 응답 + 현재 유저 입력 결합 키워드 스캔)과 시맨틱 임베딩 2차 유사도 검색(벡터 희석 방지를 위해 현재 유저 입력 단독 임베딩 사용, 임계치 `0.75f`, 3턴 잔존 Sticky)을 결합하여 설정집을 누락 없이 인출합니다. 또한 단기 기억 버퍼 전체(18~25개 메시지) 및 최근 사건 불릿(3개)에 등장하는 활성 인물(`activeChars`)을 광역 스캔하며, 각 단계 내부는 `Priority` 오름차순(`0 = 최우선순위`)으로 동적 패킹(최대 3,000토큰)하여 대명사 구간의 로어북 유지와 초장기 세션 퇴장 조연의 예산 잠식 방지를 동시에 달성합니다.
+*   **하이브리드 로어북 RAG (`HybridLorebookRetriever`)**: 정규식 1차 이름/키워드 스캔(엔트리 이름 완전 일치 및 직전 `model` 응답 + 현재 유저 입력 결합 키워드 스캔; Turn 1에는 고정 확인 응답 대신 `<initial_scenario>` 본문 전체를 자동 스캔하여 오프닝 장소·소품·세력 로어북 즉시 인출 보장)과 시맨틱 임베딩 2차 유사도 검색(벡터 희석 방지를 위해 현재 유저 입력 단독 임베딩 사용, 임계치 `0.75f`, 3턴 잔존 Sticky)을 결합하여 설정집을 누락 없이 인출합니다. 또한 단기 기억 버퍼 전체(18~25개 메시지) 및 최근 사건 불릿(3개)에 등장하는 활성 인물(`activeChars`)을 광역 스캔하며, 각 단계 내부는 `Priority` 오름차순(`0 = 최우선순위`)으로 동적 패킹(최대 3,000토큰)하여 대명사 구간의 로어북 유지와 초장기 세션 퇴장 조연의 예산 잠식 방지를 동시에 달성합니다.
 *   **사건 불릿포인트 RAG (`GatedRAGRetriever`)**: 레거시 키워드 게이팅 데드코드를 전면 적출하고, 매 턴 계산된 768차원 유저 쿼리 임베딩을 실측 기반 순수 코사인 유사도(**$\ge 0.78f$**) 스캔에 직결하여 상위 2개를 핀포인트 인출합니다. 인출 결과는 단일 원장 인덱스(`Index`) 발생 시간순으로 정렬하여 선후 인과 역전을 차단하며, 헤더에 `[떠오른 과거의 기억 - 현재 상태와 상충 시 현재 상태가 우선함]`을 명시하여 현재 상태 오판을 원천 방어합니다.
-*   **엔티티 상태 투영기 (`BiTemporalEntityProjector`) 및 동적 환경 태그 (`<current_state>`)**: 불필요한 필드 및 중복 상태 텍스트 버그를 제거하고, `- 인물(이름): 상태 (수치)` 또는 `- 인물(이름): 상태` 형태로 간결하고 명확하게 투영합니다. 또한 상태창의 현재 위치(`Places`), 플레이어 주요 수치(`CustomStats`), 인벤토리(`Items`)를 `<entity_relationship>` 직후의 `<current_state>` 태그로 서사 AI에 동적 공급하여 인지 단절을 원천 해소합니다. 런타임 상태창 갱신(`UpdateContextStatus`) 시 약칭으로 유입된 인물 Key를 로어북 표준 명칭(`NormalizeInitialCharKeys`)으로 자동 정규화하여 중복 엔티티 및 로어북 매칭 누락을 방지합니다.
+*   **엔티티 상태 투영기 (`BiTemporalEntityProjector`) 및 엔티티 명칭·경계 판정 엔진 (`EntityNameResolver`)**: 불필요한 필드 및 중복 상태 텍스트 버그를 제거하고, `- 인물(이름): 상태 (수치)` 또는 `- 인물(이름): 상태` 형태로 간결하고 명확하게 투영합니다. 또한 상태창의 현재 위치(`Places`), 플레이어 주요 수치(`CustomStats`), 인벤토리(`Items`)를 `<entity_relationship>` 직후의 `<current_state>` 태그로 서사 AI에 동적 공급하여 인지 단절을 원천 해소합니다. 런타임 상태창 갱신(`UpdateContextStatus`) 시 `EntityNameResolver.ResolveCharacterKey`를 통해 오직 인물 전체명 또는 고유 이름 첫 어절 일치로만 표준 명칭 정규화를 수행하여 일반 직함/소속 키워드 충돌로 인한 기존 인물 상태 덮어쓰기를 원천 차단합니다.
 *   **사건 해결 변수 기반 서브컬처 에피소드 & 시드 엔진 (`<story_seeds>` & `isSceneResolved`)**:
     - **변수 트리거(`StatusPayload.IsSceneResolved`)**: 상태창 추적 API(`BuildStatusRequest`)가 최근 2턴 맥락(`<recent_context>`)과 직전 턴(`<latest_turn>`)을 종합하여 당면 사건(전투, 협상, 위기 등)이 일단락된 막간(Interlude/Lull) 상태인지를 `isSceneResolved: boolean`으로 판별합니다.
     - **조건부 3대 풀 시드 주입 (평상시 오염 0 토큰)**: 오직 `_currentContext.IsSceneResolved == true`이거나 유저가 명시적으로 `[빠른 진행]`(`fast_forward`)을 켰을 때만 로어북과 상태창을 교차 대조하여 ① `[미등장 인물 조우]`(1턴 로어북 인출 딜레이 방지를 위해 분류·외양·첫 번째 일상 대사 샘플 및 초기 접점 포함), ② `[장소/사건 훅]`(미방문 장소/세력/아이템의 `* 서사 훅`), ③ `[동료 유대 심화]`(호감도/신뢰도 $\ge 30$ 달성 동료의 2단계 유대 심화 사건 및 $\ge 60$ 달성 시 내면 단서 해금) 최대 3개 시드를 `<story_seeds>` 및 추천 답변용 `<available_story_seeds>`로 주입합니다.
-    - **자동 소모(`ConsumedSeeds`) 및 쿨다운**: 서사 응답에 시드 엔티티가 등장하면 즉시 `ConsumedSeeds`에 영구 등록하고 `IsSceneResolved = false`로 리셋하며, 최소 2턴의 재발동 쿨다운(`LastSeedTriggeredTurn`)을 적용하여 장면 급발진(Seed Baiting)을 원천 차단합니다.
+    - **한국어 조사 경계 기반 자동 소모(`ConsumedSeeds`) 및 쿨다운**: `EntityNameResolver.ContainsEntityMention` 한국어 조사 경계 정규식과 Pool B(`HOOK:`) 2계층 매칭(전체 엔트리명 등장 또는 복합 구분자 + `* 서사 훅` 본문 핵심어 동시 등장)을 통해 일반 수식어("지하", "그림자" 등)에 의한 오탐 소모를 원천 차단합니다. 서사 응답에 시드 엔티티가 실제로 등장하면 즉시 `ConsumedSeeds`에 영구 등록하고 `IsSceneResolved = false`로 리셋하며, 최소 2턴의 재발동 쿨다운(`LastSeedTriggeredTurn`)을 적용하여 장면 급발진(Seed Baiting)을 방어합니다.
 
 </memory_pipeline>
 
