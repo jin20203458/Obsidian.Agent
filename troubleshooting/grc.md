@@ -508,22 +508,27 @@ related:
 
 ---
 
-## 2026-10-27: [Resolved] LLM 스트리밍 중 오토스크롤 추적 지연(Lag) 및 24px 허용오차 초과 동결(Freeze) 결함 해결
+## 2026-10-28: [Resolved] VirtualizingStackPanel 픽셀 스크롤 내부 보정으로 인한 오토스크롤 오탐 비활성화 및 도중 멈춤 결함 해결
 
 ### 1. 현상 (Symptom)
-- LLM 모델이 긴 답변을 실시간 스트리밍으로 출력할 때, 오토스크롤이 텍스트 출력을 제때 따라가지 못하고 프레임 단위로 뒤처지다가(Lag) 도중에 스크롤이 완전히 멈춰버리는(Freeze) 현상 발생.
-- 화면이 멈춘 후에도 모델의 텍스트는 뷰포트 아래로 계속 출력되며, 사용자가 수동으로 스크롤바를 조작하기 전까지 자동 추적이 재개되지 않음.
+- LLM 모델이 긴 답변을 실시간 스트리밍으로 출력할 때, 오토스크롤이 바닥을 잘 따라가다가 답변 중간에 갑자기 멈추는(Freeze) 현상 발생.
+- 텍스트가 계속 아래로 출력되어도 스크롤이 더 이상 내려가지 않다가, 답변이 완전히 끝나 메시지 교체 시점이 되면 맨 아래로 다시 스크롤됨.
+- 사용자가 마우스나 키보드를 전혀 건드리지 않은 상태에서도 재현됨.
 
 ### 2. 원인 (Root Cause)
-1. **디스패처 우선순위 기아 (Priority Starvation)**: `StatefulStreamingHelper`의 60FPS UI 렌더 타이머와 WPF 레이아웃 패스는 `DispatcherPriority.Render`(7)에서 동작하는 반면, `AutoScrollHelper.cs`의 `ScrollToEnd()`는 `DispatcherPriority.Loaded`(6)로 비동기 큐잉되어 토큰 유입 중 스크롤 실행이 계속 프레임 단위로 지연됨.
-2. **`CalculateIsAtBottom` 정적 24px 허용오차 파손 (Dead-lock)**: 1의 지연 누적이나 대사 말풍선 `Border`(높이 50~60px 이상) 생성 등으로 단일/누적 높이 차이가 24px(`BottomTolerancePixels`)을 초과하면, `verticalOffset >= (referenceHeight - 24)`가 `false`를 반환. 이로 인해 `ScrollToEnd()` 예약이 중단되고 `VerticalOffset`이 고정되어 이후 모든 프레임에서 영구히 `false`가 반환되는 동결 루프 발생.
-3. **고DPI/서브픽셀 음수 오탐 위험**: `isPureUserScroll && e.VerticalChange < 0` 판정에 데드존이 없어 고DPI 환경의 미세 부동소수점 오차(`-0.0001` 등)로 유저 스크롤 의도가 아님에도 `IsAutoScrollActive`가 `false`로 꺼질 위험 잔존.
+1. **VirtualizingStackPanel 자체 오프셋 보정의 오탐**:
+   - `ItemsControl`의 `VirtualizingStackPanel`(`ScrollUnit="Pixel"`)이 긴 스트리밍 텍스트 렌더링 중 레이아웃 패스에서 스스로 뷰포트 오프셋을 정확히 1행(`LineHeight=24px`)만큼 위로 보정(`dV = -24.00, dExt = 0.00, dVp = 0.00`).
+   - 기존 `AutoScrollHelper.cs`는 `ExtentHeightChange == 0 && ViewportHeightChange == 0 && VerticalChange < 0` 조건을 "순수 사용자 조작(`isPureUserScroll`)"으로 간주하도록 작성되어 있었음.
+   - 프레임워크 자체의 1행 재배치(`dV = -24.00`)를 사용자의 상향 스크롤 의도로 오인하여 `SetIsAutoScrollActive(sv, false)`를 호출함으로써 오토스크롤이 꺼짐.
+2. **동결 상태 고착**:
+   - `IsAutoScrollActive`가 `false`가 되면 이후 스트리밍 텍스트가 늘어나도(`dExt > 0`) 스크롤을 시도하지 않음.
+   - 스트리밍 종료 시점에 `StreamingPanel`이 숨겨지고 `FinalText`가 반영되면서 컨텐츠 높이 급증(`dV = 64.00`)과 함께 바닥 판정(`isAtBottomNow`)이 만족되어 `IsAutoScrollActive`가 뒤늦게 `true`로 복구되었던 것.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **스트리밍 활성 추적 보장 및 동결 차단 ([AutoScrollHelper.cs](../../GRC/GRC/Helpers/AutoScrollHelper.cs))**:
-  - `GetIsAutoScrollActive(sv)`가 `true`이고 컨텐츠가 확장(`e.ExtentHeightChange > 0`)될 때는 정적 24px 수식의 간섭 없이 최하단을 지속 추적하도록 분기 교정(`e.ExtentHeightChange > 0 || CalculateIsAtBottom(...)`). 컨텐츠 축소(`e.ExtentHeightChange < 0`) 시에는 기존대로 `CalculateIsAtBottom`을 통해 상단 뷰포트 하이재킹 차단.
-- **디스패처 우선순위 동기화 (`Loaded` -> `Render`)**:
-  - `AutoScrollHelper` 내 모든 `InvokeAsync`를 `DispatcherPriority.Render`(7)로 통일하여 60FPS 렌더 타이머와 동기화, 프레임 밀림(Lag) 해소.
-- **순수 유저 상향 조작 데드존 적용**:
-  - `isPureUserScroll && e.VerticalChange < -1.0`으로 서브픽셀 정렬 오차에 의한 오토스크롤 비활성화 오탐 방어.
-- **핵심 부정 제약 (Never use X)**: **절대 `IsAutoScrollActive == true`인 스트리밍 확장(`ExtentHeightChange > 0`) 상황에서 24px 무상태 수학식(`CalculateIsAtBottom`)을 단독 관문으로 사용하여 스크롤 명령을 누락시키지 말 것.**
+- **실제 물리적 사용자 입력 기반 상태 전이 확립 ([AutoScrollHelper.cs](../../GRC/GRC/Helpers/AutoScrollHelper.cs))**:
+  - `e.VerticalChange < 0` 부호만으로 사용자 의도를 추정하는 휴리스틱을 전면 폐기.
+  - 실제 사용자 입력(`PreviewMouseWheel`, 스크롤바 Thumb/Track 마우스 클릭, 방향키/PgUp/PgDn/Home/End)이 최근 500ms 이내에 발생했거나 스크롤바 Thumb을 드래그 중인 경우에만 `isUserDriven = true`로 판정하여 오토스크롤을 비활성화.
+  - 사용자 입력이 수반되지 않은 프레임워크 자체 상향 오프셋 보정(`dV < 0`)은 무시하고, 오토스크롤 활성 상태라면 즉시 최하단으로 재정렬(`QueueScrollToEnd`).
+- **디스패처 우선순위 동기화**:
+  - `ScrollToEnd` 호출을 60FPS UI 렌더 타이머와 동일한 `DispatcherPriority.Render`로 정렬하여 스트리밍 텍스트와의 렌더링 지연(Lag) 제거.
+- **핵심 부정 제약 (Never use X)**: **절대 `ExtentHeightChange == 0 && VerticalChange < 0`이라는 기하학적 조건만으로 사용자 상향 스크롤 여부를 단정하지 말 것.** 가상화 패널(`VirtualizingStackPanel`)의 픽셀 스크롤 환경에서는 레이아웃 재배치로 인한 내부 오프셋 조정이 빈번하므로, 반드시 실제 입력 디바이스 이벤트(마우스 캡처/휠/키 입력) 타임스탬프와 결합하여 검증할 것.
