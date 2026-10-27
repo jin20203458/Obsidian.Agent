@@ -610,3 +610,51 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
    * `isInAstAssignmentContext(CE, Ctx)` 및 `isEvaluatableByAstChecker(SubExpr, Ctx, Visited)`를 추가하여, `ast-no-out-of-range-assignment`가 담당하는 대입/초기화/반환 문맥의 불변 지역 변수(`isEffectivelyConstLocalVar`) 상수 대입식은 CSA에서 스킵함으로써 동일 라인 중복 경고를 차단(단, 재할당된 변수, 런타임 분기, 함수 인자 전달 `CallExpr`은 CSA 검출력 100% 보존).
    * `DstBits < SrcBits`인 경우 `"음수 값을 무부호(unsigned) 타입으로 축소 형변환 시 표현 범위 초과 및 데이터 변형 가능성"`을, `DstBits >= SrcBits`인 경우 `"음수 값을 무부호(unsigned) 타입으로 변환 시 표현 범위 초과 및 데이터 변형 가능성"`을 방출하여 `DAPA 공통(변환) a, d, e` 각각의 메시지 키워드 매칭 정합성 확립.
 
+---
+
+## 2026-10-27: [Resolved] FunctionCallArgumentConsistencyCheck 및 SignedBitwiseSafetyCheck 내 C99 열거형 상수·정수 승격·상수 비트마스크 오탐 전수 해결
+
+### 1. 현상 (Symptom)
+* **`FunctionCallArgumentConsistencyCheck` (`ast-function-call-argument-consistency`)**:
+  1. C99/C11 모드에서 열거형 상수(`EnumConstantDecl`, 예: `MBEDTLS_OPERATION_ENCRYPT`)를 자신의 열거형 타입(`mbedtls_operation_t`) 매개변수에 전달할 때 `'int' -> 'mbedtls_operation_t'` 허용되지 않는 암묵 변환 오탐 발생 (`ccm.c:77`, `chachapoly.c:313`, `cipher.c:203` 등).
+  2. 컴파일 타임 상수(`0`, `0xFF`, `'A'`, `sizeof(...)`, `((unsigned short)128)`) 및 C 정수 승격된 비트 마스킹 수식(`(C1 >> 2) & 0x3F`)을 `uint8_t`, `long`, `uint32_t` 등에 전달할 때 축소 변환 또는 비승격 타입 불일치 오탐 다수 발생 (FreeRTOS `TCP.c`, `HTTP_Serv.c`, `QPeek.c`, `GenQTest.c`, `recmutex.c`, `SandBox_Test_Case` 등).
+  3. `isAcceptableImplicitChain` 최상단의 `AllowPointerToVoidConversion` 및 `AllowArrayToPointerDecay` 조기 반환(`return true;`)으로 인해 `char[16] -> int *`(`CK_ArrayToPointerDecay` + `CK_BitCast`) 등 부적절한 후속 포인터 캐스트가 루프 검사를 우회하는 미탐 취약점 존재.
+* **`SignedBitwiseSafetyCheck` (`ast-signed-bitwise-safety`)**:
+  1. DAPA `Rule_28_Conv_LossyConversion\Compliant.c:2` (`char sca = (char)(sia & 0x7F);`), FreeRTOS (`ulTxAddress & 0xff`, `xWantedSize & portBYTE_ALIGNMENT_MASK`), MbedTLS (`(n + 1) & 0x0F`, `(C1 >> 2) & 0x3F`, `((C1 & 3) << 4)`) 등에서 접미사 없는 양수 리터럴(`0x7F`, `0xff`, `0x3F`, `3`) 및 정수 승격된 `uint8_t` 복합 비트 연산식에 대해 대규모 오탐 발생 (MbedTLS 569건, FreeRTOS 16건, DAPA Compliant 1건).
+
+### 2. 원인 (Root Cause)
+* **`FunctionCallArgumentConsistencyCheck.cpp`**:
+  1. ISO C 표준(C99 6.4.4.3p2)에서 열거자(`EnumConstantDecl`)의 표현식 타입은 항상 `int`이므로, 동일 열거형(`EnumType`) 매개변수 전달 시 `CK_IntegralCast (int -> EnumType)`가 생성되는데 이를 예외 처리하지 않음.
+  2. `CK_IntegralCast` 분기에서 `if (SrcBits > DestBits) return false;`가 상수 평가보다 먼저 수행되고, 상수 평가 또한 `Signed -> Unsigned` 조합에만 국한되어 `Signed -> Signed`(`0 -> long`, `0 -> int8_t`), `Unsigned -> Unsigned`(`(uint16_t)128 -> uint32_t`) 상수 및 C 정수 승격 비트 수식이 모두 차단됨.
+  3. `while (auto *ICE = dyn_cast<ImplicitCastExpr>(E))` 진입 전에 배열/포인터 조건만으로 `return true`를 반환하여 복합 암묵 캐스트 사슬 검증이 누락됨.
+* **`SignedBitwiseSafetyCheck.cpp`**:
+  1. `IgnoreParenImpCasts()`가 C의 일반 산술 변환(Usual Arithmetic Conversions) 및 정수 승격(Integer Promotions) 캐스트를 모두 벗겨내어, 양수 상수 리터럴(`0x7F`)과 `uint8_t` 복합 수식(`C1 >> 2`)의 원본/중간 타입인 `int`만 보고 무조건 부호 비트 오염 위험으로 판정함.
+  2. 2의 보수(Two's Complement) 대수에서 부호 비트가 `0`인 비음수 마스크(`ActiveBits < ResultWidth`)와의 `&` 연산은 피연산자의 부호와 무관하게 결과의 부호 비트를 항상 `0`(`>= 0`)으로 클리어한다는 수학적 불변식이 반영되지 않음.
+
+### 3. 해결책 (Resolution)
+1. **`FunctionCallArgumentConsistencyCheck.cpp`**:
+   * `CK_IntegralCast` 내에서 `DeclRefExpr -> EnumConstantDecl`의 소속 `EnumDecl`이 대상 `EnumType`의 `EnumDecl`과 일치하는 경우 표준 C 열거자 전달로 인정.
+   * `referencesVarDeclInEvaluatedContext` 및 `isConstantRepresentableInIntegralType`을 도입하여 변수를 참조하지 않는 순수 컴파일 타임 상수(`APSInt`)가 대상 정수 타입의 비트 폭(`getActiveBits()` / `getSignificantBits()`) 내에 손실 및 부호 왜곡 없이 수용되면 부호 조합과 무관하게 허용.
+   * `getKnownBitwiseActiveBits` 및 `isLosslessPromotedBitwiseExpr`을 도입하여 C 정수 승격으로 `int`가 된 비트/시프트 수식의 유효 비트가 하위 정수 매개변수 타입에 무손실 수용되는 경우 허용.
+   * 최상단 조기 반환을 제거하고 `while` 루프 내 `case CK_BitCast:`에서 CVR 한정자 탈락 여부를 검증하며 `T* -> (const) void*` 변환을 처리하여 `char[16] -> int*` 우회 구멍을 원천 차단.
+2. **`SignedBitwiseSafetyCheck.cpp`**:
+   * `hasTopLevelExplicitUnsignedCast`가 `IgnoreParens()`뿐만 아니라 `IgnoreParenImpCasts()`도 확인하도록 보완하여 정수 승격에 감싸진 명시적 unsigned 캐스트 인식.
+   * `getKnownMaxActiveBits` 및 `isProvablyNonNegativeExpr`을 구현하여 비음수 상수, 무부호 타입(`uint8_t` 등), 우측 시프트(`>>`), 마스킹(`&`), 범위 내 좌측 시프트(`<<`)의 유효 값 비트 상한(`W`)을 귀납적으로 추론:
+     * `<<`: 좌변 유효 비트 `WL`과 비음수 상수 시프트 `Shift`의 합이 부호 비트를 침범하지 않을 때(`WL + Shift < ResultWidth`)만 허용 (`(C1 & 3) << 4` 허용, `int sl; sl << 4` 및 `1 << 31` 경고 유지).
+     * `&`: 양변 모두 비음수이거나 어느 한쪽이 부호 비트를 클리어하는 비음수 마스크(`W < ResultWidth`, 예: `sia & 0x7F`)이면 허용 (`s1 & s2`, `s1 & -2` 경고 유지).
+     * `|`, `^`: 양변 모두 비음수(`isProvablyNonNegativeExpr`)로 증명된 경우에만 허용 (`s1 | 0x0F`, `s1 ^ 0x0F` 경고 유지).
+     * `~`: 부호 있는 타입에 대해 항상 부호 비트가 반전되므로 기존 경고 100% 유지 (`~0`, `~s1`).
+
+### 4. 검증 (Verification)
+* **DAPA 66개 전 규칙 (`C:\TestCase_Root_DAPA`)**:
+  * 전 규칙 `Compliant.c`/`Compliant.cpp` 오탐 **0건** (`Rule_28_Conv_LossyConversion\Compliant.c` 오탐 해소).
+  * `Rule_06_Style_ExternalFuncDecl\NonCompliant.c`(1건), `Rule_46_Op_BitwiseSigned\NonCompliant.c`(1건), `Rule_50_C_FuncPrototype\NonCompliant.c`(2건) 정탐 100% 유지.
+* **FreeRTOS (`WIN32-MSVC`, `WizNET_DEMO_GCC_ARM7`, `Minimal`, `heap_2.c`) 및 `SandBox_Test_Case`**:
+  * 기존 오탐 37건 -> **0건** 완전 소멸.
+* **MbedTLS (96개 전체 라이브러리 파일)**:
+  * `ast-signed-bitwise-safety`: 604건 -> **41건** (정수 승격 및 상수 마스크 오탐 563건 제거, 진성 `signed int` 비트 연산 41건 보존).
+  * `ast-function-call-argument-consistency`: 417건 -> **348건** (`enum` 상수, `0`/`0xFF` 상수, `base64.c` 비트 마스크 인자 오탐 69건 제거).
+* **합성 회귀 테스트 (`checker_regression_test.c`)**: Compliant 36케이스 0건(TN 100%), NonCompliant 17케이스 17건(TP 100%, `char[16] -> int*` 검출 포함).
+* **빌드 검증**: `cmake --build .\build --config Release --target clang-tidy` **Exit Code 0** 및 `ArqaStatic\Tools\bin\clang-tidy.exe` 배포 완료.
+
+

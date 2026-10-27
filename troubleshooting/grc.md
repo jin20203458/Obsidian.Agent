@@ -595,7 +595,7 @@ related:
 ## 2026-10-26: [Resolved] 세션 생성기 프롬프트의 예시 오염(Few-Shot Anchoring) 및 구체어 열거형 부정 지시문 정리
 
 ### 1. 현상 (Symptom)
-- 에이전트 템플릿( 5_session_architect_agent_template.md)으로 생성한 세션에서 메인 히로인 외양이 반복적으로 같은 조합(은백색·백금발 장발, 푸른 눈동자, 백은·백색 제복, 옷자락·장갑 끝을 만지는 버릇)으로 수렴함.
+- 에이전트 템플릿(5_session_architect_agent_template.md)으로 생성한 세션에서 메인 히로인 외양이 반복적으로 같은 조합(은백색·백금발 장발, 푸른 눈동자, 백은·백색 제복, 옷자락·장갑 끝을 만지는 버릇)으로 수렴함.
 
 ### 2. 원인 (Root Cause)
 - 템플릿 Preset.json 스키마 예시에 구체적 인물(이름, 외양, 버릇, 장소, 스탯)이 하드코딩되어 Few-Shot 앵커로 작동함.
@@ -631,3 +631,26 @@ related:
    - `SessionAuditFactAttribute`를 통해 `GRC_AUDIT_SESSION_DIR` 환경변수가 없을 때는 일반 단위 테스트(`Category!=Integration`)에서 통과로 위장하지 않고 명시적으로 `Skip` 처리되도록 구성.
 3. **템플릿 Stage 5/6 필수 게이트 연동 ([05_session_architect_agent_template.md](../GRC/docs/05_session_architect_agent_template.md))**:
    - 세션 파일 생성 직후 `Category=SessionAudit` 테스트를 실행하여 `Exit Code 0`(`FAIL 0건`)을 확인하는 절차를 Stage 5/6 및 검증 기준 1번 항목에 의무화.
+
+---
+
+## 2026-10-27: [Resolved] 로어북 문자열 내장 DSL(정규식 구분자) 폐기 및 구조화 JSON 스키마(`CharacterLoreDetails` / `WorldLoreDetails`) SSOT 전환
+
+### 1. 증상 (Symptom)
+- 기존 `LorebookEntry`가 단일 평문 문자열 `Content` 내부에 `* 외양/특징:`, `표면(...) / 내면(...)`, `초기 접점(...) / 유대 심화(발단 계기: ... -> 완수 후 변화: ...)`, `"첫 대사" / "두 번째 대사"` 등 다중 구분자 DSL을 내장하고 있었음.
+- 이로 인해 ① LLM 생성 시 구분자(`/`, `->`, 큰따옴표 쌍)가 하나라도 어긋나면 런타임 스토리 시드(`Pool A/B/C`)와 호감도 3단계 스포일러 마스킹(`MaskLorebooksForPrompt`)이 침묵 실패하거나 본심이 조기 노출될 위험이 있었고, ② 유저가 `EditLorebookWindow`에서 텍스트를 직접 수정할 때 정규식 문법을 실수로 깨뜨리기 쉬웠음.
+
+### 2. 원인 (Root Cause)
+- 저장 포맷(`Preset.json` / `Session.json`), LLM 출력 스키마(`ResponseSchema`), 런타임 시드/마스킹 소비자가 정형 데이터 대신 프롬프트 주입용 렌더링 문자열(`Content`)을 단일 진실 공급원(SSOT)으로 공유하던 구조적 결합.
+
+### 3. 해결책 및 불변성 (Resolution & Invariants)
+1. **구조화 로어북 모델 및 결정론적 렌더러 도입 ([LoreDetails.cs](../../GRC/GRC/Models/LoreDetails.cs), [LorebookEntry.cs](../../GRC/GRC/Models/LorebookEntry.cs), [LoreRenderer.cs](../../GRC/GRC/Services/Cognitive/LoreRenderer.cs), [LegacyLoreParser.cs](../../GRC/GRC/Services/Cognitive/LegacyLoreParser.cs))**:
+   - 인물(`Category == "인물"`)은 11개 강타입 필드(`RoleSummary`, `Appearance`, `SurfacePersona`, `InnerMotivation`, `InitialContact`, `BondTrigger`, `BondPayoff`, `OtherRelations`, `SpeechTone`, `EverydayQuote`, `EmotionalQuote` + 선택적 `Notes`)를 가진 `CharacterLoreDetails`, 비인물(`장소`, `아이템`, `세계관`)은 4개 강타입 필드(`IdentitySummary`, `SensoryDetails`, `RulesAndPrinciples`, `NarrativeHook` + 선택적 `Notes`)를 가진 `WorldLoreDetails`, 런타임 기억(`기억`)은 `FreeText`에 저장.
+   - `LorebookEntry.Content`는 `[JsonIgnore]` 계산 프로퍼티로 전환하여 `LoreRenderer.Render(this, RevealStage)`가 호감도 단계(`1 | 2 | 3`)에 맞춰 `<world_lore>` 주입용 불릿 텍스트를 결정론적으로 생성.
+   - 구형 `"Content"` JSON 필드는 `LegacyContent`(`[JsonPropertyName("Content"), JsonInclude, JsonIgnore(WhenWritingNull)]`)로 역직렬화한 뒤 `IJsonOnDeserialized.OnDeserialized()`에서 `LegacyLoreParser.TryParse`(왕복 렌더링 일치 검증 포함)로 자동 변환하고 `LegacyContent = null`로 비워 재저장 시 구조화 스키마로만 기록.
+2. **런타임 시드/마스킹 및 생성기 ResponseSchema 직결 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs), [SessionArchitectService.cs](../../GRC/GRC/Services/SessionArchitectService.cs), [LorebookService.cs](../../GRC/GRC/Services/LorebookService.cs))**:
+   - `MemoryManagerService.MaskLorebooksForPrompt`는 문자열 치환 대신 `entry with { RevealStage = stage }`를 사용하고, `ExtractAvailableStorySeeds`(`Pool A/B/C`)는 `entry.Character` 및 `entry.World` 프로퍼티를 직접 참조.
+   - `SessionArchitectService` Wave 1/Wave 2는 `WorldLorebookArrayResponseSchema`와 `CharacterLorebookArrayResponseSchema`로 각 세부 필드를 Vertex AI `ResponseSchema` 수준에서 강제하며, `SanitizeCharacterDetails`/`SanitizeWorldDetails`로 필드별 정제를 수행.
+3. **WPF 카테고리별 구조화 편집 폼 및 검증 게이트 강화 ([EditLorebookWindow.xaml](../../GRC/GRC/Views/EditLorebookWindow.xaml), [EditLorebookWindow.xaml.cs](../../GRC/GRC/Views/EditLorebookWindow.xaml.cs), [SessionAssetValidator.cs](../../GRC/tests/GRC.Tests/SessionAssetValidator.cs))**:
+   - `EditLorebookWindow`는 카테고리에 따라 인물 11필드 폼, 배경 4필드 폼, 자유 텍스트 폼으로 자동 전환되며 하단에 읽기 전용 `<world_lore>` 렌더링 미리보기를 표시하고 미수정 항목의 768차원 임베딩을 보존.
+   - `SessionAssetValidator`에 `F15_LEGACY_LORE_FORMAT`을 추가하여 신규 세션 자산에서 구형 `"Content"` JSON 필드 사용을 차단하고 구조화 `"Character"`/`"World"` 객체를 강제.
