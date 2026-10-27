@@ -504,3 +504,26 @@ related:
 > [!NOTE]
 > **[정제 완료 기준선]** 2026-10-27 이전 상위 항목은 정제 완료됨. 신규 인시던트는 이 아래에 추가됩니다.
 
+
+
+---
+
+## 2026-10-27: [Resolved] LLM 스트리밍 중 오토스크롤 추적 지연(Lag) 및 24px 허용오차 초과 동결(Freeze) 결함 해결
+
+### 1. 현상 (Symptom)
+- LLM 모델이 긴 답변을 실시간 스트리밍으로 출력할 때, 오토스크롤이 텍스트 출력을 제때 따라가지 못하고 프레임 단위로 뒤처지다가(Lag) 도중에 스크롤이 완전히 멈춰버리는(Freeze) 현상 발생.
+- 화면이 멈춘 후에도 모델의 텍스트는 뷰포트 아래로 계속 출력되며, 사용자가 수동으로 스크롤바를 조작하기 전까지 자동 추적이 재개되지 않음.
+
+### 2. 원인 (Root Cause)
+1. **디스패처 우선순위 기아 (Priority Starvation)**: `StatefulStreamingHelper`의 60FPS UI 렌더 타이머와 WPF 레이아웃 패스는 `DispatcherPriority.Render`(7)에서 동작하는 반면, `AutoScrollHelper.cs`의 `ScrollToEnd()`는 `DispatcherPriority.Loaded`(6)로 비동기 큐잉되어 토큰 유입 중 스크롤 실행이 계속 프레임 단위로 지연됨.
+2. **`CalculateIsAtBottom` 정적 24px 허용오차 파손 (Dead-lock)**: 1의 지연 누적이나 대사 말풍선 `Border`(높이 50~60px 이상) 생성 등으로 단일/누적 높이 차이가 24px(`BottomTolerancePixels`)을 초과하면, `verticalOffset >= (referenceHeight - 24)`가 `false`를 반환. 이로 인해 `ScrollToEnd()` 예약이 중단되고 `VerticalOffset`이 고정되어 이후 모든 프레임에서 영구히 `false`가 반환되는 동결 루프 발생.
+3. **고DPI/서브픽셀 음수 오탐 위험**: `isPureUserScroll && e.VerticalChange < 0` 판정에 데드존이 없어 고DPI 환경의 미세 부동소수점 오차(`-0.0001` 등)로 유저 스크롤 의도가 아님에도 `IsAutoScrollActive`가 `false`로 꺼질 위험 잔존.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+- **스트리밍 활성 추적 보장 및 동결 차단 ([AutoScrollHelper.cs](../../GRC/GRC/Helpers/AutoScrollHelper.cs))**:
+  - `GetIsAutoScrollActive(sv)`가 `true`이고 컨텐츠가 확장(`e.ExtentHeightChange > 0`)될 때는 정적 24px 수식의 간섭 없이 최하단을 지속 추적하도록 분기 교정(`e.ExtentHeightChange > 0 || CalculateIsAtBottom(...)`). 컨텐츠 축소(`e.ExtentHeightChange < 0`) 시에는 기존대로 `CalculateIsAtBottom`을 통해 상단 뷰포트 하이재킹 차단.
+- **디스패처 우선순위 동기화 (`Loaded` -> `Render`)**:
+  - `AutoScrollHelper` 내 모든 `InvokeAsync`를 `DispatcherPriority.Render`(7)로 통일하여 60FPS 렌더 타이머와 동기화, 프레임 밀림(Lag) 해소.
+- **순수 유저 상향 조작 데드존 적용**:
+  - `isPureUserScroll && e.VerticalChange < -1.0`으로 서브픽셀 정렬 오차에 의한 오토스크롤 비활성화 오탐 방어.
+- **핵심 부정 제약 (Never use X)**: **절대 `IsAutoScrollActive == true`인 스트리밍 확장(`ExtentHeightChange > 0`) 상황에서 24px 무상태 수학식(`CalculateIsAtBottom`)을 단독 관문으로 사용하여 스크롤 명령을 누락시키지 말 것.**
