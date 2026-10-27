@@ -99,8 +99,8 @@ GRC/bin/Debug/net8.0-windows/Sessions/{SanitizedSessionTitle}_{yyyyMMdd}_{6CharH
 ```json
 {
   "Name": "세션 고유 제목",
-  "Worldview": "1. 배경 및 세계의 핵심 법칙\n- 항목명: 명사구 중심 개조식 내용\n\n2. 세력 구도 및 사회적 현실\n- 항목명: 명사구 중심 개조식 내용\n\n3. 주인공(PC)의 초기 입지 및 직면 환경\n- 항목명: PC의 객관적 위장 신분, 물리적 제약, 당면 과제 (성격/감정 단정 금지)\n\n4. 서사 톤앤매너 및 감각적 디테일\n- 항목명: 일상 호흡(surfaceTone)과 위기 무게감(coreWeight)의 오감 환경 및 NPC 압박감 묘사 기준",
-  "SystemPrompt": "<system_directive>\nRole: 3인칭 전지적 게임 마스터\n</system_directive>\n\n<rules>\n1. 추상적 감정 라벨링, 시스템 수치 언급, 문단 끝의 교훈적 요약을 배제하고, 오감(시·청·후각 등)에 기반한 물리적 행동, 시선, 어조, 환경 변화로만 객관적 서술.\n2. 유저 캐릭터(PC)의 대사, 행동, 내면의 생각·감정을 임의로 대신 서술하지 말고, PC의 선택이나 대응이 필요한 시점에서 서술을 멈추고 턴을 넘길 것.\n3. 작위적인 주인공 보정(무조건적 호의·기적적 성공)과 억지 실패 보정을 모두 배제하고, 세계관 법칙 및 당사자 간의 실제 역량·무력·상황 격차와 인물 가치관에 부합하는 현실적 인과율로 판정할 것.\n4. 평소에는 주변 환경의 감각 묘사와 NPC들의 일상 대화 템포를 중심으로 서술하되, 위기나 금기 접촉 시 공기의 냉각과 적대 세력의 압박감으로 환경 분위기를 급반전시킬 것.\n5. 세계관과 로어북의 고유 법칙·제약에 기반하여 유저 행동의 개연성, 대가(Risk), 세력 및 환경의 반작용을 공정하게 판정할 것.\n</rules>",
+  "Worldview": "1. 배경 및 세계의 핵심 법칙\n- 항목명: 명사구 중심 개조식 내용\n\n2. 세력 구도 및 사회적 현실\n- 항목명: 명사구 중심 개조식 내용\n\n3. 주인공(PC)의 초기 입지 및 직면 환경\n- 항목명: PC의 객관적 위장 신분, 물리적 제약, 당면 과제 (성격/감정 단정 금지)\n\n4. 서사 톤앤매너 및 감각적 디테일\n- 항목명: 일상 호흡(surfaceTone)과 핵심 무게감(coreWeight)이 부각되는 순간의 오감 환경 및 NPC 태도 묘사 기준",
+  "SystemPrompt": "<system_directive>\nRole: 3인칭 전지적 게임 마스터\n</system_directive>\n\n<rules>\n1. 추상적 감정 라벨링, 시스템 수치 언급, 문단 끝의 교훈적 요약을 배제하고, 오감(시·청·후각 등)에 기반한 물리적 행동, 시선, 어조, 환경 변화로만 객관적 서술.\n2. 유저 캐릭터(PC)의 대사, 행동, 내면의 생각·감정을 임의로 대신 서술하지 말고, PC의 선택이나 대응이 필요한 시점에서 서술을 멈추고 턴을 넘길 것.\n3. 작위적인 주인공 보정(무조건적 호의·기적적 성공)과 억지 실패 보정을 모두 배제하고, 세계관 법칙 및 당사자 간의 실제 역량·무력·상황 격차와 인물 가치관에 부합하는 현실적 인과율로 판정할 것.\n4. 평소에는 주변 환경의 감각 묘사와 NPC들의 일상 대화 템포를 중심으로 서술하되, [coreWeight가 부각되는 계기]에서는 그에 맞는 공기·빛·소리의 변화와 NPC 태도 변화로 분위기를 전환할 것.\n5. 세계관과 로어북의 고유 법칙·관습에 기반하여 유저 행동의 개연성을 판정하고, 행동에 상응하는 결과(성취·교감·관계 변화 또는 대가·반작용)를 장르 온도에 맞춰 인과적으로 부여할 것.\n</rules>",
   "Temperature": null,
   "MaxOutputTokens": 8192,
   "Lorebooks": [
@@ -114,7 +114,7 @@ GRC/bin/Debug/net8.0-windows/Sessions/{SanitizedSessionTitle}_{yyyyMMdd}_{6CharH
         "RoleSummary": "[신분/소속 및 사회적 역할·정체성 한 줄 정의]",
         "Appearance": "[출신·직업·성격에서 도출한 고유 시각 특징(머리색·눈동자색·체형·복식)과 습관적 버릇 명사구 나열]",
         "SurfacePersona": "[대외적 페르소나 및 공적 태도]",
-        "InnerMotivation": "[친밀·위기 시 드러나는 독자적 욕망, 결핍, 비밀 또는 심층 감정]",
+        "InnerMotivation": "[친밀해지거나 감정이 고조될 때 드러나는 독자적 바람·신념·숨겨진 면모]",
         "InitialContact": "[Turn 0 또는 본편 첫 대면 계기와 초기 태도]",
         "BondTrigger": "신뢰·호감 30 이상 달성 시 [NPC가 먼저 제안·요청·공유하는 구체적 사건/의뢰의 시작점]",
         "BondPayoff": "[해당 과업을 실제로 해결한 뒤에야 개방되는 관계 전환 및 조력 보상]",
@@ -133,8 +133,8 @@ GRC/bin/Debug/net8.0-windows/Sessions/{SanitizedSessionTitle}_{yyyyMMdd}_{6CharH
       "World": {
         "IdentitySummary": "[위치 및 핵심 기능 한 줄 요약]",
         "SensoryDetails": "[시·청·후각적 환경 디테일 및 공간 구조]",
-        "RulesAndPrinciples": "[해당 공간 고유의 작동 법칙, 출입 규율 및 제약/대가]",
-        "NarrativeHook": "[직접 연관된 핵심 인물·세력 고유명사 1~3개] 및 [접촉 시 점화될 구체적 사건·단서]"
+        "RulesAndPrinciples": "[해당 공간 고유의 작동 법칙, 규율·관습 및 이용 조건(제약·대가 포함)]",
+        "NarrativeHook": "[직접 연관된 핵심 인물·세력 고유명사 1~3개] 및 [접촉 시 펼쳐질 구체적 사건·단서·교류의 계기]"
       }
     }
   ],
@@ -200,7 +200,7 @@ GRC/bin/Debug/net8.0-windows/Sessions/{SanitizedSessionTitle}_{yyyyMMdd}_{6CharH
 ```
 
 ### 4) FullHistory.json 데이터 규격 ([FullHistoryLogger.cs](../../../GRC/GRC/Helpers/FullHistoryLogger.cs))
-GRC 클라이언트는 세션을 열 때 `FullHistory.json`을 역직렬화하여 채팅 화면의 말풍선 목록을 렌더링합니다. **빈 배열(`[]`)로 두면 세션 진입 시 오프닝 시나리오가 화면에 표시되지 않으므로**, 반드시 아래와 같이 `[초기 상황]` 접두어가 붙은 `user` 메시지 1개를 기록해야 합니다([SessionArchitectService.cs](../../../GRC/GRC/Services/SessionArchitectService.cs#L1992-L1993) 준용).
+GRC 클라이언트는 세션을 열 때 `FullHistory.json`을 역직렬화하여 채팅 화면의 말풍선 목록을 렌더링합니다. **빈 배열(`[]`)로 두면 세션 진입 시 오프닝 시나리오가 화면에 표시되지 않으므로**, 반드시 아래와 같이 `[초기 상황]` 접두어가 붙은 `user` 메시지 1개를 기록해야 합니다([SessionArchitectService.cs](../../../GRC/GRC/Services/SessionArchitectService.cs#L2010-L2011) 준용).
 ```json
 [
   {
@@ -225,8 +225,8 @@ GRC는 로어북을 구형 평문 `"Content"` 문자열 대신 **구조화된 JS
 |---|---|---|---|
 | **Pool A: 미등장 인물 첫 만남** (`CHAR:{Name}`) | `Category == "인물"` 중 아직 `Chars`에 등재되지 않고 미소모된 최우선(`Priority` 오름차순) 인물 1명 | 1) `Character.RoleSummary`<br>2) `Character.Appearance`<br>3) `Character.EverydayQuote`<br>4) `Character.InitialContact` | - **1턴 딜레이 방지 프리뷰**: 첫 조우 턴에는 아직 유저 입력에 해당 인물명이 없어 로어북이 미인출되므로, 엔진이 `RoleSummary`, `Appearance`, `EverydayQuote`(일상 기본 어조 대사)를 조합해 `InitialContact`와 함께 시드에 직접 동봉함.<br>- **[시점 불변 원칙]**: Turn 0 오프닝 현장에 없는 인물의 `InitialContact`는 반드시 **Turn 0 이후 본편에서 주인공과 처음 조우(과거 구면인 경우 본편 내 첫 재회·접촉)하여 사건을 점화하는 장면 계기**여야 함. Turn 0 이전에 이미 종료된 과거 배경사를 `InitialContact`에 적으면 이미 지나간 과거 사건이 미래 시드로 주입되고 정작 본편 1차 갈등이 `BondTrigger`(호감도 30 해금)에 묶여 데드락이 발생함. |
 | **Pool B: 미방문 거점·사건 훅** (`HOOK:{Name}`) | `Category != "인물"` 중 아직 `Places`나 `Items`에 등록되지 않고 미소모된 최우선 항목 1개 | `World.NarrativeHook` | - 해당 장소·아이템·세력과 접촉했을 때 발생할 구체적인 사건·위기·비밀 단서와 직접 연관된 핵심 인물·세력 고유명사(1~3개)를 1줄로 명시. |
-| **Pool C (1단계): 동료 유대 심화** (`BOND:{Name}`) | 이미 만난 인물(`Chars` 등록) 중 `CustomStats` 내 `{인물명} 호감도/신뢰도/유대/친밀` 수치가 **30 이상** 달성 시 | `Character.BondTrigger`<br>`Character.BondPayoff` | - `BondTrigger`(발단 계기): 신뢰·호감 30 이상 달성 시 NPC가 먼저 제안·요청·공유하는 미해결 의뢰·사건 개막.<br>- `BondPayoff`(완수 후 변화): 해당 과업을 실제로 해결한 뒤에야 전환되는 기밀 공유·이해관계 결탁·전우애·사상적 경쟁·정서적 유대.<br>- 런타임 렌더러(`LoreRenderer.BondClause`)가 두 필드를 `유대 심화(발단 계기: {BondTrigger} -> 완수 후 변화: {BondPayoff})`로 자동 합성함. |
-| **Pool C (2단계): 내면·비밀 해금** (`BOND_SECRET:{Name}`) | 이미 만난 인물 중 호감도/신뢰도 수치가 **60 이상** 달성 시 (`BOND`와 동시 또는 순차 해금) | `Character.InnerMotivation`<br>`Character.EmotionalQuote` | - `InnerMotivation`: 깊은 신뢰·유대 또는 극한의 위기 관계에서만 드러나는 **독자적 신념, 트라우마, 은폐된 진실, 진짜 목적 또는 본심**(공개 단계 3에서 `SurfacePersona`와 결합 해금).<br>- `EmotionalQuote`: 감정 고조 또는 깊은 신뢰 형성 시의 어조 변화 대사 샘플(공개 단계 3에서 해금). |
+| **Pool C (1단계): 동료 유대 심화** (`BOND:{Name}`) | 이미 만난 인물(`Chars` 등록) 중 `CustomStats` 내 `{인물명} 호감도/신뢰도/유대/친밀` 수치가 **30 이상** 달성 시 | `Character.BondTrigger`<br>`Character.BondPayoff` | - `BondTrigger`(발단 계기): 신뢰·호감 30 이상 달성 시 NPC가 먼저 제안·요청·공유하는 미해결 의뢰·사건 개막.<br>- `BondPayoff`(완수 후 변화): 해당 과업을 실제로 해결한 뒤에야 전환되는 기밀 공유·이해관계 결탁·전우애·사상적 경쟁·정서적 유대·일상의 동반자 관계.<br>- 런타임 렌더러(`LoreRenderer.BondClause`)가 두 필드를 `유대 심화(발단 계기: {BondTrigger} -> 완수 후 변화: {BondPayoff})`로 자동 합성함. |
+| **Pool C (2단계): 내면·비밀 해금** (`BOND_SECRET:{Name}`) | 이미 만난 인물 중 호감도/신뢰도 수치가 **60 이상** 달성 시 (`BOND`와 동시 또는 순차 해금) | `Character.InnerMotivation`<br>`Character.EmotionalQuote` | - `InnerMotivation`: 깊은 신뢰·유대 또는 감정 고조 시에만 드러나는 **독자적 바람·신념·숨겨진 면모**(장르 온도에 따라 비밀·상처 또는 소박한 꿈·서툰 진심, 공개 단계 3에서 `SurfacePersona`와 결합 해금).<br>- `EmotionalQuote`: 감정 고조 또는 깊은 신뢰 형성 시의 어조 변화 대사 샘플(공개 단계 3에서 해금). |
 
 > [!CAUTION]
 > **구형 평문 `"Content"` 필드 사용 금지 (`F15_LEGACY_LORE_FORMAT`)**
@@ -252,13 +252,15 @@ GRC는 로어북을 구형 평문 `"Content"` 문자열 대신 **구조화된 JS
 | **하드 SF / 사이버펑크 / 스페이스 오페라** | 기술 패러다임(항성간 항법·신경 임플란트·AI 통제), 메가코프·식민지 지정학, 자원·에너지 희소성과 신체 개조 대가 | 공적 직무·기업 입장(표면) vs 은폐된 아젠다·사상적 회의·생존 목적(내면) / 전술적 공조·기밀 거래·파트너십(`신뢰도`) | `신체 부하`, `신경 동기화율`, `크레딧/보급`, `{인물명} 신뢰도` |
 | **현대 / 느와르 / 미스터리 / 정치·첩보** | 법제도·사법 사각지대, 카르텔·정보기관·언론·재벌 간 권력 역학, 수사/정보전의 현실적 절차와 사회적 압력 | 사회적 가면·공식 알리바이(표면) vs 약점·과거 범죄·숨겨진 동기·내부고발 의지(내면) / 정보 교환·공범 의식·수사 공조(`신뢰도`/`친밀`) | `스트레스/정신력`, `수사 노출도/위장도`, `{인물명} 신뢰도` |
 | **정통·다크 판타지 / 무협 / 시대극** | 마법·내공·신성력의 원리와 등가교환 대가, 제국·종단·문파·길드 간 역사적 분쟁과 계급 모순 | 가문·문파의 명분과 직책(표면) vs 숙원·복수심·금기 연구·고독(내면) / 생사를 나눈 전우애·주종/동맹 서약·연심(`신뢰도`/`호감도`) | `체력`, `마력/내공/침식도`, `{인물명} 신뢰도/호감도` |
-| **서브컬처 / 로맨스 / 아카데미·일상** | 일상 공간의 교류 규율과 이면의 갈등 구조, 관계 위계 및 성장 과제 | 대외적 태도·성격(표면) vs 정서적 결핍·반전 면모·연심(내면) / 정서적 교감·주도권 밀당·반려 서약(`호감도`/`신뢰도`) | `체력/컨디션`, `관계/주도권 지표`, `{인물명} 호감도/신뢰도` |
+| **서브컬처 / 로맨스 / 아카데미** | 일상 공간의 교류 규율과 이면의 긴장 구조, 관계 위계 및 성장 과제 | 대외적 태도·성격(표면) vs 정서적 결핍·반전 면모·연심(내면) / 정서적 교감·주도권 밀당·반려 서약(`호감도`/`신뢰도`) | `체력/컨디션`, `관계/주도권 지표`, `{인물명} 호감도/신뢰도` |
+| **치유 / 일상 / 슬로우 라이프** | 계절·생활 공간의 순환 리듬, 공동체의 관습과 생업 구조, 소소한 생활 과제 (컨셉에 없는 적대 세력·추격·채무 배제) | 대외적 태도·생활 습관(표면) vs 소박한 꿈·숨겨둔 취향·서툰 진심(내면) / 일상의 교감·작은 약속·동반자 관계(`호감도`/`친밀`) | `컨디션/피로`, `생활 지표(가게 평판·수확 등)`, `{인물명} 호감도/친밀` |
 
-  2. `AgentPlan` 스키마를 준수하여 `sessionTitle`, 일상 호흡(`surfaceTone`), 핵심 갈등 무게감(`coreWeight`), PC 초기 객관적 입지(`pcInitialPosition`)를 도출합니다.
-     * **PC 불간섭 원칙**: `surfaceTone`과 `coreWeight`는 세계 환경과 NPC들의 일상/위기 연출 기준으로만 작성하고, PC의 성격·감정은 유저의 선택 영역으로 남겨 둡니다.
+  2. `AgentPlan` 스키마를 준수하여 `sessionTitle`, 일상 호흡(`surfaceTone`), 핵심 긴장 축(`coreWeight`), PC 초기 객관적 입지(`pcInitialPosition`)를 도출합니다.
+     * **PC 불간섭 원칙**: `surfaceTone`과 `coreWeight`는 세계 환경과 NPC들의 연출 기준으로만 작성하고, PC의 성격·감정은 유저의 선택 영역으로 남겨 둡니다.
+     * **장르 온도 보존(Genre Fidelity)**: `coreWeight`는 시리어스·활극·미스터리·호러에서는 갈등 구조와 위기의 압박감으로, 치유·일상·슬로우 라이프·로맨틱 코미디에서는 관계의 거리감·소소한 일상 과업·계절과 공간의 정서적 여운으로 설계합니다. 긴장의 원천은 유저 컨셉에 내재한 요소에서만 도출하고, 컨셉이 요구하지 않는 적대 세력·추격·채무·비극적 과거를 덧붙이지 않습니다(SSOT: [SessionArchitectService.GenreFidelityRule](../../../GRC/GRC/Services/SessionArchitectService.cs#L194-L195)).
   3. **방대하고 깊이 있는 4대 섹션 마스터 세계관(`Worldview`) 작성 (거시적 독립성 보장)**:
      * 번호 섹션 헤더(`1. 배경 및 세계의 핵심 법칙`, `2. 세력 구도 및 사회적 현실`, `3. 주인공(PC)의 초기 입지 및 직면 환경`, `4. 서사 톤앤매너 및 감각적 디테일`)와 각 하위 하이픈 불릿(`- 항목명: 내용`, **섹션당 4~6개의 고밀도 항목**)으로 작성합니다.
-     * **[거시 세계관의 독립성]**: 1·2번 섹션은 **주인공이 없더라도 스스로 굴러가는 거대한 세계의 역사적 기원, 물리/기술/마법/법률 인프라, 지정학적 파벌 대립, 경제·계급적 모순**을 입체적으로 구축하는 데 할당합니다. 주인공 개인의 특수 체질과 특정 인물과의 관계는 3번 섹션과 로어북이 전담합니다.
+     * **[거시 세계관의 독립성]**: 1·2번 섹션은 **주인공이 없더라도 스스로 굴러가는 세계의 역사적 기원, 물리/기술/마법/사회 인프라, 집단·공동체 간 역학과 생활 구조(장르 온도에 맞춘 긴장 구조)**를 입체적으로 구축하는 데 할당합니다. 주인공 개인의 특수 체질과 특정 인물과의 관계는 3번 섹션과 로어북이 전담합니다.
      * 서술어 어미(`~이다`, `~한다`)를 배제한 **명사구 중심 개조식(Telegraphic Compression)**으로 압축하여 토큰당 정보 밀도를 극대화합니다.
   4. **고용량 그물망 로어북 기획(`lorebookPlan`, 12~20개 이상 권장)**:
      * **런타임 토큰 예산과의 조화**: GRC의 `HybridLorebookRetriever`는 전체 로어북이 10개든 25개든 매 턴 현재 맥락에 매칭된 항목만 최대 3,000토큰 예산 내에서 동적 인출합니다. 따라서 안티그래비티 에이전트는 **주요 인물(5~8명), 구체적 단일 장소(3~6곳), 핵심 단일 아이템/무구/단서(2~4개), 고유 세부 조직/사건/기술(2~4개) 등 총 12~20개 내외의 풍부한 엔트리 풀**을 설계하여 장기 캠페인의 서사 수명과 세계관 깊이를 극대화하십시오.
@@ -275,23 +277,23 @@ GRC는 로어북을 구형 평문 `"Content"` 문자열 대신 **구조화된 JS
      * **비인물 `World` 객체 4대 필수 필드 (`LoreRenderer.RenderWorld`가 런타임에 3줄 불릿으로 자동 조립)**:
        * `IdentitySummary`: 핵심 정의 및 기능 한 줄 요약 (`분류(장소):` 같은 접두 라벨 생략)
        * `SensoryDetails`: 시·청·후각적 핵심 환경/외형 디테일 및 고유 공간/구조적 특징 (명사구 중심)
-       * `RulesAndPrinciples`: 고유 법칙, 규율, 작동 메커니즘, 역사적 유래 및 제약/대가
-       * `NarrativeHook`: 직접 연관된 핵심 인물·세력 고유명사(1~3개) 및 상호작용 시 발생 가능한 구체적 사건·단서·이면
+       * `RulesAndPrinciples`: 고유 법칙, 규율·관습, 작동 메커니즘, 역사적 유래 및 이용 조건(제약·대가 포함)
+       * `NarrativeHook`: 직접 연관된 핵심 인물·세력 고유명사(1~3개) 및 접촉 시 펼쳐질 구체적 사건·단서·교류의 계기
   3. **Wave 2 — 등장인물 전원 통합 앙상블 캐스팅 (`Category == "인물"`, `CharacterLoreDetails` 스키마)**:
      * 확정된 Wave 1 무대 로어북 전문(`<established_world_lore>`)과 전체 청사진 명단(`<full_blueprint_roster>`)을 참조하여 **모든 등장인물 전원**을 동시 조형합니다.
      * **인과적 캐릭터 진정성 및 독립적 주체성(Independent Agency) 4대 원칙**:
        1. **[독립된 삶의 목적]**: 모든 등장인물에게 **주인공과 무관하게 추구하는 자신만의 삶의 목표, 직업적·정치적 과업, 사상적 신념, 혹은 해결해야 할 개인적 문제**를 부여합니다.
        2. **[미대면 인물의 조건부 유대 설계]**: Turn 0 이전에 주인공과 깊은 인연이 없는 **미대면 인물**(감사관, 경쟁자, 타 세력 인물, 낯선 정보상 등)의 `InnerMotivation`에는 그 인물 본연의 고독·야망·비밀·가치관만 기술하고, 주인공과의 깊은 신뢰나 정서적 유대는 첫 대면(`InitialContact`) 이후 공동의 사건(`BondTrigger` -> `BondPayoff`)을 통과하며 형성되는 조건부 가능성으로 설계합니다.
-       3. **[앙상블 관계 스펙트럼 및 시각 정체성 분산]**: 인물별 관계의 결을 장르와 역할에 맞춰 **이해관계에 따른 전략적 제휴, 사상적 라이벌리, 냉철한 검증과 시험, 생사를 나눈 전우애, 지적 호기심, 점진적 연심** 등으로 서로 다르게 배정합니다. 각 인물의 외양(`Appearance`: 머리색·눈동자색·체형·복식·습관적 제스처)은 그 인물의 출신·직업·소속 문화권·성격에서 인과적으로 도출하여, 세션 내 인물들이 외양만으로도 한눈에 구별되도록 설계합니다(유저 컨셉에 외모 지정이 있으면 해당 지정을 우선).
+       3. **[앙상블 관계 스펙트럼 및 시각 정체성 분산]**: 인물별 관계의 결을 장르와 역할에 맞춰 **이해관계에 따른 전략적 제휴, 사상적 라이벌리, 냉철한 검증과 시험, 생사를 나눈 전우애, 지적 호기심, 점진적 연심, 일상의 동반자** 등으로 서로 다르게 배정합니다. 각 인물의 외양(`Appearance`: 머리색·눈동자색·체형·복식·습관적 제스처)은 그 인물의 출신·직업·소속 문화권·성격에서 인과적으로 도출하여, 세션 내 인물들이 외양만으로도 한눈에 구별되도록 설계합니다(유저 컨셉에 외모 지정이 있으면 해당 지정을 우선).
        4. **[유대 심화 인과 단계 분리(`BondTrigger` / `BondPayoff`) 및 기본 어조 분리(`EverydayQuote` / `EmotionalQuote`)]**: `BondTrigger`에는 신뢰·호감 30 이상 달성 시 NPC가 먼저 꺼내는 구체적 의뢰·거래 제안·비밀 공유·사건 개막(미해결 시작점)만 작성하고, `BondPayoff`에는 해당 과업을 실제로 해결한 뒤에야 전환되는 관계·보상만 분리 작성합니다. `EverydayQuote`는 관계 단계와 무관하게 매 턴(공개 단계 1~3) 주입되는 기본 말투 기준이므로 Turn 0 오프닝과 무관한 일상 상황의 평상시 어조로 작성하고, `EmotionalQuote`는 공개 단계 3(호감도 60+)에서 해금되는 감정 고조·신뢰 형성 시의 어조 변화 대사로 작성합니다(바깥쪽 큰따옴표 제외).
      * **인물 `Character` 객체 11대 필수 필드 (`LoreRenderer.RenderCharacter`가 런타임에 호감도 단계별 5줄 불릿으로 자동 조립)**:
        * `RoleSummary`: 신분/소속, 사회적 역할 및 핵심 정체성 한 줄 정의 (공개 단계 1)
        * `Appearance`: 출신·직업·성격에서 도출한 핵심 시각적 인장, 복장, 습관적 행동/버릇 명사구 나열 (공개 단계 1)
        * `SurfacePersona`: 대외적 페르소나·공적 태도·역할 (공개 단계 1)
-       * `InnerMotivation`: 친밀·위기·이해관계 충돌 시 드러나는 독자적 욕망, 신념, 결핍, 비밀 또는 심층 감정 (공개 단계 3)
+       * `InnerMotivation`: 친밀해지거나 감정이 고조될 때 드러나는, 주인공과 무관한 독자적 바람·신념·숨겨진 면모 — 장르 온도에 따라 비밀·상처 또는 소박한 꿈·서툰 진심 (공개 단계 3)
        * `InitialContact`: Turn 0 또는 Turn 0 이후 본편에서의 첫 조우·재회 및 1차 사건 점화 계기와 초기 태도 (공개 단계 1)
-       * `BondTrigger`: 신뢰·호감 30 이상 달성 시 NPC가 먼저 꺼내는 구체적 의뢰·거래 제안·비밀 공유·사건 개막 (공개 단계 2)
-       * `BondPayoff`: `BondTrigger`의 과업을 실제로 해결한 뒤에야 전환되는 기밀 공유·동맹 결탁·전우애·경쟁 심화·정서적 유대 (공개 단계 2)
+       * `BondTrigger`: 신뢰·호감 30 이상 달성 시 NPC가 먼저 꺼내는 구체적 부탁·제안·고민 상담·비밀 공유·사건 개막 (공개 단계 2)
+       * `BondPayoff`: `BondTrigger`의 과업을 실제로 해결한 뒤에야 전환되는 기밀 공유·동맹 결탁·전우애·경쟁 심화·정서적 유대·일상의 동반자 관계 (공개 단계 2)
        * `OtherRelations`: 실제로 직접 얽혀 있는 핵심 인물·세력·장소(2~3개)만 선별한 구체적 역학·이해관계·갈등 (고유명사 직접 명시, 공개 단계 1)
        * `SpeechTone`: 어조 특징 요약 (존비칭, 어미, 호흡 등 — 큰따옴표 제외, 공개 단계 1)
        * `EverydayQuote`: Turn 0 오프닝과 무관하게 반복되는 일상 상황의 평상시 기본 어조 대사 샘플 (바깥쪽 큰따옴표 제외, 공개 단계 1)
@@ -309,10 +311,11 @@ GRC는 로어북을 구형 평문 `"Content"` 문자열 대신 **구조화된 JS
   2. **문장 부호 및 순수 산문 규격 (`FormatRule` 100% 일치)**:
      * 외부 발화 대사는 큰따옴표(`"..."`), **인물의 내면 독백(속마음)은 낫표(`「...」`)**, 행동과 배경 지문은 기호 없는 순수 평문으로만 작성합니다.
      * **[낫표 독백 전용 원칙]**: 낫표(`「...」`)는 인물의 속마음 독백에만 사용하고, 지문 내 장소명·아이템명·세력명 등 고유명사는 기호 없는 평문으로 표기합니다. (근거: Turn 0 본문에서 낫표가 고유명사 강조에 쓰이면 런타임 서사 LLM이 이를 모방하여 속마음 기호와 고유명사 표기가 뒤섞이는 문체 오염이 발생합니다.)
-  3. **3대 오프닝 연출 수칙**:
+  3. **4대 오프닝 연출 수칙**:
      * **[대사 신규 창작]**: 인물 로어북의 `Character.EverydayQuote` 및 `Character.EmotionalQuote` 대사 샘플은 어조 참고용으로만 활용하고, `Character.SpeechTone`의 말투 특징을 유지한 채 오프닝 상황에 맞는 새로운 대사를 창작합니다.
      * **[본심 은닉]**: 유대가 깊어진 뒤에야 드러나는 공개 단계 3(`Character.InnerMotivation`)의 본심은 첫 만남에서 은닉하고, `Character.SurfacePersona`와 미세한 행동 단서로만 암시합니다.
-     * **[PC 주체성 보존]**: 주인공(PC)의 대사·의사결정·감정은 유저의 몫으로 남기고, NPC(1~3명 이내로 밀도 있게 집중)가 말을 건네거나 사건이 발생하여 주인공이 첫 행동을 선택해야 하는 직면 순간에서 서술을 멈춥니다.
+     * **[PC 주체성 보존]**: 주인공(PC)의 대사·의사결정·감정은 유저의 몫으로 남기고, NPC(1~3명 이내로 밀도 있게 집중)가 말을 건네거나 상황이 전개되어 주인공이 첫 행동을 선택해야 하는 순간에서 서술을 멈춥니다.
+     * **[장르 온도 보존]**: 오프닝의 긴장도는 `surfaceTone`·`coreWeight`의 장르 온도를 따르고, 치유·일상 컨셉에서는 위기 대신 교류의 시작이나 작은 선택의 순간으로 장면을 맺습니다.
 
 ### Stage 4: Turn 0 상태창 역추출 및 하이브리드 GM 시스템 프롬프트 컴파일 (Status Induction & Prompt Compilation)
 * **주체**: Status & GM Engineer Subagent
@@ -326,8 +329,8 @@ GRC는 로어북을 구형 평문 `"Content"` 문자열 대신 **구조화된 JS
      * `initialItems`: 오프닝 마지막 순간 주인공이 몸에 직접 휴대·착용 중이거나 손이 닿는 현장 소지품(1~4개)만 등록합니다.
   3. **하이브리드 시스템 프롬프트(`SystemPrompt`) 컴파일 (`CompileHybridSystemPrompt`)**:
      * 불변 상단 헌법(`CoreSystemDirectivesHeader`, 규칙 1~3번) 하단에 세션 특화 비수치 GM 수칙 4번·5번(`genreDirectives`)을 결합하고 `</rules>`로 닫습니다:
-       * `4. {서사 분위기 및 환경 연출 수칙}`: 일상 호흡(`surfaceTone`)과 위기 긴장감(`coreWeight`)의 온도차를 **배경 환경의 감각 묘사(공기, 빛, 소리, 냄새)와 NPC들의 대사 템포·태도·압박감**으로만 연출하도록 지시(지시문 주어는 환경과 NPC로 한정).
-       * `5. {세계관 인과율 및 위험 판정 수칙}`: 세계관과 로어북의 고유 법칙·제약에 기반하여 유저 행동의 개연성, 대가(Risk), 세력/환경의 반작용을 공정하게 판정하도록 지시(수치는 `StatusUpdateGuide`가 전담 — Zero-Numeric).
+       * `4. {서사 분위기 및 환경 연출 수칙}`: 일상 호흡(`surfaceTone`)과 핵심 무게감(`coreWeight`)이 부각되는 순간의 온도차를 **배경 환경의 감각 묘사(공기, 빛, 소리, 냄새)와 NPC들의 대사 템포·태도**로만 연출하도록 지시(지시문 주어는 환경과 NPC로 한정).
+       * `5. {세계관 인과율 판정 수칙}`: 세계관과 로어북의 고유 법칙·관습에 기반하여 유저 행동의 개연성을 판정하고, 행동에 상응하는 결과(성취·교감·관계 변화 또는 대가·반작용)를 장르 온도에 맞춰 인과적으로 부여하도록 지시(수치는 `StatusUpdateGuide`가 전담 — Zero-Numeric, SSOT: [SessionArchitectService.GenreDirectivesSpec](../../../GRC/GRC/Services/SessionArchitectService.cs#L200-L203)).
 
 ### Stage 5: 독립 감사관 이중 게이트 실사 (Dual-Layer Deterministic & Semantic Gate)
 * **주체**: Narrative & Schema Auditor Subagent (Read-Only + C# 검증 러너 실행)
@@ -337,7 +340,8 @@ GRC는 로어북을 구형 평문 `"Content"` 문자열 대신 **구조화된 JS
       * **`FAIL` (치명적 구조 결함 — 1건이라도 존재 시 즉시 실패)**: `F01_DESERIALIZE`(3종 JSON 역직렬화), `F02_PRESET_SYNC`(`Preset.json`↔`Session.json.Preset` 동기화), `F03_TURN0`(Turn 0 `<initial_scenario>`·앵커·`FullHistory`·`Plot`·`CurrentContext` 스키마), `F04_SYSPROMPT`(고정 헌법 1~3번 바이트 일치 및 Zero-Numeric), `F05_WORLDVIEW`(4대 번호 섹션 헤더), `F06_CHAR_FIELDS`(`CharacterLoreDetails` 11대 필수 필드 완결성 및 `SpeechTone` 따옴표 분리), `F07_NONCHAR_FIELDS`(`WorldLoreDetails` 4대 필수 필드 완결성), `F08_LORE_META`(최소 수량, `Keywords` 공식 `Name` 포함, `Embedding` `null` 또는 `768`), `F09_SANITIZER_FIXEDPOINT`([SessionArchitectService.cs](../../../GRC/GRC/Services/SessionArchitectService.cs) 필드/본문 정제기 고정점 통과 — 글리치 문자, 마크다운, 중복 라벨 래퍼, 고유명사 강조용 낫표 `「...」`, `초기 태도(...)` 래퍼 잔존 차단), `F10_CHARS_KEYS`(`Chars` 키-인물 로어북 `Name` 일치), `F11_GUIDE`(`StatusUpdateGuide` 신규 인물 관계도 추적 지침), `F12_SAMPLE_COPY`(로어북 샘플 대사 오프닝 복붙 차단), `F13_RUNTIME_PIPELINE`(`HybridLorebookRetriever` 인출, Turn 1 프롬프트 조립, `Pool A/B/C` 시드 및 호감도 3단계 마스킹 실전 연동), `F15_LEGACY_LORE_FORMAT`(구형 평문 `"Content"` JSON 필드 사용 차단 및 `"Character"`/`"World"` 구조화 객체 강제).
       * **`WARN` (감사관 검토 경고)**: `W01_COMPOSITE_NAME`(`A와/과 B` 복합 명칭), `W02_CHARS_LEN`(`Chars` 값 25자 초과), `W03_TURN0_COUNTS`(`Places`/`Items` 권장 수량 이탈), `W04_SCENARIO_PARAS`(3~4문단 이탈), `W05_SHORT_KEYWORD`(비인물 2자 이하 광범위 단일 키워드), `W06_NO_AFFINITY_STAT`(Turn 0 등장인물 호감도류 스탯 누락), `W07_SAMPLE_OVERLAP`(샘플 대사 어절 50% 이상 재사용), `W08_WORLDVIEW_TRAIT_LEAK`(`Worldview` 4번 섹션 내 인물 외양/버릇 어절 3개 이상 중복).
   * [ ] **의미론적 심층 검수 (Multi-Agent Deep Audit)**:
-    * **거시 세계관의 독립성 및 스케일**: `Worldview`의 1·2번 섹션이 세계 자체의 역사적 기원·지정학·기술/마법/사회 시스템·구조적 모순을 깊이 있게 구축하고 있는가?
+    * **거시 세계관의 독립성 및 스케일**: `Worldview`의 1·2번 섹션이 세계 자체의 역사적 기원·지리·기술/마법/사회 시스템·긴장 구조를 깊이 있게 구축하고 있는가?
+    * **장르 온도 보존**: `coreWeight`, `Worldview`, 로어북, `SystemPrompt` 4·5번 수칙, 오프닝이 유저 컨셉의 장르 온도를 따르며, 컨셉이 요구하지 않는 적대 세력·추격·채무·비극적 과거가 덧붙지 않았는가?
     * **정보 직교성(Orthogonality) 및 단일 소유 기술**: 각 소품·신체 특징·사건 문구가 그것을 소유·관장하는 1개 로어북에만 상세 기술되고 나머지에서는 고유명사로만 참조되는가? 각 로어북이 해당 개체 고유의 독자적 디테일에 80% 이상을 할애하고 직접 얽힌 2~3개 대상만 연결했는가?
     * **인과적 캐릭터 진정성 및 미대면 인물 조건부 유대**: 모든 등장인물이 주인공과 무관한 자신만의 독립된 삶의 목적(야망, 신념, 과업)을 지니고 있는가? Turn 0 미대면 인물의 `Character.InnerMotivation`이 그 인물 본연의 동기로만 구성되고, 주인공과의 유대가 첫 대면(`Character.InitialContact`) 이후 사건(`Character.BondTrigger` -> `Character.BondPayoff`)을 거쳐 형성되는 조건부 가능성으로 설계되었는가?
     * **미등장 인물 `InitialContact` 시점 정합성**: Turn 0(`initialChars`)에 등장하지 않는 인물들의 `Character.InitialContact`가 Turn 0 이후 본편에서 실제로 발생할 1차 대면/사건 점화 계기로 작성되었는가?
@@ -348,7 +352,7 @@ GRC는 로어북을 구형 평문 `"Content"` 문자열 대신 **구조화된 JS
     * **기본 어조 샘플 및 대표 명칭**: 모든 인물의 `Character.EverydayQuote`가 Turn 0 오프닝 장면과 무관한 평상시 기본 어조로 작성되었는가? 모든 로어북 `Name`이 부속 구성요소를 병기하지 않은 대표 고유 명사 1개로 지어졌는가?
     * **PC 불간섭 및 Zero-Numeric**: `Worldview`, `SystemPrompt`(4·5번 수칙), `Scenario`가 환경과 NPC만을 서술 주체로 삼고, 시스템 수치는 `StatusUpdateGuide`에만 격리되었는가?
 * **외과수술식 핀포인트 보정 (`[수정 대상: 항목명]`)**:
-  * 특정 로어북 항목에 결함이 발견된 경우 `[수정 대상: 항목1, 항목2]` 형태로 결함 항목만 핀포인트 재생성하여 병합합니다(전체 배열 재작성 시 압축 손실(Lazy Compression) 발생, [ReviseLorebooksSurgicallyAsync](../../../GRC/GRC/Services/SessionArchitectService.cs#L1135-L1340) 준용).
+  * 특정 로어북 항목에 결함이 발견된 경우 `[수정 대상: 항목1, 항목2]` 형태로 결함 항목만 핀포인트 재생성하여 병합합니다(전체 배열 재작성 시 압축 손실(Lazy Compression) 발생, [ReviseLorebooksSurgicallyAsync](../../../GRC/GRC/Services/SessionArchitectService.cs#L1153-L1358) 준용).
 
 ### Stage 6: 물리 파일 영구화 및 런타임 임베딩 자동 백필 위임 (Physical Export & Runtime Auto-Backfill)
 * **주체**: Main Architect Agent (Write / File Tool 실행)
@@ -389,11 +393,11 @@ Role: 3인칭 전지적 게임 마스터
 2. 유저 캐릭터(PC)의 대사, 행동, 내면의 생각·감정을 임의로 대신 서술하지 말고, PC의 선택이나 대응이 필요한 시점에서 서술을 멈추고 턴을 넘길 것.
 3. 작위적인 주인공 보정(무조건적 호의·기적적 성공)과 억지 실패 보정을 모두 배제하고, 세계관 법칙 및 당사자 간의 실제 역량·무력·상황 격차와 인물 가치관에 부합하는 현실적 인과율로 판정할 것.
 4. {세션_특화_배경환경_감각묘사_및_NPC_템포_연출수칙_PC불간섭}
-5. {세션_특화_세계관법칙_인과관계_및_위험대가_판정수칙_ZeroNumeric}
+5. {세션_특화_세계관법칙_인과관계_및_행동결과_판정수칙_ZeroNumeric}
 </rules>
 ```
 
-### 2) 9대 불변 제약 (Invariant Rules)
+### 2) 10대 불변 제약 (Invariant Rules)
 [AI_Prompt_Engineering_Guidelines.md](../../ai_agent_refs/AI_Prompt_Engineering_Guidelines.md) 원칙 10(Affirmative Framing)에 따라 각 제약은 수행해야 할 대체 행동으로 기술합니다.
 1. **Always anchor Turn 0 with prose**: 0번 턴 `model` 응답은 표준 3인칭 산문 앵커(`"주어진 세계관과 초기 상황의 흐름을 받아들여, 첫 발걸음을 뗄 준비를 마쳤습니다."`)로 고정합니다.
 2. **Always seed `<initial_scenario>` and `FullHistory.json`**: `Session.json`의 `History[0].Text`는 `<initial_scenario>` 태그로 감싸고, `FullHistory.json`에는 `[초기 상황]` `user` 메시지 1개를 기록합니다.
@@ -401,9 +405,10 @@ Role: 3인칭 전지적 게임 마스터
 4. **Leave PC personality to the user**: `surfaceTone`, `coreWeight`, `Worldview` 3·4번 섹션, `SystemPrompt` 4번 수칙, `Scenario`는 환경과 NPC만을 서술 주체로 삼습니다.
 5. **One entity per lorebook, macro rules in `<master_setting>`**: 거시 세계관은 `Worldview`가 전담하고, 각 로어북은 단일 고유 개체만 다루며 `Name`은 대표 고유 명사 1개로 짓습니다(부속 구성요소는 본문과 `Keywords`에서 서술).
 6. **Single-owner descriptions (Orthogonality)**: 각 소품·신체 특징·사건 문구는 소유 개체 1개 로어북에만 상세 기술하고, 인물 `Character.OtherRelations` 및 비인물 `World.NarrativeHook`에는 직접 얽힌 2~3개 대상만 기재합니다.
-7. **Conditional bonds for unacquainted NPCs**: Turn 0 미대면 인물의 `Character.InnerMotivation`은 그 인물 본연의 동기로만 구성하고, 주인공과의 유대는 첫 대면(`Character.InitialContact`) 이후 사건(`Character.BondTrigger` -> `Character.BondPayoff`)을 통해 형성되도록 설계합니다(Independent Agency).
+7. **Conditional bonds for unacquainted NPCs**: Turn 0 미대면 인물의 `Character.InnerMotivation`은 그 인물 본연의 동기로만 구성하고, 주인공과의 유대는 첫 대면(`Character.InitialContact`) 이후 공동의 경험(`Character.BondTrigger` -> `Character.BondPayoff`)을 통해 형성되도록 설계합니다(Independent Agency).
 8. **Fresh dialogue and concealed inner truth in the opening**: 오프닝 대사는 로어북 샘플(`Character.EverydayQuote`/`EmotionalQuote`)과 다른 새 문장으로 창작하고, 공개 단계 3의 `Character.InnerMotivation`은 행동 단서로만 암시합니다.
 9. **Surgical edits touch only flagged entities**: 부분 수정 시 결함이 지목된 엔트리만 재생성하고, 나머지 엔트리는 원문 그대로 보존합니다.
+10. **Preserve the concept's genre temperature**: 긴장의 원천은 유저 컨셉에 내재한 요소에서만 도출하고, 치유·일상 컨셉의 `coreWeight`는 관계의 거리감·소소한 일상 과업·계절과 공간의 정서적 여운으로 설계합니다(Genre Fidelity).
 
 </prompt_blueprints>
 

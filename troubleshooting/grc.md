@@ -654,3 +654,19 @@ related:
 3. **WPF 카테고리별 구조화 편집 폼 및 검증 게이트 강화 ([EditLorebookWindow.xaml](../../GRC/GRC/Views/EditLorebookWindow.xaml), [EditLorebookWindow.xaml.cs](../../GRC/GRC/Views/EditLorebookWindow.xaml.cs), [SessionAssetValidator.cs](../../GRC/tests/GRC.Tests/SessionAssetValidator.cs))**:
    - `EditLorebookWindow`는 카테고리에 따라 인물 11필드 폼, 배경 4필드 폼, 자유 텍스트 폼으로 자동 전환되며 하단에 읽기 전용 `<world_lore>` 렌더링 미리보기를 표시하고 미수정 항목의 768차원 임베딩을 보존.
    - `SessionAssetValidator`에 `F15_LEGACY_LORE_FORMAT`을 추가하여 신규 세션 자산에서 구형 `"Content"` JSON 필드 사용을 차단하고 구조화 `"Character"`/`"World"` 객체를 강제.
+
+## 2026-10-27: [Resolved] 세션 아키텍트 프롬프트의 갈등 편향(Conflict Bias)으로 치유·일상 컨셉에 억지 위기가 주입되는 현상
+
+### 1. 증상 (Symptom)
+- 적대 세력이 없는 치유·일상·슬로우 라이프 컨셉을 입력해도 생성 세션에 컨셉에 없던 추격 세력, 채무 독촉, 비극적 과거, 위기 급반전 GM 수칙이 덧붙는 경향이 있었음(예: `잿빛_유적과_졸음_섞인_송곳니` 세션의 대출금 상환 압박 및 감찰국 추격 설정).
+
+### 2. 원인 (Root Cause)
+- 데이터 스키마나 런타임 엔진이 아니라 [SessionArchitectService.cs](../../GRC/GRC/Services/SessionArchitectService.cs) 프롬프트 어휘가 갈등을 전제로 고정되어 있었음: `coreWeight`를 "위기 시 적대 세력·환경의 압박감"으로 정의, 세계관 2·3번 섹션에 "구조적 갈등"과 "제약/패널티" 요구, GM 수칙 4·5번과 그 few-shot 예시에 "위기 급반전"과 "대가(Risk)·세력의 반작용" 고정, `innerMotivation`에 "결핍·비밀" 유도.
+- 동일한 GM 수칙 규격 문구가 `StatusGen`, `GenerateGenreDirectivesAsync`, `StatusReview`, `PromptReview`에 각기 다른 표현으로 중복 기재되어 수정 시 드리프트가 누적되던 구조.
+
+### 3. 해결책 (Resolution)
+- 장르 온도 보존 계약 `GenreFidelityRule`(SSOT 상수)을 신설하여 청사진, 세계관, Wave 1/Wave 2 로어북 시스템 지시문에 주입: 긴장의 원천을 컨셉에 내재한 요소로 한정하고, 치유·일상 컨셉의 긴장 축을 관계의 거리감·일상 과업·정서적 여운으로 정의.
+- GM 수칙 4·5번 생성 규격을 `GenreDirectivesSpec`(SSOT 상수) 하나로 통합하고 5번 수칙을 "행동에 상응하는 결과(성취·교감·관계 변화 또는 대가·반작용)" 판정으로 일반화. few-shot 예시와 `CompileHybridSystemPrompt` 폴백 문구의 "위기·적대 세력" 고정 어휘도 중립화.
+- 중복 정리: Wave 2 `final_instruction`에 반복되던 앙상블 원칙을 인물 시스템 지시문 규칙 3(앙상블 분산)으로 이관하여 외과수술식 보정 경로에서도 동일하게 적용. 청사진 프롬프트의 로어북 수량 불일치(규칙 10~18개 vs 출력 주석 8~15개)와 세계관 불릿 수 불일치(4~5개 vs 3~4개)를 통일.
+- 불변 헌법 `CoreSystemDirectivesHeader`(규칙 1~3)는 장르 중립이며 `F04_SYSPROMPT` 바이트 일치 대상이므로 변경하지 않음.
+- 검증: `dotnet build GRC.sln -nodeReuse:false` 경고 0 / 오류 0, Fast QA 235 통과 / 1 건너뜀 (Exit Code 0). 에이전트 템플릿 [05_session_architect_agent_template.md](../GRC/docs/05_session_architect_agent_template.md)에 장르 도메인 표(치유/일상 행 추가), Stage 1·2·3·4·5 및 불변 제약 10번 동기화.
