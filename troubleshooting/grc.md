@@ -477,19 +477,27 @@ related:
 
 ---
 
-## 2026-10-27: [Resolved] 로어북 문자열 내장 DSL(정규식 구분자) 폐기 및 구조화 JSON 스키마(`CharacterLoreDetails` / `WorldLoreDetails`) SSOT 전환
+## 2026-10-27: [Resolved] 로어북 문자열 내장 DSL(정규식 구분자) 및 `LegacyLoreParser` 완전 폐기, 서브컬처 시드 엔진 Option B(상태 전이 + Status LLM 화이트리스트 소모) 전환
 
 ### 1. 현상 (Symptom)
-- `LorebookEntry.Content` 단일 평문 문자열 내부에 다중 구분자(`/`, `->`, `""`) DSL을 내장함에 따라, LLM 출력이나 유저 편집 시 구분자가 하나만 어긋나도 스토리 시드(`Pool A/B/C`) 추출과 호감도 3단계 마스킹이 침묵 실패하거나 스포일러가 조기 노출됨.
+- `LorebookEntry.Content` 단일 평문 문자열 내부에 다중 구분자(`/`, `->`, `""`) DSL을 내장하거나 `LegacyLoreParser` 폴백을 유지할 경우 불필요한 정규식 부채가 잔존함.
+- 시작 거점(`Priority: 0` 장소)이나 초기 소모품이 초기 상태창(`Places`/`Items`)에만 있고 `ConsumedSeeds`에 기록되지 않아, 거점을 떠나거나 아이템을 소모한 직후 첫 막간(`isSceneResolved == true`)에 이미 방문한 시작 장소·아이템이 미방문 시드로 재주입됨(Pool B Head-of-Line Blocking).
+- 단어 출현(`BondHookStopwords` 어절 매칭)으로 `BOND:`/`HOOK:` 시드 소모를 추측함에 따라 일상 대화에서 오탐 소모가 발생하거나, 호감도가 60 이상으로 점프했을 때 `CompanionSeedKeyToMark`가 `BOND:`와 `BOND_SECRET:`을 동시에 소모 처리하여 1단계 유대 에피소드가 증발함.
+- 또한 `AddModelResponse`(타이핑 완료 시점)가 `_lastOfferedSeeds`를 즉시 비워버려 비동기로 도착하는 `UpdateContextStatus`와 경합 조건(Race Condition)이 발생함.
 
 ### 2. 원인 (Root Cause)
-- JSON 저장 포맷, LLM `ResponseSchema`, 런타임 시드/마스킹 소비자가 강타입 구조체 대신 프롬프트 주입용 렌더링 문자열(`Content`)을 SSOT로 공유하던 구조적 결합.
+- 초기/현재 상태창(`Chars`, `Places`, `Items`)과 `ConsumedSeeds` 간의 결정론적 동기화가 부재했고, 시드 개시 판정을 상태창 LLM(`BuildStatusRequest`) 대신 어휘 휴리스틱에 의존함.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **강타입 구조화 스키마 및 `[JsonIgnore]` 계산 렌더러 전환 ([LoreDetails.cs](../../GRC/GRC/Models/LoreDetails.cs), [LorebookEntry.cs](../../GRC/GRC/Models/LorebookEntry.cs), [LoreRenderer.cs](../../GRC/GRC/Services/Cognitive/LoreRenderer.cs))**:
-  - 인물은 `CharacterLoreDetails`(11개 강타입 필드), 비인물은 `WorldLoreDetails`(4개 강타입 필드), 런타임 기억은 `FreeText`를 SSOT로 저장하고, `LorebookEntry.Content`는 `[JsonIgnore]` 계산 프로퍼티(`LoreRenderer.Render(this, RevealStage)`)로 전환.
-  - `MaskLorebooksForPrompt`는 문자열 치환 대신 `entry with { RevealStage = stage }` 불변 복사를 수행하며, 구형 `"Content"` JSON은 `LegacyContent` 역직렬화 직후 `IJsonOnDeserialized`에서 `LegacyLoreParser.TryParse`로 자동 승격 후 `null`로 비움.
-- **핵심 부정 제약 (Never use X)**: **신규 세션 자산(`Preset.json` / `Session.json`)의 인물·배경 로어북에 구형 `"Content"` 문자열 JSON 필드를 직접 작성하지 말 것(`F15_LEGACY_LORE_FORMAT` 차단 대상).** 반드시 구조화된 `"Character"` 또는 `"World"` JSON 객체만 사용할 것.
+- **강타입 구조화 스키마 단일화 및 Zero-Legacy 정리 ([LoreDetails.cs](../../GRC/GRC/Models/LoreDetails.cs), [LorebookEntry.cs](../../GRC/GRC/Models/LorebookEntry.cs), [LoreRenderer.cs](../../GRC/GRC/Services/Cognitive/LoreRenderer.cs))**:
+  - `LegacyLoreParser.cs`, `LorebookEntry.LegacyContent`, `NarrativeContract` 내 평문 불릿 정규식 6종을 전면 삭제하고, `CharacterLoreDetails`(11필드)와 `WorldLoreDetails`(4필드)만을 유일한 SSOT로 확립.
+- **상태 전이 자동 동기화 및 Status LLM 화이트리스트 시드 소모 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs), [StatusPayload.cs](../../GRC/GRC/Models/StatusPayload.cs))**:
+  - `SyncStateBasedSeedConsumptionLocked`: `Chars`, `Places`, `Items`에 존재하는 엔티티의 `CHAR:{Name}` 및 `HOOK:{Name}`을 즉시 `ConsumedSeeds`에 기록하여 방문 거점·소비 아이템 재주입 원천 차단.
+  - `_pendingStatusSeeds` & `StatusPayload.TriggeredSeeds`: `AddModelResponse`에서 비워지지 않는 `_pendingStatusSeeds` 버퍼를 유지하여 `BuildStatusRequest`에 `<offered_story_seeds>`를 주입하고, `UpdateContextStatus`에서 화이트리스트 검증을 통과한 시드만 소모 처리(UI 단독 스탯 수정 시 `IsSceneResolved` 초기화 방어 포함).
+  - `Pool A` 공간 맥락 정렬(동일 `Priority` 내 현재 `Places` 연계 인물 우선), `Pool C` `BOND:` -> `BOND_SECRET:` 순차 해금 분리, `Retrieve` 이전 선행 `MaskLorebooksForPrompt` 적용, `RestoreSession` 시 `TotalTurnCount == 0` 기준 Turn 1 `ThinkingLevel.high` 앵커 보존, `EventLedgerExtractor` 정서적/관계적 이정표 추출 규칙 추가.
+- **핵심 부정 제약 (Never use X)**:
+  - **절대 로어북 파싱이나 시드 소모 판정에 평문 불릿 정규식이나 본문 단어 출현 추측(`BondHookStopwords`)을 사용하지 말 것.**
+  - **절대 `AddModelResponse`에서 상태창 API(`UpdateContextStatus`)가 참조할 `_pendingStatusSeeds` 버퍼를 조기 초기화하지 말 것.**
 
 ---
 
