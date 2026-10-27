@@ -611,3 +611,23 @@ related:
 - **첫 번째 샘플 대사 고착**: 생성 결과에서 인물 `* 말투/대사` 첫 번째 대사가 Turn 0 위기 직후의 일시적 감정 상태로 작성됨. 첫 번째 대사는 3단계 마스킹 대상이 아니어서 매 턴 `<world_lore>`로 주입되므로, 관계가 진전된 뒤에도 말투가 해당 상태에 고착될 위험이 있음. 생성기 규격과 템플릿에서 첫 번째 대사를 "Turn 0 오프닝과 무관하게 반복되는 일상 상황의 평상시 기본 어조"로 재정의.
 - **대표 명칭 규칙**: 동봉품·병설 공간을 `Name`에 병기한 복합 명칭이 생성됨(런타임 기능 결함은 없음, `IsSamePlaceOrItem`이 `Keywords`로 대조). `Name`은 대표 고유 명사 1개로 짓고 부속 구성요소는 본문과 `Keywords`에서 서술하도록 Plan 단계 규칙에 추가.
 - **유지 결정**: 메인 인물 외양에 남은 단일 색채 수식어 잔상은 사전학습 분포 편향으로 판정. 특정 색을 지시문에 명시하면 흰 곰 효과가 재발하므로 템플릿에서 추가 억제하지 않음(외모 고정이 필요하면 유저 컨셉에 직접 명시).
+---
+
+## 2026-10-27: [Resolved] 에이전트 생성 세션 자산 결정론적 검증 게이트(`SessionAssetValidator`) 도입
+
+### 1. 증상 (Symptom)
+- [05_session_architect_agent_template.md](../GRC/docs/05_session_architect_agent_template.md) Stage 5의 결정론적 구조 검수가 마크다운 체크리스트로만 존재하여, 감사 에이전트가 실제 파서나 정규식을 실행하지 않고 눈대중(Blind Audit)으로 판정함.
+- 일회성 PowerShell 스크립트로 검수를 시도할 경우 `NarrativeContract` 정규식을 복제하게 되어 SSOT가 깨지며, Windows PowerShell 5.1에서 BOM 없는 UTF-8 `.ps1` 파일 내 한글 문자열 리터럴이 CP949로 오독되어 파싱 에러가 발생함.
+
+### 2. 원인 (Root Cause)
+- 앱 내장 생성기([SessionArchitectService.cs](../../GRC/GRC/Services/SessionArchitectService.cs))는 `ReviewStepContentAsync` 및 `Sanitize*` 정제기를 C# 코드로 실행하는 반면, 외부 안티그래비티 에이전트 워크플로우에는 생성된 `Preset.json`, `Session.json`, `FullHistory.json` 3종 자산을 앱의 실제 모델과 정규식으로 검증하는 실행 게이트가 없었음.
+
+### 3. 해결책 및 불변성 (Resolution & Invariants)
+1. **호감도 키워드 SSOT 승격 ([NarrativeContract.cs](../../GRC/GRC/Services/Cognitive/NarrativeContract.cs), [MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
+   - `MemoryManagerService.GetCharacterMaxAffinity` 내부에 하드코딩되어 있던 관계도 판별 키워드(`호감`, `신뢰`, `유대`, `친밀`, `동조`, `애정`)를 `NarrativeContract.AffinityStatTerms`로 승격하여 런타임과 검증기가 공유하도록 통합.
+2. **C# 결정론적 세션 자산 검증기 및 감사 러너 구현 ([SessionAssetValidator.cs](../../GRC/tests/GRC.Tests/SessionAssetValidator.cs), [SessionAuditTests.cs](../../GRC/tests/GRC.Tests/SessionAuditTests.cs), [SessionAssetValidatorTests.cs](../../GRC/tests/GRC.Tests/SessionAssetValidatorTests.cs))**:
+   - `F01_DESERIALIZE` ~ `F12_SAMPLE_COPY` 12개 치명적 구조 결함(`Fail`)과 `W01_COMPOSITE_NAME` ~ `W08_WORLDVIEW_TRAIT_LEAK` 8개 감사 경고(`Warn`)를 앱의 실제 모델·정규식·정제기 고정점(`SanitizeWorldview`, `SanitizeLorebookContent`, `SanitizeStatusGuide`, `SanitizeScenario`, `SanitizeInitialCharValue`)으로 직접 검사.
+   - 앱 경로로 생성된 세션은 저장 시점에 768차원 임베딩이 채워지므로 `F08_LORE_META`는 `Embedding == null || Embedding.Length == 768`을 허용하고 그 외 길이를 차단.
+   - `SessionAuditFactAttribute`를 통해 `GRC_AUDIT_SESSION_DIR` 환경변수가 없을 때는 일반 단위 테스트(`Category!=Integration`)에서 통과로 위장하지 않고 명시적으로 `Skip` 처리되도록 구성.
+3. **템플릿 Stage 5/6 필수 게이트 연동 ([05_session_architect_agent_template.md](../GRC/docs/05_session_architect_agent_template.md))**:
+   - 세션 파일 생성 직후 `Category=SessionAudit` 테스트를 실행하여 `Exit Code 0`(`FAIL 0건`)을 확인하는 절차를 Stage 5/6 및 검증 기준 1번 항목에 의무화.

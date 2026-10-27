@@ -312,14 +312,12 @@ GRC 클라이언트는 세션을 열 때 `FullHistory.json`을 역직렬화하�
        * `5. {세계관 인과율 및 위험 판정 수칙}`: 세계관과 로어북의 고유 법칙·제약에 기반하여 유저 행동의 개연성, 대가(Risk), 세력/환경의 반작용을 공정하게 판정하도록 지시(수치는 `StatusUpdateGuide`가 전담 — Zero-Numeric).
 
 ### Stage 5: 독립 감사관 이중 게이트 실사 (Dual-Layer Deterministic & Semantic Gate)
-* **주체**: Narrative & Schema Auditor Subagent (Read-Only)
+* **주체**: Narrative & Schema Auditor Subagent (Read-Only + C# 검증 러너 실행)
 * **검수 기준 (Auditor Rubric)**:
-  * [ ] **결정론적 구조 검수 ([ReviewStepContentAsync](../../../GRC/GRC/Services/SessionArchitectService.cs#L1498-L1623) 동등성)**:
-    * 기획된 모든 로어북 항목이 누락 없이 생성되었는가?
-    * 모든 `인물` 로어북이 5줄 필수 불릿(`* 외양/특징`, `* 표면/내면`, `* PC 관계`, `* 타 인물/세력 관계`, `* 말투/대사`)을 갖추었으며, `* 표면/내면`과 `* PC 관계`에 `/` 구분자가 존재하고, `* 말투/대사`에 큰따옴표 샘플 대사 2개(`"..." / "..."`)가 포함되었는가?
-    * 모든 비인물 로어북이 3줄 필수 불릿(`* 감각/외관`, `* 규칙/원리`, `* 서사 훅`)을 갖추었는가?
-    * 텍스트 내 비정상 다국어 글리치 문자(`[\u0400-\u06FF\u0900-\u0E7F]+`), 마크다운 볼드/별표(`**`, `*`), `#` 헤더, 대괄호 의사 태그(`[표면]` 등)가 완전히 제거되었는가?
-    * `Session.json`의 `History[0].Text`에 `<initial_scenario>` 래퍼가 있고, `CurrentContext.Plot` 및 `FullHistory.json`의 `[초기 상황]` 엔트리가 정확히 기록되었는가?
+  * [ ] **결정론적 구조 검수 ([SessionAssetValidator.cs](../../../GRC/tests/GRC.Tests/SessionAssetValidator.cs) / [SessionAuditTests.cs](../../../GRC/tests/GRC.Tests/SessionAuditTests.cs) 실행 필수)**:
+    * 눈대중(Blind Audit) 판정을 금지하고, 반드시 C# 결정론적 검증 게이트를 실행하여 **`FAIL 0건 (Exit Code 0)`**을 확인하며 출력된 **`WARN` 항목을 전수 검토**합니다:
+      * **`FAIL` (치명적 구조 결함 — 1건이라도 존재 시 즉시 실패)**: `F01_DESERIALIZE`(3종 JSON 역직렬화), `F02_PRESET_SYNC`(`Preset.json`↔`Session.json.Preset` 동기화), `F03_TURN0`(Turn 0 `<initial_scenario>`·앵커·`FullHistory`·`Plot`·`CurrentContext` 스키마), `F04_SYSPROMPT`(고정 헌법 1~3번 바이트 일치 및 Zero-Numeric), `F05_WORLDVIEW`(4대 번호 섹션 헤더), `F06_CHAR_FIELDS`(인물 5줄 불릿 및 `유대 심화(발단 계기: ... -> 완수 후 변화: ...)` 인과 포맷), `F07_NONCHAR_FIELDS`(비인물 3줄 불릿), `F08_LORE_META`(최소 수량, `Keywords` 공식 `Name` 포함, `Embedding` `null` 또는 `768`), `F09_SANITIZER_FIXEDPOINT`([SessionArchitectService.cs](../../../GRC/GRC/Services/SessionArchitectService.cs) 정제기 5종 고정점 통과 — 글리치 문자, 마크다운, 고유명사 강조용 낫표 `「...」`, `초기 태도(...)` 래퍼 잔존 차단), `F10_CHARS_KEYS`(`Chars` 키-인물 로어북 `Name` 일치), `F11_GUIDE`(`StatusUpdateGuide` 신규 인물 관계도 추적 지침), `F12_SAMPLE_COPY`(로어북 샘플 대사 오프닝 복붙 차단).
+      * **`WARN` (감사관 검토 경고)**: `W01_COMPOSITE_NAME`(`A와/과 B` 복합 명칭), `W02_CHARS_LEN`(`Chars` 값 25자 초과), `W03_TURN0_COUNTS`(`Places`/`Items` 권장 수량 이탈), `W04_SCENARIO_PARAS`(3~4문단 이탈), `W05_SHORT_KEYWORD`(비인물 2자 이하 광범위 단일 키워드), `W06_NO_AFFINITY_STAT`(Turn 0 등장인물 호감도류 스탯 누락), `W07_SAMPLE_OVERLAP`(샘플 대사 어절 50% 이상 재사용), `W08_WORLDVIEW_TRAIT_LEAK`(`Worldview` 4번 섹션 내 인물 외양/버릇 어절 3개 이상 중복).
   * [ ] **의미론적 심층 검수 (Multi-Agent Deep Audit)**:
     * **거시 세계관의 독립성 및 스케일**: `Worldview`의 1·2번 섹션이 세계 자체의 역사적 기원·지정학·기술/마법/사회 시스템·구조적 모순을 깊이 있게 구축하고 있는가?
     * **정보 직교성(Orthogonality) 및 단일 소유 기술**: 각 소품·신체 특징·사건 문구가 그것을 소유·관장하는 1개 로어북에만 상세 기술되고 나머지에서는 고유명사로만 참조되는가? 각 로어북이 해당 개체 고유의 독자적 디테일에 80% 이상을 할애하고 직접 얽힌 2~3개 대상만 연결했는가?
@@ -343,6 +341,14 @@ GRC 클라이언트는 세션을 열 때 `FullHistory.json`을 역직렬화하�
      * **주의**: 만약 에이전트가 임의의 가짜 숫자 768개를 채워 넣으면 `EnsureEmbeddingsAsync`가 이미 유효 임베딩이 있는 것으로 오판(`entry.Embedding.Length == 768` 스킵 가드)하여 시맨틱 검색이 영구 손상되므로, 더미 배열 생성을 엄격히 금지합니다.
   2. **물리 파일 기록**:
      * `Sessions/{SanitizedSessionTitle}_{yyyyMMdd}_{6CharHex}/` 디렉터리에 `Preset.json`, `Session.json`, `FullHistory.json` 3개 파일을 UTF-8(`WriteIndented: true`, `UnsafeRelaxedJsonEscaping`)로 저장합니다.
+  3. **결정론적 검증 게이트 실행 (Mandatory QA Gate)**:
+     * 파일 기록 직후 `GRC` 저장소 루트에서 빌드와 테스트를 개별 명령으로 실행하여 `Exit Code 0`을 검증합니다:
+       ```powershell
+       dotnet build GRC.sln -nodeReuse:false
+       $env:GRC_AUDIT_SESSION_DIR = "<생성된_세션_폴더_절대경로>"
+       dotnet test tests/GRC.Tests/GRC.Tests.csproj --filter "Category=SessionAudit" --no-build -v n -nodeReuse:false --logger "console;verbosity=detailed"
+       ```
+     * `FAIL`이 발생하면 `[수정 대상: ...]` 외과수술식 핀포인트 보정으로 결함 항목만 수정한 뒤 재검증합니다(동일 결함 최대 3회 서킷 브레이커).
 
 </orchestration_sop>
 
@@ -391,11 +397,13 @@ Role: 3인칭 전지적 게임 마스터
 
 안티그래비티 에이전트가 빌드한 세션 자산이 실제 GRC 세션 아키텍트 2.0과 동등 이상으로 작동하는지 확인하는 필수 QA 기준입니다.
 
-1. **스키마 및 역직렬화 무결성**:
+1. **결정론적 검증 게이트(`Category=SessionAudit`) 통과**:
+   * [SessionAssetValidator.cs](../../../GRC/tests/GRC.Tests/SessionAssetValidator.cs) 기반 `dotnet test tests/GRC.Tests/GRC.Tests.csproj --filter "Category=SessionAudit"` 실행 결과 `FAIL 0건 (Exit Code 0)`이어야 하며, 콘솔에 출력된 `WARN` 항목(`W01`~`W08`)이 감사관에 의해 전수 검토되어야 합니다.
+2. **스키마 및 역직렬화 무결성**:
    * C# .NET 클라이언트의 `SessionService.LoadSessionAsync`, `PresetStorageService.LoadPresetAsync`, `FullHistoryLogger.LoadFullHistoryAsync`를 통해 단 하나의 예외 없이 메모리에 로드되고, 세션 진입 즉시 오프닝 시나리오 말풍선과 상태창(`Chars`, `Places`, `Items`, `CustomStats`)이 화면에 렌더링되어야 합니다.
-2. **스토리 시드(`Pool A/B/C`) 파싱 호환성**:
+3. **스토리 시드(`Pool A/B/C`) 파싱 호환성**:
    * `MemoryManagerService.ExtractAvailableStorySeeds` 실행 시 미등장 인물의 `CHAR:{Name}` 시드에 `(분류: ... | 외양: ... | 말투: "...") -> 초기 접점(...)`이 누락 없이 조합되고, 미방문 장소/아이템의 `HOOK:{Name}` 시드 및 호감도 30/60 달성 시의 `BOND:{Name}` / `BOND_SECRET:{Name}` 시드가 정규식으로 정확히 추출되어야 합니다.
-3. **임베딩 시딩 및 자동 백필 호환성**:
-   * 에이전트가 최초 생성한 `Preset.json`의 모든 로어북 `Embedding` 필드는 `null`로 깨끗하게 시딩되어 있어야 하며(임의의 가짜 768개 부동소수점 배열 주입 절대 금지), GRC에서 해당 세션을 열었을 때 `ChatViewModel.InitializeWithSession`의 백그라운드 백필을 통해 실제 `gemini-embedding-001` (`float[768]`) 벡터가 자동 채워지고 디스크에 저장되어야 합니다.
+4. **임베딩 시딩 및 자동 백필 호환성**:
+   * 에이전트가 최초 생성한 `Preset.json`의 모든 로어북 `Embedding` 필드는 `null`로 시딩하며(임의의 가짜 768개 부동소수점 배열 주입 절대 금지; 검증기는 에이전트 생성 직후의 `null`과 앱 런타임 백필 완료 후의 길이 `768` 배열만 허용), GRC에서 해당 세션을 열었을 때 `ChatViewModel.InitializeWithSession`의 백그라운드 백필을 통해 실제 `gemini-embedding-001` (`float[768]`) 벡터가 자동 채워지고 디스크에 저장되어야 합니다.
 
 </verification_criteria>
