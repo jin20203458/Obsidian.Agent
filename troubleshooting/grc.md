@@ -323,350 +323,176 @@ related:
 
 ---
 
-> [!NOTE]
-> **[정제 완료 기준선]** 2026-10-18 이전 상위 항목은 정제 완료됨. 신규 인시던트는 이 아래에 추가됩니다.
-
----
-
-## 2026-10-18: [Resolved] GRC 전역 프롬프트 아키텍처 및 문자열 리터럴 전면 표준화 (PICCO, C# 11 Raw String, 2계층 계약, 토큰 바운딩)
+## 2026-10-18: [Resolved] 프롬프트 문자열 들여쓰기 공백 유입, 초기 시나리오 중복 헤더 오염 및 구조화 디코딩 스키마 강제
 
 ### 1. 현상 (Symptom)
-- 구세대 C# 관용구(`@""`, `"..." +`)의 혼용으로 인해 C# 소스코드 들여쓰기 공백이 LLM 프롬프트에 그대로 유입되어 불필요한 토큰 낭비 및 어텐션 오염 발생.
-- 기능적 변환 태스크(`ReplySuggestionService`, `GeminiTtsService`)에 불필요한 2인칭 인격화("You are...", "전문가...")와 대괄호 비정형 마크다운(`[상황: ...] 출력:`)이 잔존하여 출력 일관성 저하.
-- `InjectInitialScenario` 호출 경로에서 `ChatViewModel`이 `[초기 상황]\n` 헤더를 붙여 전달하여 메모리 내부에 `<initial_scenario>\n[초기 상황]\n...`의 중복 헤더 결함 발생.
-- 단순 변환/추천 태스크(선택지 3개 추출, 번역 등)에 `MaxOutputTokens: 8192`가 과잉 할당되어 비정상 루프 및 통신 지연 리스크 잔존.
+- C# `@""` 축어적 리터럴 및 문자열 결합(`+`) 사용 시 소스코드 들여쓰기 공백이 LLM 프롬프트에 그대로 유입되어 토큰 낭비 및 어텐션 오염 발생.
+- `ChatViewModel`에서 `InjectInitialScenario` 호출 시 `[초기 상황]\n` 헤더를 중복 부착하여 `<initial_scenario>\n[초기 상황]\n...` 이중 헤더 오염 발생.
 
 ### 2. 원인 (Root Cause)
-- 프롬프트 엔지니어링 표준 수립 이전 구현된 레거시 프롬프트들이 C# 버전 상승과 기능 추가 과정에서 세대별 파편화(Legacy Drift)를 겪음.
+- `@""` 리터럴은 좌측 들여쓰기 공백을 스트리핑하지 않으며, 초기 시나리오 주입 경로에 멱등성 가드 및 디코딩 레벨 스키마(`responseSchema`)가 누락됨.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-1. **C# 11 원시 문자열 리터럴(`"""` / `$$"""`) 100% 전면 일원화**:
-   - 코드 들여쓰기 공백 컴파일 타임 자동 스트리핑(Stripping)으로 공백 토큰 누출을 원천 차단.
-2. **PICCO 구조화 및 무인격 기능 명세 확립**:
-   - 결정론적 태스크는 `Domain: ...`으로 무인격화하고, 비정형 마크다운 예시를 `<input>`, `<output>` 표준 XML 태그로 개편.
-3. **2계층 스키마 계약 및 토큰 상한 현실화**:
-   - `LorebookService`, `ReplySuggestionService`, `SessionArchitectService`에 `responseSchema`를 등록하여 디코딩 레벨에서 100% 문법 무결성 보장.
-   - 단발성 추천(1024), 번역(1024), 로어북 추출(2048)로 `MaxOutputTokens`를 바운딩하여 불필요한 지연과 비용 차단.
-4. **초기 시나리오 주입 멱등성 보장**:
-   - `ChatViewModel`에서 순수 시나리오 텍스트를 전달하고 `InjectInitialScenario`에서 `Trim()` 및 `IsNullOrWhiteSpace` 가드를 적용하여 중복 헤더 오염 차단.
-5. **핵심 부정 제약 (Never use X)**: **절대 프롬프트 문자열에 `@""` 축어적 리터럴을 사용하지 말 것.** C# 11 `"""` 및 `$$"""` 원시 문자열 리터럴만을 사용할 것.
+- **C# 11 원시 문자열 리터럴(`"""` / `$$"""`) 전면 일원화**: 컴파일 타임 자동 들여쓰기 스트리핑으로 공백 토큰 유입 원천 차단.
+- **초기 시나리오 멱등성 가드 및 `responseSchema` 등록**: `InjectInitialScenario`에서 순수 시나리오 원문만 `Trim()` 후 주입하고, `LorebookService`·`ReplySuggestionService`·`SessionArchitectService`에 `responseSchema`를 등록하여 디코딩 문법 무결성 보장.
+- **핵심 부정 제약 (Never use X)**: **절대 다중 줄 프롬프트 문자열에 `@""` 축어적 리터럴을 사용하지 말 것.** 반드시 C# 11 `"""` / `$$"""` 원시 문자열 리터럴만 사용할 것.
 
 ---
 
 ## 2026-10-19: [Resolved] AI 답변 추천(ReplySuggestionService)의 대화 슬라이싱 하드코딩 제거 및 미압축 단기 기억 전수 연동
 
 ### 1. 현상 (Symptom)
-- `ChatViewModel`에서 AI 답변 추천 생성 시 `ChatHistory.TakeLast(9)`로 최근 4~5턴만 고정 슬라이싱하여 전달함에 따라, 4턴 단위 중기 기억(`Plot`) 압축 대기 중이던 6~8턴 전의 미압축 대화가 `Plot`과 슬라이싱 목록 양쪽에서 모두 누락되는 과도기 기억 사각지대(Transitional Gap) 발생.
-- `ReplySuggestionService` 프롬프트 본문에서 `<current_snapshot>` 태그 내부에 `ChapterContext.ToPromptString()`의 `<current_snapshot>`이 또다시 중첩되는 XML 태그 충돌 발생.
+- `ChatViewModel`에서 답변 추천 생성 시 `ChatHistory.TakeLast(9)` 고정 슬라이싱으로 인해 중기 기억(`Plot`, 18개 메시지 임계치) 압축 대기 중인 6~8턴 전 미압축 대화가 누락되는 과도기 기억 사각지대(Transitional Gap) 발생 및 `<current_snapshot>` 이중 중첩 XML 충돌 발생.
 
 ### 2. 원인 (Root Cause)
-- 중기 기억 압축 임계치(18개 메시지)와 답변 추천의 고정 슬라이싱(`TakeLast(9)`) 간의 라이프사이클 불일치.
+- 중기 기억 압축 임계치(18개 메시지)와 UI 컬렉션 고정 슬라이싱(`TakeLast(9)`) 간 라이프사이클 불일치 및 래퍼 태그명 중복.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-1. **단기 기억 전수 스냅샷 인터페이스 확장 (`IMemoryManagerService.cs`, `MemoryManagerService.cs`)**:
-   - `IReadOnlyList<ChatMessage> GetCurrentShortTermMemory()`를 제공하여 스레드 안전하게 현재 `_shortTermMemory` 전수를 캡처.
-2. **UI 하드코딩 슬라이싱 제거 (`ChatViewModel.cs`)**:
-   - `ChatHistory.TakeLast(9)` 및 `TakeLast(10)`을 전면 제거하고, `_memoryService.GetCurrentShortTermMemory()`를 전달하여 `Plot`(이미 압축된 과거) + `_shortTermMemory`(아직 압축되지 않은 최근 대화 전부)의 무손실 톱니바퀴 결합 확립.
-3. **태그 계층 충돌 해소 (`ReplySuggestionService.cs`)**:
-   - 중복 `<current_snapshot>` 태그를 `<session_context>`로 변경하여 의미론적 XML 트리 무결성 확보.
-4. **핵심 부정 제약 (Never use X)**: **절대 단기 기억 대화를 UI 컬렉션(`ChatHistory`)에서 임의의 숫자(`TakeLast`)로 잘라내지 말 것.** 반드시 `_memoryService.GetCurrentShortTermMemory()`를 통해 메모리 라이프사이클과 직접 동기화할 것.
+- **미압축 단기 기억 전수 연동 (`IMemoryManagerService.GetCurrentShortTermMemory`)**: UI 하드코딩 슬라이싱(`TakeLast`)을 제거하고 `_memoryService.GetCurrentShortTermMemory()`를 전달하여 `Plot`(압축 완료) + `_shortTermMemory`(미압축 최근 대화 전수) 무손실 결합 확립.
+- **태그 계층 충돌 해소 (`ReplySuggestionService.cs`)**: 외곽 래퍼를 `<session_context>`로 변경하여 내부 `<current_snapshot>`과의 중첩 제거.
+- **핵심 부정 제약 (Never use X)**: **절대 단기 기억 대화를 UI 컬렉션(`ChatHistory`)에서 임의 개수(`TakeLast`)로 잘라내지 말 것.** 반드시 `_memoryService.GetCurrentShortTermMemory()`와 동기화할 것.
 
 ---
 
-## 2026-10-23: [Resolved] SessionArchitect 2.0 전면 개편 (2축 서사 톤 설계, 로어북 마이크로 배치 병렬 생성, C# 슬롯 정제기 및 Turn 0 시딩)
+## 2026-10-24: [Resolved] Session Architect 추론 토큰 잠식 방어, Turn 0 시딩 및 반플레이어 억지 저항 가드레일 제거
 
 ### 1. 현상 (Symptom)
-- 기존 `SessionArchitectService`가 전 단계를 `ModelTier.Flash` 및 짧은 요약 제약(`1~2줄 요약`, `4문단 이내`)으로 실행하여 세계관과 캐릭터 설정의 깊이가 얕고 평면적으로 생성됨.
-- 3단계(`LorebookGen`)에서 모든 로어북 항목을 단일 JSON 배열 호출 1회로 일괄 생성함에 따라 후반부 항목이 1~2문장으로 축약되는 출력 압축(Lazy Compression) 현상 발생.
-- 5단계(`ScenarioGen`)에서 로어북 본문(`Content`)을 누락하고 이름(`Name`)만 전달하여 오프닝 대사와 로어북 말투가 불일치하며, 세션 생성 시 `ChapterContext`의 `Chars`, `Places`, `Items`가 빈 컬렉션(`new()`)으로 방치되어 Turn 1에 `BiTemporalEntityProjector`와 `HybridLorebookRetriever`의 인물 기반 인출이 작동하지 않음.
-- 6단계(`PromptGen`)에서 메인 서사용 `SystemPrompt` 하단에 스탯/상태창 업데이트 가이드를 포함하도록 지시하여 `AI_Prompt_Engineering_Guidelines.md` 원칙 2(Zero-Numeric)를 위반하고, 자동 모드(`IsAutoMode`) 실행 중에도 채팅창에 세계관/로어북 심층 비밀 전문을 노출하여 플레이 시작 전 스포일러를 유발함.
+- `gemini-4-argon` (`ThinkingLevel.high`) 호출 시 `maxOutputTokens: 8192` 제한으로 인해 내부 추론 토큰이 출력 예산을 잠식하여 장문 JSON 절단 위험 발생 및 단계별 LLM 자가 검수 재호출로 인한 자기강화 환각·지연 누적.
+- 세션 생성 시 `ChapterContext`(`Chars`, `Places`, `Items`)가 빈 컬렉션(`new()`)으로 방치되어 Turn 1 엔티티 기반 인출이 작동하지 않음.
+- 구버전 프롬프트의 적대적 가드레일("인물의 가치관에 어긋날 시 거절·경계 반응")이 고성능 추론 모델에서 역량 격차를 무시한 반플레이어 억지 실패 및 시간 경과 정체(마이크로 스톨링) 유발.
 
 ### 2. 원인 (Root Cause)
-- 세션당 1회성으로 실행되는 초기 설계 파이프라인에 하위 모델(`Flash`)과 단일 패스(Monolithic Single-Pass) 생성 방식을 적용하고, 런타임 주입 슬롯(`<master_setting>`, `<world_lore>`, `<system>`)의 포맷 제약 및 Cognitive Core 3.0의 Turn 0 초기 상태 요구사항을 반영하지 못함.
+- Thinking 토큰과 가시 출력 토큰이 합산 차감되는 예산 구조 미반영, Turn 0 초기 상태 시딩 누락, 초기 LLM의 예스맨 방어용 적대적 가드레일이 고성능 모델에서 과보정됨.
 
-### 3. 해결책 (Resolution)
-- **전 단계 `ModelTier.Pro` (`ThinkingLevel.high`) 격상, 2축 톤(`SurfaceTone` / `CoreWeight`) 설계 및 아키텍트 내부 프롬프트 표준화**: 일상 대화 호흡과 배경/갈등 무게감을 분리 설계하고, `SessionArchitectService` 내부 하드코딩 프롬프트 전수를 무인격 기능 명세(`Domain` & `Task` + `Output Language: Korean`), 2계층 스키마 계약(1계층 TypeScript `interface` + 2계층 `ResponseSchema`), 긍정 프레이밍(Affirmative Framing), `<final_instruction>` 종결 구조로 표준화.
-- **로어북 마이크로 배치 병렬 합성 및 구조적 1줄 명사구 압축 (`GenerateLorebooksInParallelAsync`)**: `LorebookPlan`을 최대 3개 단위의 마이크로 배치로 분할하여 `Task.WhenAll` + `ModelTier.Pro`로 병렬 생성함으로써 출력 압축을 원천 차단하고, 추론 예산을 낭비하는 명시적 글자 수(`N자 이내`) 숫자 강제 대신 **구조적 슬롯 바운딩(지정된 하위 불릿 × 각 불릿당 1줄 명사구 개조식) 및 Few-Shot 길이 앵커링**을 적용하여 토큰 소모량을 약 65% 절감함과 동시에 우선순위 오름차순 규격(`0~3`, `0`이 최우선) 및 인물 대표 대사 샘플(`"..."` 2개)을 강제.
-- **C# 결정론적 슬롯 정제기 및 코드 하이브리드 `SystemPrompt` 컴파일러**: `SanitizeWorldview`, `SanitizeLorebookContent`, `SanitizeStatusGuide`, `SanitizeScenario`를 통해 불필요한 XML 태그, 마크다운 헤더(`#`), 볼드(`**`) 오염을 물리적으로 제거하고, `CompileHybridSystemPrompt`에서 스탯 지침을 완전 배제(Zero-Numeric)한 채 코어 5대 행동 헌법과 장르 연출 디렉팅을 결합.
-- **Turn 0 `ChapterContext` 시딩 및 자동 모드 스포일러 프리 UX (`SessionArchitectViewModel.cs`)**: `StatusDesignPayload`를 통해 초기 등장인물(`InitialChars`, `[초기: ...]` 포맷), 시작 장소(`InitialPlaces`), 소지품(`InitialItems`)을 Turn 0에 즉시 시딩하고, `IsAutoMode`(기본값 `true`) 실행 시 채팅창에는 스포일러 없는 단계별 완료 요약만 표시하도록 개선 (`dotnet test GRC.sln` 단위 테스트 131/131 및 Pro 통합 테스트 통과).
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+- **`ArchitectMaxOutputTokens = 32768` 상향 및 100% C# 결정론적 검수 관문 (`ReviewStepContentAsync`)**: 전 단계 출력 상한을 `32768`로 일원화하고, LLM 자가 감사 호출을 폐기하여 C# 정규식·파서 기반 무결성 관문(결함 시에만 핀포인트 재생성)으로 전환.
+- **Turn 0 `ChapterContext` 시딩 및 역량 기반 인과율 정립**: 오프닝 기반 `InitialChars`·`InitialPlaces`·`InitialItems`를 Turn 0에 즉시 시딩하고, 코어 GM 헌법을 당사자 간 실제 역량·상황 격차에 부합하는 현실적 인과율 판정으로 일원화.
+- **핵심 부정 제약 (Never use X)**: **절대 NPC에게 무조건적 적대·억지 저항을 지시하는 인위적 실패 가드레일을 주입하거나, 단계마다 LLM 감사관을 재호출하지 말 것.**
 
 ---
 
-## 2026-10-24: [Resolved] Session Architect 2.0 4단계 통합 파이프라인, Gemini 4 Argon 최적화 및 코어 3대 GM 수칙 개편
+## 2026-10-24: [Resolved] Session Architect 동적 GM 수칙의 PC 주체성 침해(God-modding 유도) 및 지시문 상충 해소
 
 ### 1. 현상 (Symptom)
-- **Flash 시절 6단계 파이프라인 및 레거시 병목 잔존**: 과거 `Flash` 모델의 출력 한계를 보완하기 위해 만든 6단계 분할 구조(1단계 기획과 2단계 세계관 중복, 5단계 상태창과 6단계 2줄 GM 수칙 분리), `maxOutputTokens: 8192` 하드코딩, `batchSize = 3` 인위적 로어북 조각 분할, 단계별 LLM 감사관 재호출이 `Gemini 4 Argon` (`ThinkingLevel.high`)의 거시적 통합 추론과 앙상블 캐스팅을 저해하고 불필요한 API 왕복(11~13회)을 유발.
-- **반플레이어 편향(Anti-Player Bias) 및 마이크로 스톨링**: 구버전 프롬프트 수칙 4번("작위적 성공 배제. 인물의 가치관에 어긋날 시 거절·경계 반응을 보일 것")으로 인해 일반인 NPC가 살인마 빌런 PC를 물리적으로 제압해버리는 등 세계관 무력/역량 격차를 무시한 억지 실패 유발. 또한 수칙 3번("시간 임의 요약 금지. 단일 사건 직후 즉시 멈출 것")으로 인해 유저가 명시적으로 시간 경과를 요구해도 대화가 정체되는 마이크로 스톨링 발생.
+- `SessionArchitectService`가 생성한 동적 GM 수칙(`genreDirectives`) 및 세계관 톤에 유저 캐릭터(PC)의 성격, 감정, 살기 표출, 전투 행동을 규정하는 명령문이 포함되어 코어 2번 수칙(PC 대사·행동·내면 대리 서술 금지)과 상충(Instruction Collision)하며 런타임 God-modding 유발.
 
 ### 2. 원인 (Root Cause)
-- **현상 유지 편향(Status-Quo Bias) 및 레거시 제약**: `gemini-4-argon` (`ThinkingLevel.high`)은 내부 추론 토큰을 `max_output_tokens` 예산에서 차감하므로 `32,768` 이상의 헤드룸이 필요함에도 `8192`로 묶여 있었고, 4~6명의 등장인물을 3명씩 쪼개어 병렬 호출함에 따라 전체 인물의 말투 대비와 다각 관계망을 한 번에 조망하지 못함. 또한 동일 모델에게 자가 검수를 맡기는 LLM 재호출이 자기강화 환각과 지연을 유발.
-- **구형 가드레일의 역효과**: 초기 LLM의 무조건적 예스맨 현상을 막기 위해 삽입했던 적대적 가드레일이 고성능 추론 모델에서 '유저 행동 무조건 방해 및 억지 실패'로 과보정됨.
+- 생성기 프롬프트에서 GM 통제 영역(배경 환경·NPC 태도)과 유저 통제 영역(PC 행동·감정)의 주어 경계가 분리되지 않음.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-1. **4단계 통합 파이프라인 개편 (`SessionArchitectService.cs`, `SessionArchitectViewModel.cs`, `SessionArchitectWindow.xaml`)**:
-   - **1단계 (청사진 및 마스터 세계관 통합 — 1회 호출)**: `AgentPlan.WorldviewOutline`에 `<master_setting>`용 4대 번호 섹션 개조식 레퍼런스를 직접 작성하도록 통합하여 거시 세계관과 8~15개 미시 로어북 기획(`connectedEntities`)을 단일 추론 공간에서 공동 설계.
-   - **2단계 (2-Wave 통합 앙상블 로어북 — 2회 호출)**: `batchSize = 3` 분할을 폐기하고, Wave 1에서 비인물 무대 인프라 전체를 1회 호출로 확정한 뒤, Wave 2에서 확정된 무대 전문(`<established_world_lore>`) 위에서 모든 등장인물 전원을 1회 통합 앙상블 캐스팅 호출로 동시 생성.
-   - **3단계 (오프닝 시나리오 선행 집필 — 1회 호출)**: JSON 이스케이프 및 개조식 문체 전이(Style Bleed) 방지를 위해 독립된 `text/plain` 산문 모드로 집필.
-   - **4단계 (상태창·Turn 0 시딩 및 시스템 지시문 통합 — 1회 호출 + C# 컴파일러)**: 오프닝 본문 기반 초기 스탯(`stats`), 수치 갱신 가이드(`guide`), Turn 0 컨텍스트(`initialChars`/`initialPlaces`/`initialItems`, `NormalizeInitialCharKeys` 키 정규화), 그리고 세션 특화 비수치 GM 수칙 4·5번(`genreDirectives`)을 단일 `StatusDesignPayload` JSON으로 추출 후 `CompileHybridSystemPrompt`로 즉시 결합 (총 API 호출 11~13회 $\to$ 5회로 단축).
-2. **`ArchitectMaxOutputTokens = 32768` 상수 일원화 및 100% C# 결정론적 검수 관문 (`ReviewStepContentAsync`)**:
-   - 아키텍트 전 단계의 `maxOutputTokens`를 `32768`로 상향하여 `ThinkingLevel.high` 추론 깊이 확보.
-   - LLM 자가 감사 호출 및 `ReviewResponseSchema`를 전면 삭제하고, C# 파서·정규식 기반의 결정론적 무결성 관문(API 호출 0회)으로 전환하여 결함 적발 시에만 `ReviseLorebooksSurgicallyAsync` 핀포인트 재생성 수행.
-3. **불변 코어 GM 헌법 3대 수칙 통합 및 역량 기반 현실적 인과율 정립 (`CoreSystemDirectivesHeader`)**:
-   - 1번(오감 중심 물리적 객관 서술), 2번(PC 대사·행동 대신 서술 금지 및 자연스러운 턴 양도), 3번(작위적 주인공 보정과 억지 실패 보정을 모두 배제하고 당사자 간 실제 역량·무력·상황 격차와 인물 가치관에 부합하는 현실적 인과율 판정)으로 통합하고 세션 특화 수칙을 4·5번 슬롯에 매핑.
-4. **핵심 부정 제약 (Never use X)**:
-   - **절대 NPC에게 무조건적인 적대나 억지 저항을 지시하는 인위적 실패 가드레일을 주입하지 말 것.**
-   - **절대 아키텍트 단계마다 LLM 감사관을 재호출하거나 등장인물 로어북을 인위적 마이크로 배치(`batchSize = 3`)로 쪼개어 앙상블 조망을 끊지 말 것.**
+- **GM 연출 대상과 PC 통제 영역의 물리적 분리**: `surfaceTone`, `coreWeight`, `worldviewOutline` 및 동적 GM 수칙(4·5번)의 주어를 오직 **배경 환경의 감각 묘사, NPC의 대사 템포·태도, 행동에 따른 세계/세력의 반응 판정**으로만 한정.
+- **핵심 부정 제약 (Never use X)**: **절대 시스템 프롬프트의 GM 연출 지침(`genreDirectives`, `worldviewOutline`)에 유저 캐릭터(PC)의 성격, 태도, 감정, 살기 표출, 무력 사용을 기정사실화하거나 주어로 삼는 명령문을 포함하지 말 것.**
 
 ---
 
-## 2026-10-24: [Resolved] Session Architect 동적 GM 수칙의 PC 주체성 침해(God-modding 유도) 및 지시문 상충(Instruction Collision) 해소
+## 2026-10-25: [Resolved] Session Architect 런타임 정제·스탯 바인딩 불일치 및 다국어 토크나이저 글리치 문자 혼입 해결
 
 ### 1. 현상 (Symptom)
-- `SessionArchitectService`가 생성한 4번 GM 수칙(`genreDirectives`)에 유저 캐릭터(PC)의 성격, 태도, 살기 표출 및 전투 행동을 지시하는 문장이 포함됨 (예: *"은퇴 아저씨의 느긋한 유머를 유지하되, 위기 시 전설적인 재의 검성다운 서늘한 살기와 비릿한 철의 감각 묘사로 급반전시킬 것"*).
-- 이는 코어 2번 수칙(*"유저 캐릭터(PC)의 대사, 행동, 내면의 생각·감정을 임의로 대신 서술하지 말고, PC의 선택이나 대응이 필요한 시점에서 서술을 멈추고 턴을 넘길 것"*)과 정면으로 충돌하여, 런타임에 GM 모델이 적대 세력 등장 시 유저의 입력 없이도 멋대로 *"카일의 눈빛이 차갑게 가라앉으며 전설적인 검성의 살기가 뿜어져 나왔다"*라고 서술하는 PC 조작(God-modding) 버그를 유발.
+- LLM이 `worldviewOutline` 번호 섹션과 하이픈 불릿을 줄바꿈 없이 단일 줄로 평탄화하거나, 다국어 토크나이저 글리치로 한국어 산문 중간에 데바나가리 문자(`सिर` 등)를 방출.
+- 인물명이 풀네임(`아리아 폰 블랑셰`)이고 스탯명이 첫 어절 약칭(`아리아 호감도`)이거나 접미사형(`엘레나 발렌타인 신뢰도`)일 때 `<entity_relationship>` 바인딩에 실패하고 `<current_state>`의 `주요 수치`에 중복 잔류.
+- 상태창 갱신 시 `"120/100"`, `"-15/100"` 등 범위 초과 게이지가 무검증 반영되고, `initialChars.value`에 `"초기 태도(...)"` 래퍼 및 장문 복장 묘사가 중복 포함됨.
 
 ### 2. 원인 (Root Cause)
-- **GM 통제 영역(환경·NPC)과 유저 통제 영역(PC)의 경계 미비**:
-  - 1단계(`GeneratePlanAsync`)에서 유저 컨셉의 주인공 특성을 세션 전체의 톤앤매너(`surfaceTone`, `coreWeight`, `worldviewOutline` 4번 섹션)로 변환할 때, PC의 성격과 감정을 환경 분위기와 분리하라는 제약이 결여되어 PC의 태도("은퇴 아저씨의 유머", "퇴역 영웅의 고뇌", "검성의 살기")가 세계관 서사 톤으로 오염됨.
-  - 4단계(`StatusGen` 및 `GenerateGenreDirectivesAsync`)에서 4번 수칙의 연출 대상을 명시하지 않아, 모델이 예시 템플릿의 문장 구조를 모방하며 PC를 주어로 삼는 지시문을 생성함.
+- `Sanitize*` 정제기에 줄바꿈 복원 및 비한국어 글리치 유니코드 블록 제거 정규식이 부재했으며, `MemoryManagerService.cs`가 `CustomStats` 단일 키 완전 일치만 검사하고 게이지 클램핑을 수행하지 않음.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **1단계 `GeneratePlanAsync` 프롬프트 PC 비간섭 경계 강화**:
-  - `surfaceTone`과 `coreWeight`는 **주변 환경의 분위기와 NPC들의 일상 대화 템포, 위기 시 적대 세력·환경의 압박감 등 오직 '세계와 NPC들의 연출 기준'으로 한정**하며, PC의 개인적 성격·유머·감정 상태를 규정하는 것을 엄격히 금지.
-  - `worldviewOutline` 3번 섹션(`주인공의 초기 입지 및 직면 환경`)은 PC의 객관적 위장 신분, 물리적 제약/패널티, 시작 당면 과제만 객관적으로 서술하도록 제한하고, 4번 섹션(`서사 톤앤매너 및 감각적 디테일`)은 오감 환경 묘사 및 적대 NPC의 압박감 묘사 기준만 명시하도록 통제.
-- **4단계 `StatusGen` 및 `GenerateGenreDirectivesAsync` 주체 분리 강제**:
-  - 4번 수칙(서사 분위기 연출)의 주어를 **반드시 배경 환경의 감각 묘사(공기, 빛, 소리, 냄새)와 NPC들의 대사 템포·태도·압박감만으로 한정**하고, PC의 감정·태도·유머·살기 표출·전투 행동을 대신 규정하거나 지시문 주어로 삼는 것을 엄격히 금지.
-  - 5번 수칙(세계관 인과율 및 위험 판정)은 세계관/로어북의 제약에 기반하여 유저 행동에 따른 위험과 세력/환경의 반작용만을 공정하게 판정하도록 정립.
+- **결정론적 줄바꿈 복원 및 다국어 글리치 스크립트 제거 (`SessionArchitectService.cs`)**:
+  - `SanitizeWorldview`에서 번호 섹션 앞(`\n\n`) 및 하이픈 불릿 앞(`\n- `) 줄바꿈을 정규식으로 강제 복원하고, `SanitizeInitialCharValue`로 `초기 태도(...)` 래퍼를 제거.
+  - `StripForeignGlitchScripts`를 통해 데바나가리·아랍·태국·키릴·히브리 등 비정상 유니코드 블록(`[\u0400-\u06FF\u0900-\u0E7F]+`)을 모든 `Sanitize*` 파이프라인에서 일괄 제거.
+- **2단계 스탯 Prefix 매칭 및 게이지 클램핑 (`MemoryManagerService.cs`)**:
+  - Exact Match 실패 시 풀네임(`charName + " "`) 및 고유 첫 어절(`firstToken + " "`) 접두사 매칭으로 스탯을 `<entity_relationship>`에 결합하고, 매칭된 키(`matchedStatKeys`)는 `remainingCustomStats`에서 제외하여 중복 노출을 차단.
+  - `ClampGaugeValue`로 범위형 게이지를 `0~max`로 즉시 클램핑하고 `statusUpdateGuide`는 순수 `<custom_rules>` XML 태그로만 주입.
+
+---
+
+## 2026-10-25: [Resolved] 스토리 시드 엔진(`<story_seeds>`) 오탐 소모 방어, 2단계 유대 키 분리 및 세션 직렬화 동시성 격리
+
+### 1. 현상 (Symptom)
+- 일반 명사 키워드 등장이나 일상 동료 대사만으로 미등장 인물/유대 심화 시드가 연쇄 오탐 소모(False-Positive Consumption)되며, 호감도 30+ 유대 에피소드와 60+ 내면 비밀 해금이 단일 `BOND:{Name}` 키를 공유하여 30+ 소모 후 60+ 시드가 영구 잠김.
+- `ExportSession`이 디스크 중복 방지를 위해 `Preset with { Lorebooks = null }`로 직렬화함에 따라 복원 시 `_cachedLorebooks`가 비어 있게 되고, 백그라운드 JSON 직렬화 중 컬렉션 변경 예외 위험 존재.
+
+### 2. 원인 (Root Cause)
+- 시드 소모 판정에 일반 명사 키워드까지 무분별하게 포함되었고 단계별 시드 키가 분리되지 않았으며, 세션 스냅샷 내보내기/복원 시 프리셋 로어북 재결합 및 깊은 복사 격리가 누락됨.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+- **고유명사/핵심어 이원화 소모 판정 및 `BOND:` / `BOND_SECRET:` 키 분리 (`MemoryManagerService.cs`)**:
+  - Pool A/B는 고유명사 매칭으로만 소모 판정하고, Pool C(유대 심화)는 동료 이름(`PrimaryKeywords`)과 유대/내면 본문 핵심 명사(`SecondaryKeywords`)가 **동시에** 등장할 때만 소모.
+  - 호감도 30~59 구간(`BOND:{Name}`)과 60+ 구간(`BOND_SECRET:{Name}`)의 소모 키를 분리.
+- **`ChapterContext.Clone()` 스냅샷 격리 및 `_cachedLorebooks` 복원 (`ChatViewModel.cs`)**:
+  - 세션 복원 시 `savedSession with { Preset = sessionPreset }`으로 `_cachedLorebooks`를 즉시 초기화하고, `ExportSession`/`RestoreSession` 시 `ChapterContext.Clone()` 깊은 복사로 백그라운드 직렬화 중 컬렉션 변경 예외를 원천 차단.
+
+---
+
+## 2026-10-26: [Resolved] EntityNameResolver 및 NarrativeContract SSOT 도입 (상태창 인물 덮어쓰기 차단, 비인물 첫 어절 오염 제거, Turn 1 오프닝 스캔)
+
+### 1. 현상 (Symptom)
+- 비인물 복합 명칭(`"지하 유적 제단"`, `"그림자 사냥개 길드"`)의 첫 어절(`"지하"`, `"그림자"`)이 단독 키워드 및 `HOOK:` 시드 트리거로 자동 추출되어 일반 단어 등장만으로 미방문 장소 시드가 오탐 소모됨.
+- 상태창 갱신 시 `entry.Keywords` 부분 문자열 포함(`cleanKey.Contains(kw)`) 검사로 인해, `"성녀"` 키워드를 가진 주연(`"세실리아 본 로젠버그"`)의 상태창 슬롯을 단역(`"성녀 호위대장"`)이 덮어쓰는 상태 오염 발생.
+- Turn 1에 직전 `model` 응답(`InitialScenarioAckText`)만 스캔하여 `<initial_scenario>` 오프닝 본문 속 시작 장소·소품·세력 로어북이 1차 스캔에서 누락됨.
+
+### 2. 원인 (Root Cause)
+- 엔티티 별칭 파생, 동일 인물 판정, 시드 소모 경계 매칭, 서사 문장부호 계약이 여러 서비스에 서로 다른 휴리스틱으로 파편화되어 있었음.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+- **`EntityNameResolver` (`GRC/Helpers/EntityNameResolver.cs`) & `NarrativeContract` (`GRC/Services/Cognitive/NarrativeContract.cs`) SSOT 확립**:
+  - `DeriveAliases`: 복합 명칭 첫 어절 자동 추출은 오직 `인물` 카테고리에서만 수행.
+  - `ResolveCharacterKey`: 일반 `Keywords`(직함·소속) 부분 문자열 매칭을 전면 배제하고, 전체 엔트리명 일치 또는 고유 이름 첫 어절(`GetCharacterGivenName`) 완전 일치 시에만 매핑.
+  - `DeriveHookPrimaryKeywords` & `ContainsEntityMention`: Pool B(`HOOK:`) 시드는 전체 엔트리명 등장 또는 2어절 이상 핵심 구분자 + 서사 훅 본문 핵심어 동시 등장 시에만 한국어 조사 경계 정규식으로 소모 판정.
+  - `SanitizeScenario`: 로어북 고유명사를 감싼 강조용 낫표(`「...」`)를 결정론적으로 스트리핑(`「」`는 속마음/독백 전용).
+- **Turn 1 `<initial_scenario>` 자동 스캔 연동 (`MemoryManagerService.cs`)**: `lastModelMessage.Text == NarrativeContract.InitialScenarioAckText`인 Turn 1에는 직전 `<initial_scenario>` 원문을 `loreScanQuery`에 결합하여 오프닝 장소·소품 로어북 즉각 인출 보장.
 - **핵심 부정 제약 (Never use X)**:
-  - **절대 시스템 프롬프트의 GM 연출 지침(`genreDirectives`, `worldviewOutline`)에 유저 캐릭터(PC)의 성격, 태도, 감정, 살기 표출, 무력 사용 여부를 기정사실화하는 명령문을 포함하지 말 것.**
+  - **절대 비인물(`장소`, `아이템`, `세계관`) 복합 명칭의 첫 어절을 단독 키워드나 시드 소모 트리거로 추출하지 말 것.**
+  - **절대 상태창 인물 Key 정규화(`ResolveCharacterKey`)에 일반 직함/소속 `Keywords` 부분 문자열 포함 검사(`.Contains`)를 사용하지 말 것.**
 
 ---
 
----
-
-## 2026-10-25: [Resolved] Session Architect 2.0 라이브 연동 5대 런타임 및 조립 결함 교정 (Round 1)
+## 2026-10-26: [Resolved] `<world_lore>` 미해금 스포일러 조기 노출 및 유대 심화 완료형 문구에 의한 인과 건너뛰기(보상 선지급 환각) 차단
 
 ### 1. 현상 (Symptom)
-1. **`<master_setting>`(`worldviewOutline`) 평탄화**: LLM이 JSON 문자열 내에서 4대 번호 섹션과 하위 하이픈 불릿을 줄바꿈(`\n`) 없이 공백으로 이어붙여 1,100자 단일 줄로 평탄화하여 서사 GM 가독성 저하.
-2. **`BiTemporalEntityProjector` 인물-수치 바인딩 실패**: `<entity_relationship>`에 인물 호감도/신뢰도가 결합되지 않고 `<current_state>`의 `주요 수치`에 고립 잔류 (예: `Chars["엘레나 발렌타인"]` vs `CustomStats["엘레나 발렌타인 신뢰도"]` 키 불일치).
-3. **`<master_setting>` vs `lorebookPlan` 토큰 이중 주입**: 거시 세계관 법칙이 상시 주입되는 `<master_setting>`에 이미 존재함에도, `Priority 0~1`의 `세계관` 로어북으로 중복 생성되어 매 턴 약 750토큰 이상 이중 낭비.
-4. **비단일 개체 복합 명칭 및 비휴대 무구의 인벤토리 등록**: 로어북에 `"봉인된 흑철 대검과 은빛 알껍질"`처럼 2개 개체가 묶이고, 오프닝 씬에서 지하실에 봉인되어 꺼낼 수 없는 무구가 Turn 0 `initialItems`에 포함됨.
-5. **Turn 0 인물 상태 태도 장문 중복**: `initialChars`의 `value`에 40자 이상의 장문 서사 설명이 작성되어 `<world_lore>`의 `* PC 관계` 프로필과 중복 토큰 낭비.
+- 친밀도 미달(30 미만) 상태에서도 인출된 인물 로어북의 심화 내면 동기와 유대 에피소드, 감정 개방 대사가 `<world_lore>`에 그대로 노출되어 초기 대사에 후반부 본심이 조기 반영됨.
+- 인물 유대 심화 설정이 과거 완료형 결과 요약문으로 작성될 경우, 친밀도 30 달성 시 `<internal_chronicle_facts>`에 선행 과업 수행 이력이 없음에도 서사 AI가 중간 의뢰 과정을 건너뛰고 최종 보상을 즉시 선지급함.
 
 ### 2. 원인 (Root Cause)
-- 프롬프트 지시문의 `"1줄 개조식"` 표현을 모델이 단일 줄 평탄화로 오인했으며 C# 정제기에 줄바꿈 복원 정규식이 부재함.
-- `MemoryManagerService.cs`가 `CustomStats.TryGetValue(charName)` 단일 일치만 수행하고 `CustomStats`, `Items`, `Places`를 `CognitiveContext`로 온전히 전달하지 못함.
-- 프롬프트에서 상시 제공되는 `<master_setting>`과 조건부 인출되는 `lorebookPlan`의 명확한 역할 분리 및 단일 개체 원칙이 결여됨.
+- `<world_lore>` 주입 시 인물별 현재 관계도 수치(`CustomStats`)에 따른 단계별 노출 제어가 부재했으며, `<story_seeds>` 안내문에 미발생 과거 사건 날조 금지 가드 및 `[발단 계기]`와 `[완수 후 변화]`의 구조적 분리가 결여됨.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-1. **`SanitizeWorldview` 결정론적 줄바꿈 복원 엔진 (`SessionArchitectService.cs`)**:
-   - `(?<!^)(?<!\r?\n)\s+(?=[1-9]\.\s+[가-힣a-zA-Z])` $\to$ `\n\n` (번호 섹션 헤더 앞 줄바꿈 강제)
-   - `(?<!^)(?<!\r?\n)\s+-\s+(?=[가-힣a-zA-Z0-9()·/_\s]{2,35}:\s)` $\to$ `\n- ` (하이픈 불릿 앞 줄바꿈 강제)
-2. **인물-수치 2단계 프리픽스 매칭 및 중복 제거 (`MemoryManagerService.cs`)**:
-   - 1단계 Exact Match 실패 시 2단계 Prefix Match(`charName` 또는 `firstWord` 접두사 검사)를 통해 `"엘레나 발렌타인 신뢰도"`에서 접미사 `"신뢰도"`를 추출하여 `(신뢰도: 60/100)`으로 엔티티 슬롯에 직결.
-   - 바인딩된 스탯 키를 `matchedStatKeys`로 추적하여 `remainingCustomStats`에서 제외함으로써 `<current_state>`의 `주요 수치` 내 중복 노출을 100% 제거.
-   - `remainingCustomStats`, `itemsSnapshot`, `placesSnapshot`을 `new CognitiveContext(...)`로 무손실 전달.
-3. **거시 법칙 vs 미시 개체 역할 분리 및 1개체 1항목 원칙 (`GeneratePlanAsync`)**:
-   - `worldviewOutline`(`<master_setting>`)이 세계 거시 법칙을 상시 전담하므로 `lorebookPlan`에서 중복 '세계관' 작성을 금지하고 조건부 인출 대상(인물, 단일 장소, 단일 무구, 고유 세부 사건)만을 전담하도록 분리.
-   - 1항목 1개체 원칙을 강제하여 `"A와 B"` 식의 복합 명칭 엄격 금지.
-4. **현장 휴대 소지품 한정 및 감정 키워드 압축 (`StatusGen`)**:
-   - `initialItems`는 오프닝 현장에서 몸에 직접 휴대/착용 중인 물품으로만 한정(지하실/창고 등 격리 보관물 제외).
-   - `initialChars.value`의 태도 기술을 2~4어절의 핵심 감정 키워드로 압축(`초기 태도(경계와 호기심)`)하여 마이크로 토큰 낭비 제거.
-5. **수치 클램핑 및 가이드 XML 순수화 (`MemoryManagerService.cs`)**:
-   - `UpdateContextStatus`에서 `"120/100"`, `"-15/100"` 등 범위형 게이지를 `0~max`로 즉시 클램핑(`ClampGaugeValue`).
-   - `BuildStatusRequest`의 `statusUpdateGuide`를 순수 XML 태그(`<custom_rules>...</custom_rules>`)로 주입하고 구형 `[CUSTOM_RULES]` 의사 태그 완전 제거.
+- **호감도/신뢰도 3단계 스포일러 게이팅 (`MaskLorebooksForPrompt`, `RevealStage 1 | 2 | 3`)**: 인물별 최대 관계도(`GetCharacterMaxAffinity`) 및 시드 소모 이력에 따라 **Stage 1(30 미만: 표면 페르소나·일상 대사만 공개)**, **Stage 2(30~59: 유대 발단·완수 변화 추가 공개)**, **Stage 3(60 이상: 심층 내면·감정 대사 전면 공개)**로 차등 렌더링(`CurrentActiveLorebooks`는 원본 유지).
+- **`<story_seeds>` 인과율 방어 및 발단-완수 분리**: `<story_seeds>` 헤더에 `<internal_chronicle_facts>`에 없는 과거 사건 날조 및 중간 과업 생략(보상 선지급) 절대 금지를 명시하고, 인물 로어북의 유대 발단(`BondTrigger`)과 완수 후 변화(`BondPayoff`)를 분리하여 반드시 '발단(의뢰·제안·단서 발견)'부터 개막하도록 강제.
 
 ---
 
-## 2026-10-25: [Resolved] Session Architect 2.0 라이브 테스트 5대 런타임·정제 결함 정밀 교정 (Round 2)
+## 2026-10-27: [Resolved] 에이전트 생성 세션 자산 결정론적 검증 게이트(`SessionAssetValidator`) 도입 및 PowerShell 5.1 CP949 인코딩 함정 방어
 
 ### 1. 현상 (Symptom)
-1. **풀네임 인물-약칭 스탯 매칭 누락**: 인물명은 풀네임(`아리아 폰 블랑셰`, `시엘 클로버`)이고 스탯명은 첫 어절 약칭(`아리아 호감도`, `시엘 호감도`)인 경우, 접두사 불일치로 `<entity_relationship>`에 스탯이 바인딩되지 못하고 `<current_state>`의 `주요 수치`에 중복 잔류.
-2. **로어북 샘플 대사 오프닝 복붙 및 본심 조기 소진**: `ScenarioGen`의 `"말투/대사를 로어북 원문과 100% 일치"` 지침으로 인해, 모델이 로어북에 작성된 예시 대사(심지어 후반부 본심 대사)를 오프닝 시나리오에 토씨 하나 바꾸지 않고 복사해 넣고 4명의 인물을 과밀 등장시킴.
-3. **Turn 0 인물 상태 태도 장문화 및 인원 누락**: `StatusGen`의 `초기 태도(...)` 래퍼 및 복장·장소 요구로 인해 30단어 이상의 장문이 출력되고, `주요 NPC(1~3명)` 제한으로 오프닝에 등장한 4번째 인물(칼리아)이 누락됨.
-4. **다중 히로인 스탯 비대칭 및 집착 클리셰 수렴**: 6인 히로인 중 3명만 Turn 0 호감도 스탯이 생성되어 비대칭이 발생하고, Wave 2 인물 일괄 생성 시 다수 인물의 내면 결핍이 '독점욕/집착'으로 획일화됨.
-5. **다국어 글리치 토큰 혼입**: Gemini 모델이 다국어 토크나이저 글리치로 인해 한국어 산문 중간에 데바나가리 문자(`सिर`) 등을 방출하였으나 정제기에 외국 문자 제거 로직이 부재함.
+- 외부 에이전트 워크플로우에서 생성된 세션 자산(`Preset.json`, `Session.json`, `FullHistory.json`)을 눈대중(Blind Audit)으로 판정하거나, 일회성 PowerShell 스크립트로 검수할 때 `NarrativeContract` 정규식이 복제되어 SSOT가 파손되고 Windows PowerShell 5.1에서 BOM 없는 UTF-8 `.ps1` 내 한글 리터럴이 CP949로 오독되어 파싱 에러 발생.
 
 ### 2. 원인 (Root Cause)
-- `MemoryManagerService.cs`가 전체 이름 접두사(`charName + " "`)만 검사하고 고유 첫 어절(`firstToken + " "`) 검사를 지원하지 않음.
-- `ScenarioGen` 지시문이 어조 유지가 아닌 예시 대사 문자열 자체의 100% 일치를 강제하여 발생한 모델의 직독직해(Literal Translation).
-- `StatusGen` 지시문 및 예시가 런타임 상태창 포맷과 달리 장문 위치/복장 서술을 유도했고 인원수 상한을 둠.
-- `Sanitize*` 파이프라인에 비한국어/비라틴/비CJK 비정상 유니코드 블록 필터링 부재.
+- 외부 에이전트 세션 생성 파이프라인에 앱의 실제 C# 모델·정규식·정제기 고정점을 그대로 실행하는 결정론적 테스트 러너 게이트가 없었음.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-1. **인물명 첫 어절 토큰 접두사 매칭 확장 (`MemoryManagerService.cs`)**:
-   - 전체 이름 접두사(`"아리아 폰 블랑셰 "`)와 고유 첫 어절 접두사(`"아리아 "`)를 모두 후보에 포함하여, `"아리아 호감도"`를 `- 인물(아리아 폰 블랑셰): ... (호감도: 25/100)`으로 자동 결합 및 `<current_state>` 중복 제거.
-2. **로어북 대사 복붙 금지 및 등장인물 밀도 제어 (`SessionArchitectService.cs`)**:
-   - `ScenarioGen` 및 `ScenarioReview`에 `Output Language: Korean` 추가.
-   - 로어북 샘플 대사 문장의 단순 복사·인용을 엄격히 금지하고 상황에 맞는 신규 대사 창작 및 본심 조기 소진 차단 지침 명시.
-   - 오프닝 현장 직접 대면 인원을 1~3명으로 집중.
-3. **`initialChars` 전수 등록 및 `value` 15~25자 경량화 (`SessionArchitectService.cs`)**:
-   - 오프닝에 등장한 모든 NPC를 누락 없이 등록하고, `"초기 태도(...)"` 래퍼 및 복장·장소 중복 서술을 배제한 채 `3~6어절(25자 이내)`의 감정·즉각 행동으로 프롬프트 및 예시 개정.
-   - C# `SanitizeInitialCharValue` 결정론적 정제기를 통해 잔여 `초기 태도(...)` 래퍼를 정규식으로 자동 제거.
-4. **다중 히로인 동적 호감도 확장 및 내면 결 다양화 (`SessionArchitectService.cs`)**:
-   - `guide`에 미등장 주요 인물과 본편 조우 시 `{인물명} 호감도` 스탯을 동적 추가한다는 룰을 명시하여 스탯 비대칭 해소.
-   - Wave 2 인물 생성 프롬프트에 '독점욕·집착' 단일 클리셰로 획일화되지 않도록 관계 발전 양상(라이벌, 헌신, 지적 호기심, 비호 등) 차별화 지침 추가.
-5. **다국어 글리치 스크립트 정제기 (`StripForeignGlitchScripts`)**:
-   - 데바나가리, 아랍, 태국, 키릴, 히브리 등 한국어 RP 텍스트에 사용되지 않는 유니코드 블록(`[\u0400-\u06FF\u0900-\u0E7F]+`)을 일괄 제거하는 헬퍼를 추가하여 모든 `Sanitize*` 파이프라인에 공통 적용.
-
----
-
-## 13. 서브컬처 에피소드 & 시드 엔진 (`<story_seeds>`) 스키마 정합성 및 동시성/오탐 방어
-
-### 증상 및 잠재적 결함 (Root Cause)
-1. **세션 아키텍트 스키마와 시드 파서 정규식 간 불일치**:
-   - `SessionArchitectService`가 생성하는 인물 로어북은 첫 줄에 `분류(인물): ...` (선행 `*` 없음) 및 `* 표면/내면: 표면(...) / 내면(...)` 포맷을 사용하나, `MemoryManagerService`의 초기 정규식이 `^\*\s*분류\s*:`와 `^\*\s*내면\s*:`만 매칭하여 AI 생성 세션에서 분류 및 60+ 내면 단서가 누락될 수 있었음.
-2. **일반 명사 키워드 및 일상 동료 대사에 의한 시드 오탐 소모 (False-Positive Consumption)**:
-   - `ConsumeMatchedSeedsLocked`에서 로어북의 모든 `Keywords`(예: `"수습생"`, `"마탑"`)를 소모 트리거로 포함할 경우, 한 수습생 캐릭터가 등장했을 때 동일 키워드를 공유하는 다른 미등장 캐릭터 시드까지 연쇄 소모되거나, 동행 중인 동료가 일상 대사를 한 것만으로 `[동료 유대 심화]` 시드가 즉시 소모되는 결함이 있었음.
-3. **동료 유대 심화 2단계(호감도 30+ vs 60+) 단일 키 잠금 문제**:
-   - 호감도 30+ 구간의 유대 심화 에피소드와 60+ 구간의 내면 비밀 해금이 동일한 `BOND:{Name}` 키를 공유할 경우, 30+에서 유대 에피소드를 한 번 소모하면 이후 호감도가 60+에 도달해도 내면 비밀 시드가 영구 차단됨.
-4. **세션 저장/복원 시 `Lorebooks = null` 슬림화 및 백그라운드 상태창 태스크 경합**:
-   - `ExportSession`이 디스크 중복 방지를 위해 `Preset with { Lorebooks = null }`로 직렬화하므로, 세션 로드 시 `savedSession`을 그대로 `RestoreSession`에 넘기면 첫 턴 전까지 `_cachedLorebooks`가 비어 있게 됨. 또한 `ChatDelay == 0` 환경에서 `AddModelResponse`와 `onDownloadComplete`/`BuildStatusRequest` 간 메시지 타이밍 경합이 발생할 수 있었음.
-
-### 해결책 (Resolution)
-1. **양방향 호환 정규식 및 내면 파서 (`MemoryManagerService.cs`)**:
-   - `CategoryFieldRegex`가 `^\*\s*분류(?:\([^)]*\))?\s*:`와 `^분류(?:\([^)]*\))?\s*:`를 모두 지원하고, `InnerThoughtFieldRegex` + `ExtractInnerThoughtText`가 `* 표면/내면: 표면(...) / 내면(...)`에서 `내면(...)` 구간만 정확히 분리 추출하도록 개선.
-2. **고유명사/유대 핵심어 이원화 매칭 (`OfferedSeedCandidate`)**:
-   - Pool A/B(인물 조우·장소 훅)는 `ExtractProperNameKeywords(entry.Name)` 고유명사 매칭으로만 소모 판정하고, Pool C(동료 유대 심화)는 동료 이름(`PrimaryKeywords`)과 유대/내면 본문에서 추출한 핵심 명사(`SecondaryKeywords`, `ExtractBondContentKeywords`)가 **동시에** 등장할 때만 소모되도록 강화.
-3. **`BOND:{Name}` (30+) 및 `BOND_SECRET:{Name}` (60+) 키 분리**:
-   - 호감도 30~59 구간(`BOND:`)과 60+ 내면 비밀 해금 구간(`BOND_SECRET:`)의 소모 키를 분리하여 단계별 서사 보상이 모두 정상 작동하도록 보장.
-4. **`ChapterContext.Clone()` 스냅샷 격리 및 `AwaitPendingStatusTaskAsync` 동기화 (`ChatViewModel.cs`)**:
-   - 세션 로드 및 아키텍트 편집 복원 시 `savedSession with { Preset = sessionPreset }`을 전달하여 `_cachedLorebooks`를 즉시 초기화하고, `ExportSession`/`RestoreSession`에서 `ChapterContext.Clone()` 깊은 복사로 백그라운드 JSON 직렬화 중 컬렉션 변경 예외를 원천 차단.
-
----
-
-## 2026-10-26: [Resolved] EntityNameResolver 및 NarrativeContract SSOT 도입 (상태창 인물 덮어쓰기 차단, 비인물 첫 어절 오염 제거, Turn 1 오프닝 로어북 스캔)
-
-### 1. 현상 (Symptom)
-1. **비인물 로어북 첫 어절 일반 수식어 자동 주입 및 Pool B(`HOOK:`) 시드 오탐 소모**:
-   - `SessionArchitectService.NormalizeKeywords`가 카테고리를 구분하지 않고 모든 복합 명칭의 첫 어절(`nameParts[0]`)을 키워드에 무조건 추가하여, `"지하 유적 제단"`에서 `"지하"`, `"그림자 사냥개 길드"`에서 `"그림자"`가 단독 키워드로 등록됨.
-   - `MemoryManagerService.ExtractProperNameKeywords` 역시 첫 어절을 `PrimaryKeywords`에 추가하여, 서사 응답에 `"지하 창고"`나 `"그림자가 드리웠다"`만 등장해도 미방문 장소/세력 시드(`HOOK:`)가 오탐 소모(`ConsumedSeeds`)됨.
-2. **런타임 상태창 갱신(`UpdateContextStatus`) 시 일반 직함 키워드 충돌로 인한 기존 인물 상태 덮어쓰기**:
-   - `NormalizeInitialCharKeys`가 `entry.Keywords` 전체에 대해 부분 문자열 포함(`cleanKey.Contains(kw)`)을 검사함에 따라, `"성녀"` 키워드를 가진 `"세실리아 본 로젠버그"`가 있는 세션에서 단역 `"성녀 호위대장"`이 등장하면 `"세실리아 본 로젠버그"`의 상태창 슬롯을 덮어쓰는 상태 오염 버그 존재.
-3. **Turn 1 오프닝 장면의 장소·소품·세력 로어북 인출 공백**:
-   - `InjectInitialScenario`가 Turn 0를 `[User: <initial_scenario>...]` + `[Model: "상황을 파악했습니다. 당신의 행동을 기다립니다."]`로 구성하고 `BuildNarrativeRequestAsync`는 직전 `model` 응답만 스캔하여, Turn 1에 오프닝 시나리오 본문 속 시작 장소/소품/배경 세력 로어북이 1차 키워드 스캔에서 누락됨.
-4. **오프닝 시나리오 고유명사 낫표(`「...」`) 오염 및 서브컬처 메타 은어("갭 모에") 혼입**:
-   - `ScenarioGen` 지시문의 `"독백/속마음 및 강조용은 낫표(「...」)"` 문구가 런타임 `CognitivePromptAssembler.FormatRule`과 상충하여 고유명사에 `「...」`가 남용되고, `GeneratePlanAsync`의 `"갭 모에"` 지시어가 다크 판타지 마스터 세계관에 노출됨.
-
-### 2. 원인 (Root Cause)
-- 엔티티 명칭·별칭 파생, 동일 엔티티 판정, 시드 소모 경계 매칭, 서사 문장부호 계약이 `SessionArchitectService`, `MemoryManagerService`, `CognitivePromptAssembler` 3개 클래스에 각각 다른 휴리스틱으로 파편화되어 있었음.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-1. **`EntityNameResolver` (`GRC/Helpers/EntityNameResolver.cs`) SSOT 도입**:
-   - `DeriveAliases(entryName, rawKeywords, category)`: 복합 명칭의 첫 어절 자동 추출은 오직 `인물` 카테고리에서만 수행하며, 비인물(`장소`, `아이템`, `세계관`)에서는 첫 어절 수식어가 단독 키워드로 등록되는 것을 원천 차단.
-   - `ResolveCharacterKey(rawKey, characterLorebooks)`: 일반 `Keywords`(직함·소속) 부분 문자열 매칭을 전면 배제하고, 오직 전체 엔트리명 일치 또는 고유 이름 첫 어절(`GetCharacterGivenName`) 완전 일치 시에만 정규화하여 단역 NPC에 의한 주연 상태 덮어쓰기 차단.
-   - `DeriveHookPrimaryKeywords` 및 `ContainsEntityMention`: Pool B(`HOOK:`) 시드는 전체 엔트리명 등장(Tier 1) 또는 2어절 이상 핵심 구분자 + `* 서사 훅` 본문 핵심어 동시 등장(Tier 2) 시에만 소모되도록 이원화하고, 한국어 조사 경계 정규식을 적용하여 합성어 부분 일치 오탐 차단.
-2. **`NarrativeContract` (`GRC/Services/Cognitive/NarrativeContract.cs`) SSOT 도입 및 `SanitizeScenario` 정제**:
-   - 런타임과 아키텍트의 문장부호 규칙(`""` 대사, `「」` 속마음/독백 전용, 고유명사/강조용 `「」` 금지)과 로어북 필드 정규식을 단일 정적 계약으로 통합하고, `SanitizeScenario(raw, lorebooks)`에서 로어북 고유명사를 감싼 강조용 `「...」`를 결정론적으로 스트리핑.
-   - `GeneratePlanAsync` 및 `GetLorebookBatchSystemInstruction`에서 `"갭 모에"` 등 메타 은어를 `"반전 면모"` 및 세계관 내 서술어로 치환하고, 오프닝 등장 예정 인물의 `* PC 관계: 초기 접점(...)`이 오프닝 직면 상황과 일치하도록 제약 명시.
-3. **Turn 1 `<initial_scenario>` 자동 스캔 연동 (`MemoryManagerService.cs`)**:
-   - `lastModelMessage.Text == NarrativeContract.InitialScenarioAckText`인 Turn 1에는 직전 `<initial_scenario>` 원문을 `loreScanQuery`에 결합하여 오프닝 현장의 장소·소품·세력 로어북이 첫 턴부터 즉시 인출되도록 보장.
-4. **핵심 부정 제약 (Never use X)**:
-   - **절대 비인물(`장소`, `아이템`, `세계관`) 복합 명칭의 첫 어절을 단독 키워드나 시드 소모 트리거로 자동 추출하지 말 것.**
-   - **절대 상태창 인물 Key 정규화(`ResolveCharacterKey`)에 일반 직함/소속 `Keywords` 부분 문자열 포함 검사(`.Contains`)를 사용하지 말 것.**
-
----
-
-## 2026-10-26: [Resolved] `<world_lore>` 미해금 스포일러 조기 노출 및 `유대 심화` 완료형 문구에 의한 인과 건너뛰기(보상 선지급 환각) 차단
-
-### 1. 현상 (Symptom)
-1. **초기 단계(호감도/신뢰도 30 미만) `<world_lore>` 스포일러 누수**:
-   - `HybridLorebookRetriever`가 인출한 인물 로어북 원문이 마스킹 없이 `<world_lore>`에 그대로 노출됨에 따라, 아직 친밀도가 낮은 상태에서도 `* 표면/내면`의 `/ 내면(...)`, `* PC 관계`의 `/ 유대 심화(...)`, 그리고 **`* 말투/대사`의 두 번째 심화 대사(`/ "..."`)**에 적힌 후반부 기밀/연심 대사가 조기 반영됨.
-2. **완료형 `유대 심화` 문구로 인한 선행 퀘스트 건너뛰기 및 보상 선지급 환각**:
-   - 인물 로어북의 `유대 심화`가 `"대미궁 중층부에서 오빠의 부러진 인식표를 회수해 오자 깊은 신뢰를 보내며 재판소 비밀 검문 일정을 빼돌려 주는 조력자로 거듭남"`처럼 **과거 완료형 결과 요약문**으로 작성된 경우, 신뢰도 30 달성 후 유저가 검문 일정을 물으면(`<internal_chronicle_facts>`에 인식표 회수 사실이 없음에도) 서사 AI가 인식표 수색 의뢰 과정을 통째로 건너뛰고 최종 보상인 비밀 검문 일정을 즉시 유출함.
-   - 또한 `"~회수하는 사건을 계기로 ~조력자로 전환"`처럼 발단과 결과를 뭉뚱그린 문구를 주입할 경우, NPC가 플레이어에게 수색 의뢰(발단)조차 제안하지 못한 채 키워드 일치만으로 `BOND:{Name}` 시드가 1턴 만에 영구 소모(`ConsumedSeeds`)되어 에피소드가 증발함.
-
-### 2. 원인 (Root Cause)
-- `<world_lore>` 주입 파이프라인에 인물의 현재 관계도 수치(`CustomStats`)에 따른 단계별 필드 마스킹이 부재했고, `* 말투/대사`의 두 번째 예시 대사에 완료 시점 스포일러 대사가 포함됨.
-- `<story_seeds>` 안내문에 `<internal_chronicle_facts>`에 없는 과거 사건 날조 및 중간 과업 생략 금지 가드가 없었으며, 생성기 프롬프트가 `유대 심화`의 **[발단 계기(NPC의 의뢰/제안)]**와 **[완수 후 변화(과업 해결 후 보상)]**를 분리하도록 강제하지 않음.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-1. **`MaskLorebooksForPrompt` 호감도/신뢰도 단계별 3중 마스킹 (`MemoryManagerService.cs`)**:
-   - `<world_lore>`용 `RetrievedLores` 생성 시 인물별 최대 관계도(`GetCharacterMaxAffinity`) 및 시드 소모 이력을 확인하여:
-     - **30 미만 (`!unlockBond`)**: `/ 유대 심화(...)`, `/ 내면(...)`, `* 말투/대사`의 두 번째 대사(`/ "..."`) 3곳 모두 마스킹.
-     - **30~59 구간 (`unlockBond && !unlockSecret`)**: `/ 유대 심화(...)`만 공개하고 `/ 내면(...)` 및 두 번째 대사는 60 달성 시까지 마스킹 유지.
-     - **60 이상 (`unlockSecret`)**: 전 구간 공개 (`CurrentActiveLorebooks` 프로퍼티는 UI/참조 무결성을 위해 원본 유지).
-2. **`<story_seeds>` 인과율 방어 헤더 및 `[발단 계기 -> 완수 후 변화]` 작성 규격 (`CognitivePromptAssembler.cs`, `SessionArchitectService.cs`)**:
-   - `<story_seeds>` 안내문에 **`<internal_chronicle_facts>`에 기록되지 않은 과거 사건 날조 및 중간 과업 생략(완수 보상 선지급) 절대 금지, 반드시 사건의 '발단(의뢰 제안·거래 제시·고민 토로·단서 발견)' 단계부터 개막할 것**을 명시.
-   - `SessionArchitectService` 및 에이전트 템플릿의 인물 로어북 규격에서 `유대 심화(발단 계기: ... -> 완수 후 변화: ...)` 구조화를 강제하고 두 번째 예시 대사에 미발생 퀘스트 완수 스포일러 기재를 금지.
-
----
-
-## 2026-10-26: [Resolved] 세션 생성기 프롬프트의 예시 오염(Few-Shot Anchoring) 및 구체어 열거형 부정 지시문 정리
-
-### 1. 현상 (Symptom)
-- 에이전트 템플릿(5_session_architect_agent_template.md)으로 생성한 세션에서 메인 히로인 외양이 반복적으로 같은 조합(은백색·백금발 장발, 푸른 눈동자, 백은·백색 제복, 옷자락·장갑 끝을 만지는 버릇)으로 수렴함.
-
-### 2. 원인 (Root Cause)
-- 템플릿 Preset.json 스키마 예시에 구체적 인물(이름, 외양, 버릇, 장소, 스탯)이 하드코딩되어 Few-Shot 앵커로 작동함.
-- 같은 템플릿과 SessionArchitectService.cs 생성기 프롬프트 곳곳에 과거 세션·과거 결함에서 가져온 구체어를 나열한 부정 지시문(금지 키워드 예시, 금지 클리셰 목록, 과거 세션 소품명, 메타 은어 목록, 학원물 genreDirectives 예시 등)이 남아 흰 곰 효과(원칙 10)로 해당 어휘의 어텐션을 오히려 활성화함.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-1. 템플릿 Preset.json/Session.json 예시는 전부 대괄호 구조 플레이스홀더로 교체(형식만 제시, 내용 앵커 제거).
-2. 구체어 열거형 부정 지시문을 긍정형 대체 행동으로 전환: 키워드 고유성 원칙, 단일 소유 기술 원칙, 낫표 독백 전용 원칙, 대사 신규 창작, 본심 은닉, 조건부 유대 설계, 외양의 출신·직업·문화권 인과 도출. 템플릿의 Never Rules 9개도 Invariant Rules(Always 형식)로 재작성.
-3. 생성기 GetLorebookBatchSystemInstruction() 인물 예시의 유대 심화를 발단 계기 -> 완수 후 변화 규격으로 동기화하고, Wave 2 <final_instruction>에 외양 인과 도출·인물 간 구별 지시를 긍정형으로 추가.
-4. **불변식**: 생성기 프롬프트와 템플릿의 예시는 구조 플레이스홀더만 사용하고, 금지 대상을 구체 어휘로 열거하지 말 것. 부정형은 원칙 10의 예외 범주(PC 불간섭 안전선, 형식 고정, 임베딩 더미 벡터 금지 같은 기술 가드)로 한정.
-
-### 4. 후속 보정 (2026-10-26, 등불 골목 세션 실측 기반)
-- **첫 번째 샘플 대사 고착**: 생성 결과에서 인물 `* 말투/대사` 첫 번째 대사가 Turn 0 위기 직후의 일시적 감정 상태로 작성됨. 첫 번째 대사는 3단계 마스킹 대상이 아니어서 매 턴 `<world_lore>`로 주입되므로, 관계가 진전된 뒤에도 말투가 해당 상태에 고착될 위험이 있음. 생성기 규격과 템플릿에서 첫 번째 대사를 "Turn 0 오프닝과 무관하게 반복되는 일상 상황의 평상시 기본 어조"로 재정의.
-- **대표 명칭 규칙**: 동봉품·병설 공간을 `Name`에 병기한 복합 명칭이 생성됨(런타임 기능 결함은 없음, `IsSamePlaceOrItem`이 `Keywords`로 대조). `Name`은 대표 고유 명사 1개로 짓고 부속 구성요소는 본문과 `Keywords`에서 서술하도록 Plan 단계 규칙에 추가.
-- **유지 결정**: 메인 인물 외양에 남은 단일 색채 수식어 잔상은 사전학습 분포 편향으로 판정. 특정 색을 지시문에 명시하면 흰 곰 효과가 재발하므로 템플릿에서 추가 억제하지 않음(외모 고정이 필요하면 유저 컨셉에 직접 명시).
----
-
-## 2026-10-27: [Resolved] 에이전트 생성 세션 자산 결정론적 검증 게이트(`SessionAssetValidator`) 도입
-
-### 1. 증상 (Symptom)
-- [05_session_architect_agent_template.md](../GRC/docs/05_session_architect_agent_template.md) Stage 5의 결정론적 구조 검수가 마크다운 체크리스트로만 존재하여, 감사 에이전트가 실제 파서나 정규식을 실행하지 않고 눈대중(Blind Audit)으로 판정함.
-- 일회성 PowerShell 스크립트로 검수를 시도할 경우 `NarrativeContract` 정규식을 복제하게 되어 SSOT가 깨지며, Windows PowerShell 5.1에서 BOM 없는 UTF-8 `.ps1` 파일 내 한글 문자열 리터럴이 CP949로 오독되어 파싱 에러가 발생함.
-
-### 2. 원인 (Root Cause)
-- 앱 내장 생성기([SessionArchitectService.cs](../../GRC/GRC/Services/SessionArchitectService.cs))는 `ReviewStepContentAsync` 및 `Sanitize*` 정제기를 C# 코드로 실행하는 반면, 외부 안티그래비티 에이전트 워크플로우에는 생성된 `Preset.json`, `Session.json`, `FullHistory.json` 3종 자산을 앱의 실제 모델과 정규식으로 검증하는 실행 게이트가 없었음.
-
-### 3. 해결책 및 불변성 (Resolution & Invariants)
-1. **호감도 키워드 SSOT 승격 ([NarrativeContract.cs](../../GRC/GRC/Services/Cognitive/NarrativeContract.cs), [MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
-   - `MemoryManagerService.GetCharacterMaxAffinity` 내부에 하드코딩되어 있던 관계도 판별 키워드(`호감`, `신뢰`, `유대`, `친밀`, `동조`, `애정`)를 `NarrativeContract.AffinityStatTerms`로 승격하여 런타임과 검증기가 공유하도록 통합.
-2. **C# 결정론적 세션 자산 검증기 및 감사 러너 구현 ([SessionAssetValidator.cs](../../GRC/tests/GRC.Tests/SessionAssetValidator.cs), [SessionAuditTests.cs](../../GRC/tests/GRC.Tests/SessionAuditTests.cs), [SessionAssetValidatorTests.cs](../../GRC/tests/GRC.Tests/SessionAssetValidatorTests.cs))**:
-   - `F01_DESERIALIZE` ~ `F12_SAMPLE_COPY` 12개 치명적 구조 결함(`Fail`)과 `W01_COMPOSITE_NAME` ~ `W08_WORLDVIEW_TRAIT_LEAK` 8개 감사 경고(`Warn`)를 앱의 실제 모델·정규식·정제기 고정점(`SanitizeWorldview`, `SanitizeLorebookContent`, `SanitizeStatusGuide`, `SanitizeScenario`, `SanitizeInitialCharValue`)으로 직접 검사.
-   - 앱 경로로 생성된 세션은 저장 시점에 768차원 임베딩이 채워지므로 `F08_LORE_META`는 `Embedding == null || Embedding.Length == 768`을 허용하고 그 외 길이를 차단.
-   - `SessionAuditFactAttribute`를 통해 `GRC_AUDIT_SESSION_DIR` 환경변수가 없을 때는 일반 단위 테스트(`Category!=Integration`)에서 통과로 위장하지 않고 명시적으로 `Skip` 처리되도록 구성.
-3. **템플릿 Stage 5/6 필수 게이트 연동 ([05_session_architect_agent_template.md](../GRC/docs/05_session_architect_agent_template.md))**:
-   - 세션 파일 생성 직후 `Category=SessionAudit` 테스트를 실행하여 `Exit Code 0`(`FAIL 0건`)을 확인하는 절차를 Stage 5/6 및 검증 기준 1번 항목에 의무화.
+- **관계도 키워드 SSOT 승격 및 C# 검증 게이트 확립 ([NarrativeContract.cs](../../GRC/GRC/Services/Cognitive/NarrativeContract.cs), [SessionAssetValidator.cs](../../GRC/tests/GRC.Tests/SessionAssetValidator.cs), [SessionAuditTests.cs](../../GRC/tests/GRC.Tests/SessionAuditTests.cs))**:
+  - 관계도 판별 키워드(`호감`, `신뢰`, `유대`, `친밀`, `동조`, `애정`)를 `NarrativeContract.AffinityStatTerms` SSOT로 통합하고, `CoreSystemDirectivesHeader`(코어 규칙 1~3)는 `F04_SYSPROMPT` 바이트 일치 검증 대상이므로 임의 수정을 금지.
+  - 앱 저장 세션 호환을 위해 `F08_LORE_META`는 `Embedding == null || Embedding.Length == 768`만 허용하며, `SessionAuditFactAttribute`를 통해 `GRC_AUDIT_SESSION_DIR` 미지정 시 일반 테스트에서 위장 통과 대신 명시적 `Skip` 처리.
+- **핵심 부정 제약 (Never use X)**: **절대 세션 자산 검수를 위해 일회성 PowerShell 정규식 스크립트(`.ps1`)를 작성하지 말 것.** 반드시 `GRC_AUDIT_SESSION_DIR` 환경변수를 지정하고 `dotnet test --filter "Category=SessionAudit"` C# 검증 게이트를 실행할 것.
 
 ---
 
 ## 2026-10-27: [Resolved] 로어북 문자열 내장 DSL(정규식 구분자) 폐기 및 구조화 JSON 스키마(`CharacterLoreDetails` / `WorldLoreDetails`) SSOT 전환
 
-### 1. 증상 (Symptom)
-- 기존 `LorebookEntry`가 단일 평문 문자열 `Content` 내부에 `* 외양/특징:`, `표면(...) / 내면(...)`, `초기 접점(...) / 유대 심화(발단 계기: ... -> 완수 후 변화: ...)`, `"첫 대사" / "두 번째 대사"` 등 다중 구분자 DSL을 내장하고 있었음.
-- 이로 인해 ① LLM 생성 시 구분자(`/`, `->`, 큰따옴표 쌍)가 하나라도 어긋나면 런타임 스토리 시드(`Pool A/B/C`)와 호감도 3단계 스포일러 마스킹(`MaskLorebooksForPrompt`)이 침묵 실패하거나 본심이 조기 노출될 위험이 있었고, ② 유저가 `EditLorebookWindow`에서 텍스트를 직접 수정할 때 정규식 문법을 실수로 깨뜨리기 쉬웠음.
+### 1. 현상 (Symptom)
+- `LorebookEntry.Content` 단일 평문 문자열 내부에 다중 구분자(`/`, `->`, `""`) DSL을 내장함에 따라, LLM 출력이나 유저 편집 시 구분자가 하나만 어긋나도 스토리 시드(`Pool A/B/C`) 추출과 호감도 3단계 마스킹이 침묵 실패하거나 스포일러가 조기 노출됨.
 
 ### 2. 원인 (Root Cause)
-- 저장 포맷(`Preset.json` / `Session.json`), LLM 출력 스키마(`ResponseSchema`), 런타임 시드/마스킹 소비자가 정형 데이터 대신 프롬프트 주입용 렌더링 문자열(`Content`)을 단일 진실 공급원(SSOT)으로 공유하던 구조적 결합.
+- JSON 저장 포맷, LLM `ResponseSchema`, 런타임 시드/마스킹 소비자가 강타입 구조체 대신 프롬프트 주입용 렌더링 문자열(`Content`)을 SSOT로 공유하던 구조적 결합.
 
-### 3. 해결책 및 불변성 (Resolution & Invariants)
-1. **구조화 로어북 모델 및 결정론적 렌더러 도입 ([LoreDetails.cs](../../GRC/GRC/Models/LoreDetails.cs), [LorebookEntry.cs](../../GRC/GRC/Models/LorebookEntry.cs), [LoreRenderer.cs](../../GRC/GRC/Services/Cognitive/LoreRenderer.cs), [LegacyLoreParser.cs](../../GRC/GRC/Services/Cognitive/LegacyLoreParser.cs))**:
-   - 인물(`Category == "인물"`)은 11개 강타입 필드(`RoleSummary`, `Appearance`, `SurfacePersona`, `InnerMotivation`, `InitialContact`, `BondTrigger`, `BondPayoff`, `OtherRelations`, `SpeechTone`, `EverydayQuote`, `EmotionalQuote` + 선택적 `Notes`)를 가진 `CharacterLoreDetails`, 비인물(`장소`, `아이템`, `세계관`)은 4개 강타입 필드(`IdentitySummary`, `SensoryDetails`, `RulesAndPrinciples`, `NarrativeHook` + 선택적 `Notes`)를 가진 `WorldLoreDetails`, 런타임 기억(`기억`)은 `FreeText`에 저장.
-   - `LorebookEntry.Content`는 `[JsonIgnore]` 계산 프로퍼티로 전환하여 `LoreRenderer.Render(this, RevealStage)`가 호감도 단계(`1 | 2 | 3`)에 맞춰 `<world_lore>` 주입용 불릿 텍스트를 결정론적으로 생성.
-   - 구형 `"Content"` JSON 필드는 `LegacyContent`(`[JsonPropertyName("Content"), JsonInclude, JsonIgnore(WhenWritingNull)]`)로 역직렬화한 뒤 `IJsonOnDeserialized.OnDeserialized()`에서 `LegacyLoreParser.TryParse`(왕복 렌더링 일치 검증 포함)로 자동 변환하고 `LegacyContent = null`로 비워 재저장 시 구조화 스키마로만 기록.
-2. **런타임 시드/마스킹 및 생성기 ResponseSchema 직결 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs), [SessionArchitectService.cs](../../GRC/GRC/Services/SessionArchitectService.cs), [LorebookService.cs](../../GRC/GRC/Services/LorebookService.cs))**:
-   - `MemoryManagerService.MaskLorebooksForPrompt`는 문자열 치환 대신 `entry with { RevealStage = stage }`를 사용하고, `ExtractAvailableStorySeeds`(`Pool A/B/C`)는 `entry.Character` 및 `entry.World` 프로퍼티를 직접 참조.
-   - `SessionArchitectService` Wave 1/Wave 2는 `WorldLorebookArrayResponseSchema`와 `CharacterLorebookArrayResponseSchema`로 각 세부 필드를 Vertex AI `ResponseSchema` 수준에서 강제하며, `SanitizeCharacterDetails`/`SanitizeWorldDetails`로 필드별 정제를 수행.
-3. **WPF 카테고리별 구조화 편집 폼 및 검증 게이트 강화 ([EditLorebookWindow.xaml](../../GRC/GRC/Views/EditLorebookWindow.xaml), [EditLorebookWindow.xaml.cs](../../GRC/GRC/Views/EditLorebookWindow.xaml.cs), [SessionAssetValidator.cs](../../GRC/tests/GRC.Tests/SessionAssetValidator.cs))**:
-   - `EditLorebookWindow`는 카테고리에 따라 인물 11필드 폼, 배경 4필드 폼, 자유 텍스트 폼으로 자동 전환되며 하단에 읽기 전용 `<world_lore>` 렌더링 미리보기를 표시하고 미수정 항목의 768차원 임베딩을 보존.
-   - `SessionAssetValidator`에 `F15_LEGACY_LORE_FORMAT`을 추가하여 신규 세션 자산에서 구형 `"Content"` JSON 필드 사용을 차단하고 구조화 `"Character"`/`"World"` 객체를 강제.
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+- **강타입 구조화 스키마 및 `[JsonIgnore]` 계산 렌더러 전환 ([LoreDetails.cs](../../GRC/GRC/Models/LoreDetails.cs), [LorebookEntry.cs](../../GRC/GRC/Models/LorebookEntry.cs), [LoreRenderer.cs](../../GRC/GRC/Services/Cognitive/LoreRenderer.cs))**:
+  - 인물은 `CharacterLoreDetails`(11개 강타입 필드), 비인물은 `WorldLoreDetails`(4개 강타입 필드), 런타임 기억은 `FreeText`를 SSOT로 저장하고, `LorebookEntry.Content`는 `[JsonIgnore]` 계산 프로퍼티(`LoreRenderer.Render(this, RevealStage)`)로 전환.
+  - `MaskLorebooksForPrompt`는 문자열 치환 대신 `entry with { RevealStage = stage }` 불변 복사를 수행하며, 구형 `"Content"` JSON은 `LegacyContent` 역직렬화 직후 `IJsonOnDeserialized`에서 `LegacyLoreParser.TryParse`로 자동 승격 후 `null`로 비움.
+- **핵심 부정 제약 (Never use X)**: **신규 세션 자산(`Preset.json` / `Session.json`)의 인물·배경 로어북에 구형 `"Content"` 문자열 JSON 필드를 직접 작성하지 말 것(`F15_LEGACY_LORE_FORMAT` 차단 대상).** 반드시 구조화된 `"Character"` 또는 `"World"` JSON 객체만 사용할 것.
 
-## 2026-10-27: [Resolved] 세션 아키텍트 프롬프트의 갈등 편향(Conflict Bias)으로 치유·일상 컨셉에 억지 위기가 주입되는 현상
+---
 
-### 1. 증상 (Symptom)
-- 적대 세력이 없는 치유·일상·슬로우 라이프 컨셉을 입력해도 생성 세션에 컨셉에 없던 추격 세력, 채무 독촉, 비극적 과거, 위기 급반전 GM 수칙이 덧붙는 경향이 있었음(예: `잿빛_유적과_졸음_섞인_송곳니` 세션의 대출금 상환 압박 및 감찰국 추격 설정).
+> [!NOTE]
+> **[정제 완료 기준선]** 2026-10-27 이전 상위 항목은 정제 완료됨. 신규 인시던트는 이 아래에 추가됩니다.
 
-### 2. 원인 (Root Cause)
-- 데이터 스키마나 런타임 엔진이 아니라 [SessionArchitectService.cs](../../GRC/GRC/Services/SessionArchitectService.cs) 프롬프트 어휘가 갈등을 전제로 고정되어 있었음: `coreWeight`를 "위기 시 적대 세력·환경의 압박감"으로 정의, 세계관 2·3번 섹션에 "구조적 갈등"과 "제약/패널티" 요구, GM 수칙 4·5번과 그 few-shot 예시에 "위기 급반전"과 "대가(Risk)·세력의 반작용" 고정, `innerMotivation`에 "결핍·비밀" 유도.
-- 동일한 GM 수칙 규격 문구가 `StatusGen`, `GenerateGenreDirectivesAsync`, `StatusReview`, `PromptReview`에 각기 다른 표현으로 중복 기재되어 수정 시 드리프트가 누적되던 구조.
-
-### 3. 해결책 (Resolution)
-- 장르 온도 보존 계약 `GenreFidelityRule`(SSOT 상수)을 신설하여 청사진, 세계관, Wave 1/Wave 2 로어북 시스템 지시문에 주입: 긴장의 원천을 컨셉에 내재한 요소로 한정하고, 치유·일상 컨셉의 긴장 축을 관계의 거리감·일상 과업·정서적 여운으로 정의.
-- GM 수칙 4·5번 생성 규격을 `GenreDirectivesSpec`(SSOT 상수) 하나로 통합하고 5번 수칙을 "행동에 상응하는 결과(성취·교감·관계 변화 또는 대가·반작용)" 판정으로 일반화. few-shot 예시와 `CompileHybridSystemPrompt` 폴백 문구의 "위기·적대 세력" 고정 어휘도 중립화.
-- 중복 정리: Wave 2 `final_instruction`에 반복되던 앙상블 원칙을 인물 시스템 지시문 규칙 3(앙상블 분산)으로 이관하여 외과수술식 보정 경로에서도 동일하게 적용. 청사진 프롬프트의 로어북 수량 불일치(규칙 10~18개 vs 출력 주석 8~15개)와 세계관 불릿 수 불일치(4~5개 vs 3~4개)를 통일.
-- 불변 헌법 `CoreSystemDirectivesHeader`(규칙 1~3)는 장르 중립이며 `F04_SYSPROMPT` 바이트 일치 대상이므로 변경하지 않음.
-- 검증: `dotnet build GRC.sln -nodeReuse:false` 경고 0 / 오류 0, Fast QA 235 통과 / 1 건너뜀 (Exit Code 0). 에이전트 템플릿 [05_session_architect_agent_template.md](../GRC/docs/05_session_architect_agent_template.md)에 장르 도메인 표(치유/일상 행 추가), Stage 1·2·3·4·5 및 불변 제약 10번 동기화.
