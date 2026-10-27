@@ -657,4 +657,41 @@ std::tie(StateTrue, StateFalse) = EvalState->assume(CondVal);
 * **합성 회귀 테스트 (`checker_regression_test.c`)**: Compliant 36케이스 0건(TN 100%), NonCompliant 17케이스 17건(TP 100%, `char[16] -> int*` 검출 포함).
 * **빌드 검증**: `cmake --build .\build --config Release --target clang-tidy` **Exit Code 0** 및 `ArqaStatic\Tools\bin\clang-tidy.exe` 배포 완료.
 
+---
+
+## 2026-10-27: [Resolved] C++ 전방 선언(Incomplete Type) 및 미인스턴스화 템플릿 의존 표현식(Dependent/RecoveryExpr) 대상 ARQA Clang-Tidy 체커 크래시(0xC0000005) 전수 방어 가드 적용
+
+### 1. 현상 (Symptom)
+* 오픈소스 C++ 프로젝트(`LevelDB`, `Box2D v2.4.1`, `yaml-cpp`, `libzmq`)를 대상으로 `DAPA 2024` 프리셋 전 체커를 구동할 때 다음 두 가지 유형의 Access Violation (`0xC0000005`) 크래시 발생:
+  1. **`VirtualBaseCastCheck` (`ast-virtual-base-cast`)**: `Box2D`의 `src/dynamics/b2_chain_circle_contact.cpp:56` (`(b2CircleShape*)m_fixtureB->GetShape()`) 분석 중 `clang::CXXRecordDecl::isDerivedFrom` 내부에서 `DefinitionData` 널 포인터 역참조 크래시 발생.
+  2. **`SignedBitwiseSafetyCheck` (`ast-signed-bitwise-safety`)**: `yaml-cpp`의 `src/fptostring.cpp:89` (`template <typename T> ... ss << v;`) 및 `libzmq`의 `src/ctx.cpp` 분석 중 `clang::ASTContext::getTypeInfoImpl` (`getIntWidth`) 내부에서 `DependentTy` / `RecoveryExpr` 처리 중 크래시 발생.
+
+### 2. 원인 (Root Cause)
+* **불완전 타입(`Incomplete Type`)에 대한 상속/필드 쿼리**:
+  * C++에서 클래스가 전방 선언(`class b2CircleShape;`)만 되고 정의(`Definition`)가 포함되지 않은 번역 단위에서도 해당 클래스의 포인터/참조 캐스팅이나 예외 핸들러 선언이 문법적으로 유효함.
+  * 그러나 `CXXRecordDecl::isDerivedFrom()`, `isVirtuallyDerivedFrom()`, `RecordDecl::fields()`는 내부적으로 `DefinitionData`가 존재한다고 가정하는 Clang AST 불변식을 가지므로, `getDefinition()` 확인 없이 호출할 경우 즉시 `nullptr` 역참조가 발생함.
+* **템플릿 의존 표현식(`Dependent Type/Value`) 및 오류 복구 노드(`RecoveryExpr`)에 대한 상수/비트폭 평가**:
+  * 미인스턴스화 C++ 함수/클래스 템플릿 본문 내에서 오버로딩된 연산자(`ss << v` 등)나 템플릿 파라미터 의존 수식은 `isTypeDependent()` 또는 `isValueDependent()`가 `true`이며 타입이 `BuiltinType::Dependent`임.
+  * 또한 선행 헤더/매크로 오류로 생성된 `RecoveryExpr`은 `containsErrors()`가 `true`임.
+  * 이러한 노드에 대해 `ASTContext::getIntWidth()` 또는 `Expr::EvaluateAsInt()` / `EvaluateAsBooleanCondition()`을 사전 가드 없이 호출하면 Clang 내부 `llvm_unreachable` 또는 널 역참조가 발생함.
+
+### 3. 해결책 (Resolution)
+* `../../llvm-project/clang-tools-extra/clang-tidy/ARQA/` 내 79개 전체 체커 소스 파일을 전수 감사하여 Clang AST 불변식(Invariant)에 부합하는 근본 방어 가드를 15개 체커에 일괄 적용:
+  1. **전방 선언(`getDefinition()`) 및 의존 타입 가드**:
+     * `VirtualBaseCastCheck.cpp`: `QualType::isNull()`, `isDependentType()` 확인 후 `DestDecl = DestDecl->getDefinition()`, `SrcDecl = SrcDecl->getDefinition()`으로 정의 노드를 획득한 뒤에만 `isDerivedFrom()` 및 `isVirtuallyDerivedFrom()` 호출.
+     * `DestructorExceptionSafetyCheck.cpp`, `ExceptionSpecificationCheck.cpp`, `MainUnhandledThrowCheck.cpp`, `UnusedExceptionHandlerCheck.cpp`: `CatchRecord->getDefinition()` 및 `ThrownRecord->getDefinition()` 확인 후 `isDerivedFrom()` 호출.
+     * `AggregateInitStyleCheck.cpp`: `RD = RD->getDefinition()` 확인 후 `RD->fields()` 순회.
+  2. **의존 표현식(`isTypeDependent()`, `isValueDependent()`, `containsErrors()`) 및 정수형 확인(`isIntegralOrEnumerationType()`) 가드**:
+     * `SignedBitwiseSafetyCheck.cpp`: `check()` 및 `getKnownMaxActiveBits()` 진입부에서 `isTypeDependent()`, `isValueDependent()`, `containsErrors()`, `!isIntegralOrEnumerationType()` 가드 추가 후 `Ctx.getIntWidth()` 및 `EvaluateAsInt()` 호출.
+     * `FunctionCallArgumentConsistencyCheck.cpp`, `NoOutOfRangeAssignmentCheck.cpp`: `getIntWidth()` 및 `EvaluateAsInt()` 호출 전 `isDependentType()`, `isTypeDependent()`, `isValueDependent()`, `containsErrors()`, `isIntegralOrEnumerationType()` 가드 추가.
+     * `AlwaysConstantConditionCheck.cpp`, `AggregateInitStyleCheck.cpp`, `ImproperLinkResolutionCheck.cpp`, `IncorrectPermissionAssignmentCheck.cpp`, `InitBeforeUseCheck.cpp`, `MallocSizeMultipleCheck.cpp`, `NotNullTerminatedResultCheck.cpp`, `UninitializedAddressToConstParamCheck.cpp`, `UnreachableCodeCheck.cpp`: `EvaluateAsInt()` / `EvaluateAsBooleanCondition()` 호출 전 의존성 및 에러 포함 여부 방어 가드 추가.
+
+### 4. 검증 (Verification)
+* **빌드 검증**: `cmake --build .\build --config Release --target clang-tidy` **Exit Code 0** 완료 및 `../../clang-lab/UI_WPF/ArqaStatic/ArqaStatic/Tools/bin/clang-tidy.exe` 동기화 배포 완료.
+* **C++ 오픈소스 프로젝트 3종 전수 구동 검증 (`DAPA 2024` 프리셋)**:
+  * `LevelDB` (40개 코어 `.cc` 파일): 크래시 **0건**, 28개 체커에서 669건 경고 정상 검출.
+  * `Box2D v2.4.1` (45개 `.cpp` 파일): 기존 `b2_chain_circle_contact.cpp` 크래시 해소, 크래시 **0건** (`ReturnCode: 0`), 20개 체커에서 614건 경고 정상 검출.
+  * `yaml-cpp` (32개 `.cpp` 파일): 기존 `fptostring.cpp` 크래시 해소, 크래시 **0건** (`ReturnCode: 0`), 19개 체커에서 391건 경고(`ast-signed-bitwise-safety` 10건 포함) 정상 검출.
+
+
 
