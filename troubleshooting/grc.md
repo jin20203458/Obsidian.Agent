@@ -532,3 +532,68 @@ related:
 - **디스패처 우선순위 동기화**:
   - `ScrollToEnd` 호출을 60FPS UI 렌더 타이머와 동일한 `DispatcherPriority.Render`로 정렬하여 스트리밍 텍스트와의 렌더링 지연(Lag) 제거.
 - **핵심 부정 제약 (Never use X)**: **절대 `ExtentHeightChange == 0 && VerticalChange < 0`이라는 기하학적 조건만으로 사용자 상향 스크롤 여부를 단정하지 말 것.** 가상화 패널(`VirtualizingStackPanel`)의 픽셀 스크롤 환경에서는 레이아웃 재배치로 인한 내부 오프셋 조정이 빈번하므로, 반드시 실제 입력 디바이스 이벤트(마우스 캡처/휠/키 입력) 타임스탬프와 결합하여 검증할 것.
+
+
+---
+
+## 2026-10-30: [Resolved] 67턴 실플레이 세션 감사 — 시드 생명주기, 로어북 인출 계층, 기억 공백, 상태창 정합성, 서사 말투 일괄 보정
+
+### 1. 현상 (Symptom)
+- **시드 엔진**:
+  - 이름 없는 실루엣만 등장한 턴에 StatusAI가 `CHAR:리네아`를 `triggeredSeeds`로 보고하여 소모되고, 다음 턴에는 시드와 로어북이 모두 빠져 외형 환각("토끼 귀")이 발생함.
+  - 신규 인물 시드 문장에 요약만 담기고 전체 로어북은 Dense 유사도 운에 의존하여 묘사 품질이 턴마다 달라짐.
+  - `Places`에 수식어 변형(`"지열이 피어오르는 온천 호수"`)이 기록되어 `HOOK:안개비 온천 호수`가 방문 후에도 소모되지 않고 9회 반복 주입됨. `세계관` 로어북이 Pool B를 영구 점유함.
+  - 풀마다 `Priority` 순 첫 미소모 시드만 고르고 중단하여, 채택되지 않은 시드 1개가 후순위 전체를 차단(Head-of-Line Blocking)함. 호감도 30 이전에 선행 플레이된 `BOND:` 시드가 60을 넘어서도 Pool C 1순위를 점유함.
+  - `isSceneResolved` 오판(대화 진행 중 `true`) 다음 턴에 같은 시드 묶음이 연속 재추출되고, "1달여가 지났다", "수년이 지났다" 같은 시간 경과에도 세계 변화가 없음.
+- **로어북·기억**:
+  - 미등장 인물 로어북이 Dense 유사도만으로 유입되어 예산을 점유함. Dense 매칭에도 Sticky가 부여됨.
+  - 상시 불릿 칸이 고정 15개라, 챕터 말미에 장기 연대기에 아직 반영되지 않은 사건이 상시 칸에서 밀려나는 중기↔장기 공백이 발생함.
+  - 메시지 삭제·재생성 시 상태가 롤백되지 않아 호감도가 중첩 상승함(`12 → 15`).
+- **상태창**: 이동 후에도 이전 장소가 누적되어 `Places` 4곳 동시 존재, 주인공 이름이 `Chars`에 혼입, 시간 경과 턴에 호감도 `+20` 급등, 섭취·수선된 소모품의 영구 잔류.
+- **서사**: 단답형 인물의 장문화와 말투 동질화, 다인 장면에서 비지목 인물의 의무 발화(19/20턴), 유저 입력 첫 줄 복창(11/39턴), 직전 외양 묘사 자기복제, 자동 진행 시 직전 장면 재서술.
+
+### 2. 원인 (Root Cause)
+1. **시드 소모 경로 혼재**: `CHAR:`가 StatusAI `triggeredSeeds`와 `Chars` 등록으로도 소모되어 "언급·등록"과 "실제 등장"이 구분되지 않았음. 시드 창(window) 개념이 없어 오판 턴마다 재추출되었고, 제시 횟수 기록이 없어 순환 정렬이 불가능했음.
+2. **로어북 인출 계층 미분리**: 시드 대상 인물을 `Retrieve`에 전달할 경로가 없었고, 시드 추출이 로어북 인출보다 늦게 실행되었음. Dense 매칭과 Sparse 매칭이 같은 Sticky 규칙을 공유했음.
+3. **고정 크기 상시 칸**: 상시 불릿 분할이 장기 요약 성공 여부와 무관한 `TakeLast(15)` 고정이었음.
+4. **배열 장소 스키마와 정규화 부재**: `places: string[]`가 방문 이력 누적을 유도했고, `Places`/`Items`에 로어북 정식 명칭 정규화 단계가 없었음. 시간 경과 정보(`elapsedTime`)가 없어 시간 경과 턴만의 상한을 걸 수 없었음.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+- **상태 모델 ([ChapterContext.cs](../../GRC/GRC/Models/ChapterContext.cs), [MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
+  - 상태 복사를 `Clone()` 단일 경로로 통일하고 `SeedOfferCounts`, `ActiveSeedKeys`, `SeedWindowStartTurn`, `PendingTimeSkip`, `LastSummarizedChapter`를 추가.
+  - 턴 시작 시 스냅샷을 보관하고, 마지막 턴 삭제 시 상태창·소모 시드·시드 창·제시 횟수를 함께 롤백.
+- **시드 생명주기**:
+  - `CHAR:`는 모델 응답 본문에 이름이 등장했을 때만 소모. `HOOK:`은 정규화된 `Places`/`Items` 상태 동기화, `BOND:`/`BOND_SECRET:`은 StatusAI 화이트리스트 판정과 호감도 60 도달 시 1단계 자동 소모.
+  - 시드 창: 장면 종료(LLM 판정 또는 로어북 장소 엔티티 변경) + 2턴 쿨다운 통과 시 개설, 진행 중 장면 종료 판정은 기존 창 유지, 3턴 경과 시 종료, `elapsedTime >= days`·`fast_forward`는 쿨다운을 무시하고 재개설.
+  - 풀 정렬은 제시 횟수 오름차순 → `Priority` 오름차순. Pool B에서 `세계관` 제외. Turn 0에는 `아이템` 카테고리만 오프닝 소모 등록.
+  - 시간 경과 턴은 다음 턴에 화면 밖 변화 반영 지시를 결합하며, 실제로 제시될 시드가 있을 때만 시드 개막 문구를 포함.
+- **로어북 인출 ([HybridLorebookRetriever.cs](../../GRC/GRC/Services/Cognitive/HybridLorebookRetriever.cs))**:
+  - 예산 배정 순서: 시드 고정 로어북(3-H) → Sparse 직접 매칭 → 현재 장소·활성 인물 보충 → Sticky(Sparse 전용 2턴) → Dense(최대 3개). 미등장 인물은 Dense로 인출하지 않음.
+  - 활성 인물 광역 스캔(단기 기억 전체 + 최근 불릿 3개)은 대명사 구간 로어북 증발 방지를 위해 유지(4-E 미적용 결정).
+- **기억**: 상시 칸은 장기 미요약 불릿 전량(최소 15개), 회상 풀은 그 정확한 여집합. `_lastSummarizedChapter`는 `Session.json`에 저장되어 복원 시 그대로 쓰이며, 필드가 없는 구버전 세션만 `ChapterCount - 1`로 추론. `ShortTermThreshold = 14`, `TokenLog.csv`에 `CachedTokens` 추가. `gemini-embedding-001` 3대 영역 실측(Case 1~6) 결과에 따라 로어북 Dense(`0.75f`, `MaxDenseMatches = 3`)는 유지하고, 원장 회상 임계치(`GatedRAGRetriever.SemanticSimilarityThreshold`)는 일상 행동 오탐(최대 `0.7914`)을 차단하고 핀포인트 회상(`0.8627 ~ 0.9053`)을 보존하는 `0.80f`로 상향했으며, 2-A 원장 중복 드롭·1-C MMR은 분포 중첩(`0.9152` vs `0.9041 ~ 0.9154`)으로 미적용 확정.
+- **상태창**: `currentPlace` 단일 문자열·`elapsedTime` 스키마, 로어북 정식 명칭 정규화 및 명칭 목록 제공, 주인공 필터, 시간 경과 턴에만 `최대치 × 비율(5%/12%/20%) × (1 - 이전값/최대치)` 상승 상한(일반 턴 무상한).
+- **서사 프롬프트 ([NarrativeContract.cs](../../GRC/GRC/Services/Cognitive/NarrativeContract.cs), [CognitivePromptAssembler.cs](../../GRC/GRC/Services/Cognitive/CognitivePromptAssembler.cs), [ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs))**: `FormatRuleBlock` 3번(로어북 말투 준수)·4번(무관 인물 의무 발화 억제), `FinalInstruction`에 복창·외양 비유 반복 금지 결합, 자동 진행은 `metaDirective` 기준으로만 판정하여 `<current_action>` 정규화, `auto_continue` 지시문에 재서술 금지 보강.
+- **세션 생성기·검증기 ([SessionArchitectService.cs](../../GRC/GRC/Services/SessionArchitectService.cs), [SessionAssetValidator.cs](../../GRC/tests/GRC.Tests/SessionAssetValidator.cs))**: 단일 시작 장소, PC 실소유 소지품 0~4개, `speechTone` 종결어미·호흡 명시와 앙상블 분산 지침, `W09`/`W10`/`W11` 경고 추가.
+- **핵심 부정 제약 (Never use X)**:
+  - **절대 StatusAI 판정이나 `Chars` 등록만으로 `CHAR:` 시드를 소모하지 말 것.** 이름 없는 등장에서 시드와 로어북이 함께 사라져 환각이 재발함.
+  - **절대 `SystemInstruction`(`FormatRuleBlock` 포함)에 `<world_lore>` 같은 동적 태그명을 넣지 말 것.** `AssemblePrompt_SystemInstruction_RemainsStaticWithoutDynamicContext` 불변식 위반.
+  - **절대 활성 인물·장소 보충 로어북이 Sparse 직접 매칭을 밀어내도록 순서를 바꾸지 말 것.** Sparse보다 앞설 수 있는 것은 시드 고정 로어북(3-H)뿐임.
+  - **절대 말줄임표 횟수 같은 숫자 상한을 공통 프롬프트에 넣지 말 것.** 의도된 말투 설계와 충돌함(장르 중립 원칙).
+
+
+---
+
+## 2026-10-30: [Resolved] 자동 진행 정체 해소를 위한 코어 헌법 2번 조건부 완화(L2) 및 위임 신호 추가
+
+### 1. 현상 (Symptom)
+- 유저가 입력 없이 "계속"(`auto_continue`)이나 빠른 진행(`fast_forward`)만 연속으로 누르면, 서사가 PC의 결정이 필요한 지점(예: NPC의 질문)에서 주변 묘사만 반복하며 정체됨.
+
+### 2. 원인 (Root Cause)
+- `CoreSystemDirectivesHeader` 2번 조항("PC의 대사·행동·내면을 대신 서술하지 말고, PC의 선택이나 대응이 필요한 시점에서 서술을 멈추고 턴을 넘길 것")이 `auto_continue` 메타 지시("시간과 사건을 한 단계 진행")와 충돌하여, 모델이 PC 반응을 넘기지 못하고 같은 지점에 머무름.
+
+### 3. 조치 및 관찰 포인트 (Action & Observation)
+- **조치 ([SessionArchitectService.cs](../../GRC/GRC/Services/SessionArchitectService.cs), [ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs))**: `CoreSystemDirectivesHeader` 2번을 조건부 L2 조항("PC의 속마음과 관계·수위·위험 결정은 대신 서술하지 말고 그 지점에서 멈추되, 유저가 입력한 행동·대사는 임의로 덧붙이지 않고, 유저가 진행을 위임한 턴에만 일상 행동·이동과 짧은 기능성 대답을 이어 서술")으로 교체하고, `auto_continue`·`fast_forward` 메타 지시에 `"이번 턴은 유저가 진행을 위임한 턴입니다."` 신호를 추가.
+- **기존 세션 호환**: 헤더는 세션 생성 시 `Preset.json`의 `SystemPrompt`에 복사되므로 코드 변경만으로는 기존 세션에 반영되지 않음. 기존 세션을 재적용(재컴파일)하면 `CompileHybridSystemPrompt`의 고정 헤더 중복 필터(`유저 캐릭터` 패턴)가 구버전 2번 조항을 제거하고 신규 2번 조항으로 자동 교체함(`CompileHybridSystemPrompt_WhenRecompilingLegacyHeader_DropsPcProxyRuleAndRenumbersGenreRules`). 재적용하지 않은 구버전 세션은 `Category=SessionAudit`에서 `F04_SYSPROMPT` 헤더 불일치로 실패하는 것이 정상임.
+- **실험 중 관찰 항목**: (1) 유저가 직접 입력한 턴에도 PC 대사·행동을 이어 쓰는지, (2) 고백·스킨십 진행·위험 감수 같은 관계·수위 결정을 PC 대신 내리는지, (3) PC 속마음(「」) 서술 발생 여부, (4) 턴당 출력 길이·`TokenLog.csv` 출력 토큰 증가, (5) `ReplySuggestionService` 추천 답변과 이미 서술된 PC 반응의 중복, (6) "계속" 연타 시 정체 해소 여부.
+- **잔존 PC 불간섭 지침**: `GenreDirectivesSpec`(장르 수칙 주어를 환경·NPC로 한정)과 기획 단계 폴백 수칙의 "PC의 태도·행동은 유저 선택에 맡길 것" 문구는 세션 설정이 PC 성격을 단정하지 않도록 하는 생성 규칙이므로 유지함.
+- **관찰 포인트**: 위임 턴(`auto_continue`·`fast_forward`)에서 일상 반응이 자연스럽게 넘어가면서 고백·스킨십 진행·위험 감수 지점에서만 멈추는지, 일반 유저 입력 턴에서 PC 대사·행동 임의 추가가 없는지 확인.

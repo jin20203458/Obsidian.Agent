@@ -25,8 +25,8 @@ related:
   - [Troubleshooting_Pruning_Guidelines.md](ai_agent_refs/Troubleshooting_Pruning_Guidelines.md): AI 에이전트 트러블슈팅 런북 압축, 의미론적 증류 및 온디맨드 가지치기 표준 지침
 
 
-- **LLVM/**: LLVM/Clang 커스텀 Tidy 체커 및 Static Analyzer 개발 아키텍처와 참고 문서를 다루는 기술 노트 폴더
-  - [LLVM Index](./LLVM/README.md): LLVM/Clang 커스텀 체커 및 정적 분석기 프로젝트 전용 문서 인덱스
+- **Obsidian.ARQA (외부 전용 볼트)**: ARQA 정적분석기 및 LLVM/Clang 커스텀 체커 아키텍처·런북 전용 지식베이스
+  - [Obsidian.ARQA Index](../Obsidian.ARQA/README.md): LLVM/Clang 커스텀 체커 및 ARQA 정적 분석기 전용 볼트 메인 인덱스
 
 - **MundusVivens/**: Mundus Vivens 프로젝트의 아키텍처, 기획 의도, 고도화 과제를 다루는 기술 노트 폴더
   - [Mundus Vivens Index](./MundusVivens/README.md): Mundus Vivens 프로젝트 전용 문서 인덱스
@@ -41,12 +41,10 @@ related:
 - **troubleshooting/**: 중앙 집중형 트러블슈팅 및 런북 보관 폴더
   - [grc.md](troubleshooting/grc.md): GRC C# WPF 클라이언트 장애 조치 로그
   - [phalanx.md](troubleshooting/phalanx.md): Phalanx C++ 센서 & C# 코어 장애 조치 로그
-  - [llvm_clang.md](troubleshooting/llvm_clang.md): LLVM/Clang 커스텀 체커 및 Static Analyzer 장애 조치 로그
+  - [llvm_clang.md](../Obsidian.ARQA/4.%20트러블슈팅%20및%20워크플로우/트러블슈팅%20(Runbook)/llvm_clang.md): LLVM/Clang 커스텀 체커 및 Static Analyzer 장애 조치 로그 (`Obsidian.ARQA` 이관)
   - [mundus_vivens.md](troubleshooting/mundus_vivens.md): C# AI Server & C++ Game Server 장애 조치 로그
   - [unity_client.md](troubleshooting/unity_client.md): 유니티 엔진 및 클라이언트 장애 조치 로그
 
 
-
 ## 에이전트 준수 규칙 (Agent Directives)
 - [.agents/AGENTS.md](.agents/AGENTS.md)
- 

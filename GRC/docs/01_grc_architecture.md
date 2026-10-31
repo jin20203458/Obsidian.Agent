@@ -39,17 +39,17 @@ flowchart TB
         SYS["불변 시스템 지시문 (Prefix-Frozen SystemInstruction)<br>- 페르소나 및 세계관 불변 동결 (Prompt Cache Hit Rate 극대화)"]
         
         subgraph TIERS ["3-Tier Memory & Reasoning Pipeline"]
-            M1["단기 기억 (Raw History): 최근 18개 메시지 (9턴 원문, ShortTermThreshold=18)"]
-            M2["사건 불릿 원장 (Single Event Ledger): 단일 불변 원장 무손실 누적 (Append-Only)<br>- 상시 노출: 최신 15개 [제N장] 그룹화 (TakeLast 15)<br>- 과거 회상 RAG: 15개 제외 과거 전체 풀 (Take Count-15)"]
+            M1["단기 기억 (Raw History): 최근 14개 메시지 (7턴 원문, ShortTermThreshold=14)"]
+            M2["사건 불릿 원장 (Single Event Ledger): 단일 불변 원장 무손실 누적 (Append-Only)<br>- 상시 노출: 장기 미요약 불릿(Chapter > LastSummarizedChapter) 전량, 최소 15개 보장 (MinActiveBullets)<br>- 과거 회상 RAG: 상시 노출의 정확한 여집합 (요약 완료 챕터 불릿)"]
             M3["장기 기억 (Macro Chronicle): 챕터 마감(10회 누적, MediumTermThreshold=10) 즉시 Gemini Pro 1,500자 산문 병합"]
             
-            M1 -->|"18개 메시지 도달 시 8개(4턴, ChunkSize=8) 절삭 후 Flash-Lite 팩트 추출"| M2
+            M1 -->|"14개 메시지 도달 시 8개(4턴, ChunkSize=8) 절삭 후 Flash-Lite 팩트 추출"| M2
             M2 -->|"10회 누적(80개 메시지 = 40턴 대화) 즉시 비동기 연대기 병합"| M3
         end
         
         subgraph AUXILIARY ["Selective Auxiliary Cognitive Engines (2-Core RAG)"]
-            HL["하이브리드 로어북 RAG (HybridLorebookRetriever)<br>- 1차 Regex 이름/키워드 일치 + 2차 768차원 임베딩 유사도 (>=0.75f, 3턴 잔존 Sticky)<br>- 상태창 활성 인물 연동 (단기 기억 전체 18~25개 메시지 및 최근 팩트 불릿 광역 스캔)"]
-            GR["사건 불릿포인트 RAG (GatedRAGRetriever)<br>- 단일 원장 과거 풀 대상 시맨틱 임베딩 유사도 (>=0.78f) 직결 + 원장 인덱스(Index) 시간순 정렬"]
+            HL["하이브리드 로어북 RAG (HybridLorebookRetriever)<br>- 시드 고정 인물(3-H) -> Sparse 이름/키워드 일치 -> 활성 인물/현재 장소 -> Sticky(Sparse 전용 2턴) -> Dense 순 예산 배정<br>- Dense 768차원 유사도 (>=0.75f, 최대 3개, Sticky 미부여, 미등장 인물 배제)"]
+            GR["사건 불릿포인트 RAG (GatedRAGRetriever)<br>- 단일 원장 과거 풀 대상 시맨틱 임베딩 유사도 (>=0.80f) 직결 + 원장 인덱스(Index) 시간순 정렬"]
             BP["엔티티 상태 투영기 (BiTemporalEntityProjector)<br>- 상태창 인물 상태/수치 1줄 투영 (- 인물(이름): 상태 (수치))"]
         end
         
@@ -64,37 +64,56 @@ flowchart TB
 
 ### 1) 불변 접두사 동결 (Prefix-Frozen SystemInstruction)
 *   세계관, 시스템 페르소나, 불변 지시문을 `SystemInstruction`에 완전히 격리하여 고정합니다.
-*   **서술 기본 원칙(`FormatRule`) 및 퓨샷 규격**: 대사는 큰따옴표(`" "`), 독백 및 속마음은 낫표(`「 」`), 행동/배경은 기호 없는 평문 소설체로 명시하고, 마크다운 강조(*별표* 등) 배제 지침과 4줄 직관적 `<example>` 퓨샷을 고정 주입하여 UI 파서와의 일관성을 유지합니다.
-*   동적으로 변하는 로어북, 사건 렛저, 대서사 연대기는 최신 유저 메시지 직전의 **동적 컨텍스트 슬롯(Dynamic Context Slot)**에 주입함으로써, LLM 엔진의 프롬프트 캐시 적중률을 극대화하고 문체 오염을 방지합니다.
-*   **메타 지시문 독립 격리 및 벡터 희석 방지**: 빠른 진행(`fast_forward`), 자동 이어쓰기(`auto_continue`) 등 유저 명시적 의도 기반 개입 명령(`metaDirective`)은 `userMessage.Text`에 합성하지 않고 `CognitiveContext.MetaDirective`를 통해 `<current_action>` 외부의 독립 상위 태그로만 조건부 렌더링(미발생 시 완전 생략)합니다. 이를 통해 768차원 유저 쿼리 임베딩의 시맨틱 순도를 100% 보존하고 유저 데이터-시스템 지시문 역전을 방지합니다. (강제 챕터 전환 메타지시문 `chapter_transition`은 진행 중이던 장면을 급발진시키는 부작용을 원천 차단하기 위해 폐기하고, 아래의 사건 해결 변수 기반 `<story_seeds>` 엔진으로 통합되었습니다.)
-*   **Thinking 모델 자가 검증 기준(Verification Criteria)**: `<final_instruction>`에 최종 출력 전 직전 턴 인과 관계 및 배경 맥락과 상충되지 않는지 내부 추론 단계에서 자체 검증하도록 기준을 명시하여 서사 일관성을 극대화합니다.
+*   **서술 기본 원칙(`FormatRule`) 및 퓨샷 규격**: 대사는 큰따옴표(`" "`), 독백 및 속마음은 낫표(`「 」`), 행동/배경은 기호 없는 평문 소설체로 명시하고, 마크다운 강조(*별표* 등) 배제 지침, 로어북에 정의된 인물별 말투(반말/존댓말 어미, 문장 길이, 호흡) 준수, 다인 장면에서 유저의 현재 행동과 무관한 인물의 의무적 발화 억제 규칙, 4줄 직관적 `<example>` 퓨샷을 고정 주입합니다. 말줄임표 등 숫자 상한은 의도된 말투 설계와 충돌하므로 두지 않으며(장르 중립 원칙), `SystemInstruction`에는 동적 태그명(`<world_lore>` 등)을 직접 언급하지 않습니다.
+*   동적으로 변하는 로어북, 사건 렛저, 대서사 연대기는 최신 유저 메시지 직전의 **동적 컨텍스트 슬롯(Dynamic Context Slot)**에 주입함으로써, LLM 엔진의 프롬프트 캐시 적중률을 극대화하고 문체 오염을 방지합니다(캐시 적중 토큰 `cachedContentTokenCount`는 [TokenLogger.cs](../../../GRC/GRC/Helpers/TokenLogger.cs)의 `CachedTokens` 컬럼으로 기록).
+*   **메타 지시문 독립 격리 및 자동 진행 단일 판정**: 빠른 진행(`fast_forward`), 자동 이어쓰기(`auto_continue`), 시간 경과(`time_skip_progression`) 등 개입 명령(`metaDirective`)은 `userMessage.Text`에 합성하지 않고 `CognitiveContext.MetaDirective`를 통해 `<current_action>` 외부의 독립 상위 태그로만 조건부 렌더링하며, 여러 지시는 기존 지시 뒤에 이어 붙입니다. 자동 진행 여부는 UI 표시 문구가 아니라 `metaDirective`의 `type="auto_continue"`로만 판정하여 `<current_action>`을 `(서사를 계속 진행하십시오.)`로 정규화합니다.
+*   **초단답·자동 진행 임베딩 쿼리 폴백 (`ResolveEmbeddingQueryTextLocked`)**: 자동 진행이거나, 알려진 인물·로어북 엔티티 언급이 없는 4자 이하 초단답이면 직전 `model` 서술의 마지막 문단을 768차원 임베딩 쿼리로 대체합니다.
+*   **최종 지시 (`<final_instruction>`)**: 참조 태그의 개조식 형태 모방 금지, `<current_action>` 문장 첫 줄 복창 금지, 직전 응답의 외양 묘사·비유 반복 금지를 한 문장으로 결합하여 곧바로 이어지는 다음 장면을 소설 산문으로만 서술하도록 지시합니다.
 
 ### 2) 단기 기억 (Raw History)
-*   가장 최근에 주고받은 날것의 대화 18개 메시지(9턴 대화, `ShortTermThreshold = 18`)를 손실 없이 보존합니다.
-*   **비동기 압축 트리거**: 18개 메시지에 도달하면 가장 오래된 8개 메시지(4턴 대화, `MemoryCompressionChunkSize = 8`)를 절삭하여 백그라운드 태스크(`Task.Run`)에서 사건 팩트 추출을 시작합니다. 낙관적 락(`_shortTermVersion`)을 통해 동시성 정합성을 보장합니다.
+*   가장 최근에 주고받은 날것의 대화 14개 메시지(7턴 대화, `ShortTermThreshold = 14`)를 손실 없이 보존합니다.
+*   **비동기 압축 트리거**: 14개 메시지에 도달하면 가장 오래된 8개 메시지(4턴 대화, `MemoryCompressionChunkSize = 8`)를 절삭하여 백그라운드 태스크(`Task.Run`)에서 사건 팩트 추출을 시작합니다(절삭 직후 최근 6개 메시지 = 3턴 보존). 낙관적 락(`_shortTermVersion`)을 통해 동시성 정합성을 보장합니다.
 
 ### 3) 사건 불릿 원장 (Single Event Ledger 및 [제N장] 시간축 앵커)
 *   **단일 원장 무손실 누적 (Append-Only)**: 절삭된 8개 메시지는 **Gemini 3.5 Flash-Lite** 모델을 통해 대명사('그', '그녀' 등)를 배제하고 `[원인/배경 + 명시적 고유명사 주체 + 행동/대화/사건 + 결과/관계·상태 변화]`를 담은 1~2문장의 자기완결형 인과 팩트 불릿(최대 3~5개)으로 추출됩니다. 물리적 사건뿐만 아니라 인물 간의 의미 있는 감정/신뢰 변화, 호칭·태도의 전환, 공유된 정서적 순간과 개인적 약속을 함께 추출하여 서브컬처 장르의 관계 서사 연속성을 보존합니다. 추출 프롬프트는 정적 규칙/TypeScript 스키마를 `SystemInstruction`으로 물리 분리하여 매 4턴마다 구글 서버의 **KV Cache를 100% 재사용**하며, `Temperature: null` 설정을 통해 Flash-Lite 모델의 무한 반복 루프를 원천 차단합니다. 응답은 `LlmJsonParser`를 통해 내결함성 파싱(프리앰블 스킵 및 잘린 JSON 복구)되며, Google의 차세대 통일 임베딩(`gemini-embedding-001`, MRL 768차원, 서울 `asia-northeast3` 리전)과 함께 `_currentContext.EventLedgers` 단일 리스트에 영구 누적됩니다.
 *   **가짜 Turn 메타태그 완전 적출**: 4턴 배치 단위로 동일하게 찍히던 왜곡된 가짜 Turn 번호를 완전히 제거하고, 단일 원장 인덱스(`Index`)를 통해 100% 발생 시간순 인과관계를 보존합니다.
-*   **챕터 전환 시 무손실 승계**: 1개 챕터가 끝나 새 챕터로 전환될 때도 단일 원장 전체를 그대로 승계하여 챕터 전환 직후 상시 불릿이 증발하는 결함을 원천 차단합니다.
-*   **상시 노출 칸 (`<internal_chronicle_facts>`)**: 단일 원장의 **최신 15개(`TakeLast(15)`)**를 항상 노출하며, 장 번호가 변경될 때만 `[제N장]` 그룹 헤더를 1회 출력하여 중복 토큰을 없애고 챕터 경계 인과를 보존합니다. 헤더에 `(현재 제N장 진행 중)`을 명시하여 시간 기준점을 확립합니다.
-*   **과거 회상 RAG 풀 (`<recalled_history>`)**: 단일 원장에서 **최신 15개를 제외한 앞쪽 전체(`Take(Count - 15)`)**가 자동으로 과거 회상 검색 대상이 됩니다.
+*   **장기 미요약 불릿 무손실 상시 노출(`_lastSummarizedChapter`) 및 회상 풀 여집합 분할**:
+    - **상시 노출 칸 (`<internal_chronicle_facts>`)**: 장기 연대기 병합에 실제 성공한 마지막 장 번호(`_lastSummarizedChapter`)보다 뒤의 불릿(`Chapter > _lastSummarizedChapter`)은 개수 제한 없이 전량 노출하고, 최소 15개(`MinActiveBullets = 15`)를 보장합니다. 이로써 챕터 말미에도 연대기에 아직 반영되지 않은 사건이 상시 칸에서 밀려나는 중기↔장기 기억 공백을 제거합니다. 장 번호가 변경될 때만 `[제N장]` 그룹 헤더를 1회 출력하며, 헤더에 `(현재 제N장 진행 중)`을 명시합니다.
+    - **과거 회상 RAG 풀 (`<recalled_history>`)**: `MemoryManagerService`가 상시 노출 칸의 정확한 여집합(연대기로 병합 완료된 앞쪽 불릿)을 `GatedRAGRetriever` 검색 대상으로 분할하여, 연대기 요약 이후에도 과거 챕터의 구체적 고유명사·약속을 핀포인트로 회상합니다.
+    - **영구 저장**: `_lastSummarizedChapter`는 `ExportSession` 시 `ChapterContext.LastSummarizedChapter`로 `Session.json`에 기록되고, 복원 시 그대로 사용됩니다. 필드가 없는 구버전 세션(`-1`)만 `ChapterCount - 1`로 추론합니다(요약 실패 장의 불릿이 상시 칸에서 누락되는 결함 방지).
 
 ### 4) 장기 연대기 (Macro Chronicle 즉시 병합)
 *   과거 레거시 3개 챕터 지연 대기 큐(`_mediumBuffers`, `PrevContexts`)를 전면 폐지하고, **10회 압축 누적(80개 메시지 = 40턴 대화, `MediumTermThreshold = 10`)으로 챕터가 마감되는 즉시** 해당 장의 불릿들을 **Gemini Pro** 모델에 비동기 전달합니다.
-*   **살리언스 증발(Salience Evaporation)** 기법을 적용하여 1,500자 이내의 대서사 산문 연대기(`_longTermSummary`)로 즉시 병합 보존하여 서사의 거시적 대의명분 공백을 완전히 해소합니다.
+*   **살리언스 증발(Salience Evaporation)** 기법을 적용하여 1,500자 이내의 대서사 산문 연대기(`_longTermSummary`)로 즉시 병합 보존하고, 병합에 성공했을 때만 `_lastSummarizedChapter`를 해당 장 번호로 갱신합니다.
 
 ### 5) 보조 인지 엔진 (2-Core RAG & Relational Projector)
 *   **구조화 로어북 SSOT 스키마 (`CharacterLoreDetails` / `WorldLoreDetails`), 하이브리드 로어북 RAG (`HybridLorebookRetriever`), 호감도 단계별 3중 스포일러 마스킹 (`MaskLorebooksForPrompt` & `LoreRenderer`)**:
     - **순수 구조화 JSON SSOT (Zero-Legacy)**: `LorebookEntry`는 문자열 내부 구분자(`/`, `->`, `* 항목명:`)에 의존하던 평문 DSL과 레거시 파서(`LegacyLoreParser`)를 완전히 적출하고, 인물 전용 11필드 레코드(`CharacterLoreDetails`: `RoleSummary`, `Appearance`, `SurfacePersona`, `InnerMotivation`, `InitialContact`, `BondTrigger`, `BondPayoff`, `OtherRelations`, `SpeechTone`, `EverydayQuote`, `EmotionalQuote`, `Notes`), 비인물 전용 4필드 레코드(`WorldLoreDetails`: `IdentitySummary`, `SensoryDetails`, `RulesAndPrinciples`, `NarrativeHook`, `Notes`), 그리고 런타임 기억 추출용 `FreeText`(`Category == "기억"`)만을 JSON 단일 진실 공급원(SSOT)으로 저장합니다.
     - **선행 3단계 스포일러 마스킹 및 결정론적 프롬프트 렌더링 (`LoreRenderer`)**: `entry.Content`는 `[JsonIgnore]` 계산 프로퍼티로서 `LoreRenderer.Render(entry, entry.RevealStage)`가 호출 시점에 결정론적으로 조립합니다. `HybridLorebookRetriever.Retrieve` 호출 전 `MemoryManagerService.MaskLorebooksForPrompt`가 각 인물의 현재 호감도/신뢰도를 검사하여 `entry with { RevealStage = stage }`(`1`: `< 30` 기본 프로필·일상 대사만 공개 / `2`: `30~59` `BondTrigger -> BondPayoff` 유대 심화 해금 / `3`: `>= 60` `InnerMotivation` 및 `EmotionalQuote` 완전 해금)로 선행 마스킹하므로, 3,000토큰 로어북 예산이 실제 프롬프트 주입 길이 기준으로 정확히 산정되며 UI/TTS용 `CurrentActiveLorebooks`는 원본 참조를 보존합니다.
-    - **하이브리드 인출 및 인물 어절 스캔**: 정규식 1차 이름/키워드 스캔(엔트리 이름 완전 일치 및 직전 `model` 응답 + 현재 유저 입력 결합 키워드 스캔; Turn 1에는 `<initial_scenario>` 본문 전체 자동 스캔; Turn 0 초기 시나리오 세션 복원 시에도 `TotalTurnCount == 0`을 기준으로 Turn 1 `ThinkingLevel.high` 앵커 보존)과 시맨틱 임베딩 2차 유사도 검색(현재 유저 입력 단독 임베딩, 임계치 `0.75f`, 3턴 잔존 Sticky)을 결합하며, 단기 기억 버퍼(18~25개 메시지) 및 최근 사건 불릿(3개) 내 활성 인물(`activeChars`)을 `EntityNameResolver.ExtractCharacterNameTokens` 어절 단위로 광역 스캔하여 이름 첫 어절만 호명되는 구간에서도 상태창 인물을 누락 없이 패킹합니다.
-*   **사건 불릿포인트 RAG (`GatedRAGRetriever`)**: 레거시 키워드 게이팅 데드코드를 전면 적출하고, 매 턴 계산된 768차원 유저 쿼리 임베딩을 실측 기반 순수 코사인 유사도(**$\ge 0.78f$**) 스캔에 직결하여 상위 2개를 핀포인트 인출합니다. 인출 결과는 단일 원장 인덱스(`Index`) 발생 시간순으로 정렬하여 선후 인과 역전을 차단하며, 헤더에 `[떠오른 과거의 기억 - 현재 상태와 상충 시 현재 상태가 우선함]`을 명시하여 현재 상태 오판을 원천 방어합니다.
-*   **엔티티 상태 투영기 (`BiTemporalEntityProjector`) 및 엔티티 명칭·경계 판정 엔진 (`EntityNameResolver`)**: 불필요한 필드 및 중복 상태 텍스트 버그를 제거하고, `- 인물(이름): 상태 (수치)` 또는 `- 인물(이름): 상태` 형태로 간결하고 명확하게 투영합니다. 또한 상태창의 현재 위치(`Places`), 플레이어 주요 수치(`CustomStats`), 인벤토리(`Items`)를 `<entity_relationship>` 직후의 `<current_state>` 태그로 서사 AI에 동적 공급하여 인지 단절을 원천 해소합니다. 런타임 상태창 갱신(`UpdateContextStatus`) 시 `EntityNameResolver.ResolveCharacterKey`를 통해 오직 인물 전체명 또는 고유 이름 첫 어절 일치로만 표준 명칭 정규화를 수행하여 일반 직함/소속 키워드 충돌로 인한 기존 인물 상태 덮어쓰기를 원천 차단합니다.
+    - **계층적 하이브리드 인출 및 미등장 인물 Dense 배제**: 예산(3,000토큰)은 아래 순서로 배정되며, 첫 항목은 예산을 넘어도 최소 1개 포함됩니다.
+        1. **시드 고정 로어북 (3-H)**: `CHAR:` 시드가 제시 중인 창 동안 해당 신규 인물의 로어북(호감도 1단계 마스킹)을 최우선 배치하여, 예산이 포화되어도 신규 인물 묘사 근거(외양·말투·표면 태도)가 빠지지 않도록 보장합니다.
+        2. **Sparse 직접 매칭**: 엔트리 이름 또는 키워드가 검색 텍스트(직전 `model` 응답 + 현재 유저 입력, Turn 1에는 `<initial_scenario>` 본문)에 어절 경계로 매칭된 항목입니다. 매칭 시 `DefaultStickyTurns = 2`(트리거 턴 포함 총 3턴 활성)가 충전됩니다.
+        3. **확정 보충**: 현재 장소(`activePlaceNames`, 단일 `currentPlace`)와 활성 인물(`activeCharNames`)입니다. 활성 인물은 4-E 결정에 따라 단기 기억 버퍼 전체 + 최근 사건 불릿 3개 + 현재 입력을 `EntityNameResolver.ExtractCharacterNameTokens` 어절 단위로 광역 스캔하여, 대명사·약칭 구간에서도 로어북이 증발하지 않도록 합니다. 이 보충 항목은 Sparse 직접 매칭을 밀어내지 않습니다.
+        4. **Sticky 잔존**: 직전 턴 Sparse 매칭 항목만 해당하며, Dense 매칭에는 Sticky를 부여하지 않습니다.
+        5. **Dense 보충**: 시맨틱 유사도 `>= 0.75f` 항목을 유사도 내림차순 상위 최대 3개(`DefaultMaxDenseMatches = 3`)로 제한합니다. 상태창 `Chars`에 없는 인물 로어북은 Dense 경로로 인출하지 않으며, 미등장 인물 정보의 공식 유입 경로는 시드 고정(3-H)과 Sparse(본문 이름 등장)뿐입니다.
+*   **사건 불릿포인트 RAG (`GatedRAGRetriever`)**: 레거시 키워드 게이팅 데드코드를 전면 적출하고, 매 턴 계산된 768차원 유저 쿼리 임베딩을 실측 기반 순수 코사인 유사도(**$\ge 0.80f$**, Case 2 일상 행동 오탐 최댓값 `0.7914` 차단 및 Case 3 핀포인트 회상 `0.8627 ~ 0.9053` 보존) 스캔에 직결하여 상위 최대 5개(DefaultMaxResults=5)를 핀포인트 인출합니다. 인출 결과는 단일 원장 인덱스(`Index`) 발생 시간순으로 정렬하여 선후 인과 역전을 차단하며, 헤더에 `[떠오른 과거의 기억 - 현재 상태와 상충 시 현재 상태가 우선함]`을 명시하여 현재 상태 오판을 원천 방어합니다. (67턴 실측 Case 6에서 "동일 사건 재요약 `0.9152`"과 "같은 인물의 다른 사건 `0.9041 ~ 0.9154`" 유사도 분포가 겹쳐 MMR 중복 차단·원장 중복 드롭은 미적용 상태로 유지합니다.)
+*   **엔티티 상태 투영기 (`BiTemporalEntityProjector`), 명칭·경계 판정 엔진 (`EntityNameResolver`), 상태창 정합성 가드 (`UpdateContextStatus`)**:
+    - 상태창 인물을 `- 인물(이름): 상태 (수치)` 또는 `- 인물(이름): 상태` 형태로 간결하게 투영하며, 현재 위치(`Places`), 플레이어 주요 수치(`CustomStats`), 인벤토리(`Items`)를 `<entity_relationship>` 직후의 `<current_state>` 태그로 서사 AI에 동적 공급합니다.
+    - **StatusAI 출력 스키마**: `BuildStatusRequest`는 `currentPlace: string`(단일 장소, 세부 구역은 `"정식장소명 - 세부구역"`), `elapsedTime: "none" | "hours" | "days" | "months" | "years"`, `isSceneResolved`, `triggeredSeeds`를 출력합니다. 로어북의 정식 장소·아이템 명칭 목록(`<canonical_names>`)은 세션 동안 불변이므로 시스템 프롬프트의 `<custom_rules>` 뒤에 배치하여 캐시를 유지합니다. NPC 목록 규칙은 "기존 NPC 유지 및 신규 조우 NPC 추가(PC 제외)"로, 현재 장면에 없는 NPC가 목록에서 탈락하여 호감도 추적과 활성 인물 스캔이 끊기는 것을 방지합니다.
+    - **장소·아이템 정규화와 주인공 필터**: `ChapterContext.Places`는 하위 호환용 리스트 타입을 유지하되 항상 `[currentPlace]` 1개로 덮어쓰며(구형 `places` 배열 응답은 첫 원소로 폴백), 장소·아이템명은 `NormalizePlaceName`/`NormalizeItemName`으로 로어북 정식 명칭에 정규화합니다. 플레이어 지칭어(`당신`, `주인공`, `플레이어`, `PC`, `유저` 등)와 마스터 세계관에서 추출한 주인공 고유명사(`UpdateProtagonistNamesLocked`)는 `Chars`에서 코드로 제거합니다.
+    - **시간 경과 턴 호감도 상한 (4-C)**: 일반 턴(`none`/`hours`)에는 코드 상한을 두지 않고 세션별 `StatusUpdateGuide`를 신뢰합니다. `elapsedTime`이 `days`/`months`/`years`일 때만 `NarrativeContract.AffinityStatTerms` 명칭의 `"현재/최대"` 형식 스탯 상승폭을 `최대치 × (5% / 12% / 20%) × (1 - 이전값/최대치)`로 제한하며, 하락은 제한하지 않습니다. 상한은 코드에만 존재하므로 프롬프트 문구는 두지 않습니다.
 *   **사건 해결 변수 기반 서브컬처 에피소드 & 시드 엔진 (`<story_seeds>`, `isSceneResolved`, `triggeredSeeds`)**:
-    - **변수 트리거(`StatusPayload.IsSceneResolved`)**: 상태창 추적 API(`BuildStatusRequest`)가 최근 2턴 맥락(`<recent_context>`)과 직전 턴(`<latest_turn>`)을 종합하여 당면 사건(전투, 협상, 위기 등)이 일단락된 막간(Interlude/Lull) 상태인지를 `isSceneResolved: boolean`으로 판별합니다.
-    - **조건부 3대 풀 시드 주입 및 공간 맥락 우선순위**: 오직 `_currentContext.IsSceneResolved == true`이거나 유저가 명시적으로 `[빠른 진행]`(`fast_forward`)을 켰을 때만 로어북과 상태창을 교차 대조하여 ① `[미등장 인물 조우]`(`Pool A`: 동일 `Priority` 내에서 현재 위치 `Places`와 `InitialContact` 또는 장소 `NarrativeHook`이 연결된 인물을 최우선 정렬), ② `[장소/사건 훅]`(`Pool B`: 미방문 장소/세력/아이템의 `World.NarrativeHook`), ③ `[동료 유대 심화]`(`Pool C`: 호감도/신뢰도 $\ge 30$ 달성 시 1단계 `BOND:{Name}` 우선 해금 후, $\ge 60$ 달성 시 별도 막간에서 2단계 `BOND_SECRET:{Name}` 순차 해금) 최대 3개 시드를 `<story_seeds>` 및 추천 답변용 `<available_story_seeds>`로 주입합니다.
-    - **상태 전이 동기화(`SyncStateBasedSeedConsumptionLocked`) + Status LLM 화이트리스트 소모 판정(`StatusPayload.TriggeredSeeds`)**: 시작 거점(`Places`)과 소지품(`Items`), 등장인물(`Chars`)에 편입된 엔티티는 즉시 `ConsumedSeeds`에 자동 동기화되어 거점 이동이나 소모품 사용 후 `Priority: 0` 초기 거점/아이템이 재주입되는 Head-of-Line Blocking을 원천 차단합니다. 또한 단어 출현 기반 추측(`BondHookStopwords` 등)을 전면 폐기하고, 시드가 제시된 턴에만 `BuildStatusRequest`에 `<offered_story_seeds>`와 `triggeredSeeds: string[]` 필드를 주입하여 `Flash-Lite`가 실제 개시된 시드 키만 반환하도록 위임한 뒤 `UpdateContextStatus`에서 `_pendingStatusSeeds` 화이트리스트 대조로 확정 소모합니다.
+    - **시드 창(window) 상태 규칙**: 창은 `UpdateContextStatus`에서 개설하며(`fast_forward`만 `BuildNarrativeRequestAsync`에서 개설), 개설 시점에 제시 횟수(`SeedOfferCounts`)를 1회 증가시킵니다.
+        - 창 없음 + 장면 종료(LLM `isSceneResolved`, 또는 로어북 장소 엔티티 변경) + 쿨다운 통과(소모 후 2턴) → 새 창 개설.
+        - `elapsedTime >= days` 또는 `fast_forward` → 쿨다운을 무시하고 새 창 개설(진행 중인 창은 종료 후 재개설, 같은 턴에 시드가 소모되어 창이 닫힌 경우도 재개설).
+        - 창 진행 중 + 장면 종료 판정 → 기존 창 유지(재추출·제시 횟수 증가 없음). 창 기간에는 매 턴 `ActiveSeedKeys`에서 시드 문장을 다시 렌더링(호감도 마스킹 최신화)하여 본문 감지·StatusAI 화이트리스트를 복구합니다.
+        - 창 내 시드 소모 → 창 종료 + 쿨다운 시작 / 개설 후 3턴(`SeedWindowDurationTurns = 3`) 경과 → 쿨다운 없이 종료.
+    - **3대 풀과 기아 방지 정렬 (3-G)**: 각 풀은 **제시 횟수 오름차순 → `Priority` 오름차순**으로 정렬하여, 채택되지 않은 시드 1개가 후순위 시드를 무기한 차단하는 Head-of-Line Blocking을 해소합니다(안 쓴 시드는 소모하지 않음).
+        - ① `[미등장 인물 조우]`(`Pool A`): 같은 정렬 키 안에서는 현재 장소와 `InitialContact`/장소 `NarrativeHook`이 연결된 인물을 우선합니다. 시드 문장은 `[미등장 인물 조우] {Name} -> 초기 접점(...)`으로 축소하고, 외양·말투는 시드 고정 로어북(3-H)이 공급합니다.
+        - ② `[장소/사건 훅]`(`Pool B`): `세계관` 카테고리를 제외한 미방문 장소·아이템·세력/사건의 `NarrativeHook`입니다. Turn 0에는 오프닝 본문에 등장하거나 초기 소지품으로 지급된 `아이템` 카테고리만 `HOOK:` 소모로 등록하며, `장소`는 언급이 아닌 실제 방문 시 소모합니다.
+        - ③ `[동료 유대 심화]`(`Pool C`): 호감도/신뢰도 $\ge 30$에서 1단계 `BOND:{Name}`, $\ge 60$에서 2단계 `BOND_SECRET:{Name}`입니다. 1단계를 소화하지 못한 채 60에 도달하면 1단계는 지나간 이벤트로 자동 소모되며(창을 닫거나 쿨다운을 시작하지 않음), 시간 경과 턴이면 해당 인물의 `BondPayoff` 요약이 화면 밖 변화 지시에 포함됩니다.
+    - **소모 경로 분리**: `CHAR:`는 모델 응답 본문에 인물 이름이 실제로 등장했을 때만(`AddModelResponse`) 소모하며, StatusAI `triggeredSeeds`나 `Chars` 등록으로는 소모하지 않습니다(이름 없는 실루엣 등장 시 시드·로어북이 함께 증발하는 결함 방지). `HOOK:`은 `Places`/`Items` 상태 동기화, `BOND:`/`BOND_SECRET:`은 StatusAI `triggeredSeeds`(제시된 시드 화이트리스트 대조) 및 60 도달 자동 소모로 확정됩니다.
+    - **시간 경과 지시 (`time_skip_progression`)**: `elapsedTime >= days`이면 `PendingTimeSkip`에 다음 턴 지시를 기록하여 기존 메타 지시 뒤에 결합합니다. 화면 밖 인물·환경 변화 반영을 지시하고, 다음 턴에 실제로 제시될 시드가 있을 때만 `<story_seeds>` 중 1개 개막을 덧붙입니다.
 
 </memory_pipeline>
 
@@ -151,13 +170,13 @@ flowchart TB
 
 *   **4단계 통합 상태 기계(4-Stage Consolidated State Machine)**:
     1. **1단계 (청사진 및 마스터 세계관 통합 — 1회 호출)**: `<master_setting>` 전용 4대 번호 섹션 개조식 마스터 세계관(`worldviewOutline`)과 8~15개 그물망 로어북 기획(`connectedEntities`)을 단일 추론 공간에서 공동 설계(Co-Design)합니다.
-    2. **2단계 (2-Wave 통합 앙상블 구조화 로어북 — 2회 호출)**: 인위적인 마이크로 배치 분할(`batchSize = 3`) 없이, Wave 1에서 모든 비인물(장소·세계관·아이템) 무대 인프라를 `WorldLorebookArrayResponseSchema`(4대 필수 필드 강제) 기반 1회 통합 호출로 먼저 확정한 뒤, Wave 2에서 확정된 무대 전문(`<established_world_lore>`) 위에서 모든 등장인물 전원을 `CharacterLorebookArrayResponseSchema`(11대 필수 필드 강제) 기반 1회 통합 앙상블 캐스팅 호출로 동시 생성합니다. 각 필드는 `SanitizeCharacterDetails` / `SanitizeWorldDetails`를 통해 중복 라벨 래퍼나 바깥쪽 따옴표 없이 순수 값으로 정제되며, WPF 로어북 편집창([EditLorebookWindow.xaml](../../../GRC/GRC/Views/EditLorebookWindow.xaml)) 또한 카테고리(`인물` 11필드 / `장소·아이템·세계관` 4필드 / `기억` 자유 텍스트)에 따라 전용 구조화 입력 폼과 실시간 `<world_lore>` 렌더링 미리보기를 제공합니다.
+    2. **2단계 (2-Wave 통합 앙상블 구조화 로어북 — 2회 호출)**: 인위적인 마이크로 배치 분할(`batchSize = 3`) 없이, Wave 1에서 모든 비인물(장소·세계관·아이템) 무대 인프라를 `WorldLorebookArrayResponseSchema`(4대 필수 필드 강제) 기반 1회 통합 호출로 먼저 확정한 뒤, Wave 2에서 확정된 무대 전문(`<established_world_lore>`) 위에서 모든 등장인물 전원을 `CharacterLorebookArrayResponseSchema`(11대 필수 필드 강제) 기반 1회 통합 앙상블 캐스팅 호출로 동시 생성합니다. 각 필드는 `SanitizeCharacterDetails` / `SanitizeWorldDetails`를 통해 중복 라벨 래퍼나 바깥쪽 따옴표 없이 순수 값으로 정제되며, `speechTone`에는 기본 종결어미(반말/존댓말 등)와 문장 길이·호흡을 명시하고 샘플 대사의 어절 단위 말줄임표 도배를 지양하며 인물 간 화법·외형 틀이 동질화되지 않도록 하는 앙상블 분산 지침이 적용됩니다(숫자 상한 없음). WPF 로어북 편집창([EditLorebookWindow.xaml](../../../GRC/GRC/Views/EditLorebookWindow.xaml)) 또한 카테고리(`인물` 11필드 / `장소·아이템·세계관` 4필드 / `기억` 자유 텍스트)에 따라 전용 구조화 입력 폼과 실시간 `<world_lore>` 렌더링 미리보기를 제공합니다.
     3. **3단계 (오프닝 시나리오 선행 집필 — 1회 호출)**: JSON 이스케이프 및 개조식 문체 전이(Style Bleed)를 차단하기 위해 독립된 `text/plain` 문학 산문 모드로 첫 직면 장면을 집필합니다.
-    4. **4단계 (상태창·Turn 0 시딩 및 시스템 지시문 통합 — 1회 호출 + C# 하이브리드 컴파일러)**: 완성된 오프닝 본문(`<opening_scenario>`)을 기반으로 초기 스탯(`stats`), 수치 갱신 가이드(`guide`), Turn 0 초기 컨텍스트(`initialChars`/`initialPlaces`/`initialItems`, 인물 Key 정규화 포함), 그리고 세션 특화 비수치 GM 수칙 4·5번(`genreDirectives`)을 단일 JSON으로 추출하고 `CompileHybridSystemPrompt`를 통해 코어 3대 헌법(`CoreSystemDirectivesHeader`)과 즉시 결합합니다. 세션 최종 적용 시 [LorebookService.cs](../../../GRC/GRC/Services/LorebookService.cs)는 런타임 쿼리와 동일한 대칭 공간(`SEMANTIC_SIMILARITY`)으로 768차원 임베딩을 순서 보장형 병렬 발급합니다.
+    4. **4단계 (상태창·Turn 0 시딩 및 시스템 지시문 통합 — 1회 호출 + C# 하이브리드 컴파일러)**: 완성된 오프닝 본문(`<opening_scenario>`)을 기반으로 초기 스탯(`stats`), 수치 갱신 가이드(`guide`), Turn 0 초기 컨텍스트(`initialChars`/`initialPlaces` 단일 시작 장소 1곳/`initialItems` PC가 실제 소유·휴대 중인 소지품 0~4개, 인물 Key 정규화 및 오프닝 등장 `아이템` 카테고리 훅 `ConsumedSeeds` 선소모 포함), 그리고 세션 특화 비수치 GM 수칙 4·5번(`genreDirectives`)을 단일 JSON으로 추출하고 `CompileHybridSystemPrompt`를 통해 코어 3대 헌법(`CoreSystemDirectivesHeader`: 1번 객관적 감각 서술, 2번 속마음·중대 결정 불간섭 및 위임 턴 일상 반응 조건부 허용, 3번 현실적 인과율 판정)과 즉시 결합합니다. 기존 세션을 재적용하면 구버전 2번 조항이 신규 조건부 2번 조항으로 자동 교체됩니다. 세션 최종 적용 시 [LorebookService.cs](../../../GRC/GRC/Services/LorebookService.cs)는 런타임 쿼리와 동일한 대칭 공간(`SEMANTIC_SIMILARITY`)으로 768차원 임베딩을 순서 보장형 병렬 발급합니다.
 *   **100% C# 결정론적 무결성 관문 및 외과수술식 보정(`ReviewStepContentAsync` & `ReviseLorebooksSurgicallyAsync`)**:
     기존 단계별 LLM 자가 감사 재호출로 인한 자기강화 환각 및 토큰 낭비를 전면 제거하고, C# 파서와 정규식 기반의 즉시 결정론적 검수 관문(API 호출 0회)을 가동합니다. 기획된 로어북 항목 누락이나 인물 필수 대사(`"..."`) 누락 등 객관적 구조 결함이 적발되었을 때만 `[수정 대상: 항목명]` 태그를 생성하여 해당 항목만 핀포인트로 재생성·병합합니다.
 *   **에이전트 세션 자산 결정론적 검증 게이트 ([SessionAssetValidator.cs](../../../GRC/tests/GRC.Tests/SessionAssetValidator.cs) & [SessionAuditTests.cs](../../../GRC/tests/GRC.Tests/SessionAuditTests.cs), `Category=SessionAudit`)**:
-    [05_session_architect_agent_template.md](05_session_architect_agent_template.md) 기반 외부 에이전트가 생성한 3종 JSON 자산(`Preset.json`, `Session.json`, `FullHistory.json`)을 런타임 SSOT([NarrativeContract.cs](../../../GRC/GRC/Services/Cognitive/NarrativeContract.cs)의 `AffinityStatTerms`·`InitialScenarioAckText`, [LoreDetails.cs](../../../GRC/GRC/Models/LoreDetails.cs)의 구조화 스키마, [SessionArchitectService.cs](../../../GRC/GRC/Services/SessionArchitectService.cs)의 `CoreSystemDirectivesHeader`·정제기 고정점)로 직접 검증하여 눈대중 검수(Blind Audit)를 원천 차단합니다.
+    [05_session_architect_agent_template.md](05_session_architect_agent_template.md) 기반 외부 에이전트가 생성한 3종 JSON 자산(`Preset.json`, `Session.json`, `FullHistory.json`)을 런타임 SSOT([NarrativeContract.cs](../../../GRC/GRC/Services/Cognitive/NarrativeContract.cs)의 `AffinityStatTerms`·`InitialScenarioAckText`, [LoreDetails.cs](../../../GRC/GRC/Models/LoreDetails.cs)의 구조화 스키마, [SessionArchitectService.cs](../../../GRC/GRC/Services/SessionArchitectService.cs)의 `CoreSystemDirectivesHeader`·정제기 고정점, 그리고 `W03_TURN0_COUNTS` 단일 시작 거점·소지품 0~4개, `W09_QUOTE_ELLIPSIS_DENSITY`·`W10_SPEECH_TONE_OVERLAP` 말투 품질 경고, 진행 세션용 `W11_UNLISTED_CHAR_KEY`)로 직접 검증하여 눈대중 검수(Blind Audit)를 원천 차단합니다.
 
 </session_architect>
 
@@ -268,4 +287,3 @@ LLM 토큰 단위 스트리밍 출력과 사용자의 과거 대화 탐색(Upwar
   컨텐츠가 아래로 스트리밍 팽창할 때(`extentHeightChange > 0`)는 직전 프레임의 바닥 높이를 역산하여 사용자가 바닥에 있었는지를 정확히 판정(24px 허용오차 적용)하고, 접기/삭제 등 컨텐츠가 축소될 때(`extentHeightChange <= 0`)는 현재 가용 높이와 직접 비교함으로써 사용자의 스크롤 뷰포트를 강제로 하단으로 끌고 내려가는 스크롤 하이재킹(Scroll Hijacking)을 원천 차단했습니다.
 
 </smart_autoscroll>
-
