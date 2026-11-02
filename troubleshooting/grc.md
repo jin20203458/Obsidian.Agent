@@ -592,8 +592,44 @@ related:
 - `CoreSystemDirectivesHeader` 2번 조항("PC의 대사·행동·내면을 대신 서술하지 말고, PC의 선택이나 대응이 필요한 시점에서 서술을 멈추고 턴을 넘길 것")이 `auto_continue` 메타 지시("시간과 사건을 한 단계 진행")와 충돌하여, 모델이 PC 반응을 넘기지 못하고 같은 지점에 머무름.
 
 ### 3. 조치 및 관찰 포인트 (Action & Observation)
-- **조치 ([SessionArchitectService.cs](../../GRC/GRC/Services/SessionArchitectService.cs), [ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs))**: `CoreSystemDirectivesHeader` 2번을 조건부 L2 조항("PC의 속마음과 관계·수위·위험 결정은 대신 서술하지 말고 그 지점에서 멈추되, 유저가 입력한 행동·대사는 임의로 덧붙이지 않고, 유저가 진행을 위임한 턴에만 일상 행동·이동과 짧은 기능성 대답을 이어 서술")으로 교체하고, `auto_continue`·`fast_forward` 메타 지시에 `"이번 턴은 유저가 진행을 위임한 턴입니다."` 신호를 추가.
+- **조치 ([SessionArchitectService.cs](../../GRC/GRC/Services/SessionArchitectService.cs), [ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs))**: `CoreSystemDirectivesHeader` 2번을 조건부 L2 조항("PC의 속마음과 관계·수위·위험 결정은 대신 서술하지 말고 그 지점에서 멈추되, 유저가 입력한 행동·대사는 임의로 덧붙이지 않고, 유저가 진행을 위임한 턴에만 이전 대화에서 드러난 유저의 판단 기조·말투·태도를 일관되게 유지한 채 최소한의 일상 행동·이동과 짧은 기능성 대답만 이어 서술")으로 교체하고, `auto_continue`·`fast_forward` 메타 지시에 `"이번 턴은 유저가 진행을 위임한 턴입니다."` 신호와 함께 PC의 독자적 상황 주도 금지 및 이전 대화의 유저 판단 기조·말투·태도 참조 제약을 명시.
 - **기존 세션 호환**: 헤더는 세션 생성 시 `Preset.json`의 `SystemPrompt`에 복사되므로 코드 변경만으로는 기존 세션에 반영되지 않음. 기존 세션을 재적용(재컴파일)하면 `CompileHybridSystemPrompt`의 고정 헤더 중복 필터(`유저 캐릭터` 패턴)가 구버전 2번 조항을 제거하고 신규 2번 조항으로 자동 교체함(`CompileHybridSystemPrompt_WhenRecompilingLegacyHeader_DropsPcProxyRuleAndRenumbersGenreRules`). 재적용하지 않은 구버전 세션은 `Category=SessionAudit`에서 `F04_SYSPROMPT` 헤더 불일치로 실패하는 것이 정상임.
 - **실험 중 관찰 항목**: (1) 유저가 직접 입력한 턴에도 PC 대사·행동을 이어 쓰는지, (2) 고백·스킨십 진행·위험 감수 같은 관계·수위 결정을 PC 대신 내리는지, (3) PC 속마음(「」) 서술 발생 여부, (4) 턴당 출력 길이·`TokenLog.csv` 출력 토큰 증가, (5) `ReplySuggestionService` 추천 답변과 이미 서술된 PC 반응의 중복, (6) "계속" 연타 시 정체 해소 여부.
 - **잔존 PC 불간섭 지침**: `GenreDirectivesSpec`(장르 수칙 주어를 환경·NPC로 한정)과 기획 단계 폴백 수칙의 "PC의 태도·행동은 유저 선택에 맡길 것" 문구는 세션 설정이 PC 성격을 단정하지 않도록 하는 생성 규칙이므로 유지함.
 - **관찰 포인트**: 위임 턴(`auto_continue`·`fast_forward`)에서 일상 반응이 자연스럽게 넘어가면서 고백·스킨십 진행·위험 감수 지점에서만 멈추는지, 일반 유저 입력 턴에서 PC 대사·행동 임의 추가가 없는지 확인.
+
+
+---
+
+## 2026-11-02: [Resolved] 76턴 실플레이 세션 감사 — 3인칭 대사 소문 시드 오탐, 단독 로어북 교차 참조 정체성 누락, RunOnUIThread 타임아웃 크래시 및 StatusPayload 관용 역직렬화 보강
+
+### 1. 현상 (Symptom)
+- **이슈 1 (소문 언급 시드 소진 및 미대면 인물 상태창 등재)**: 동료 NPC가 대사(`"..."`) 안에서 미대면 인물을 소문·경고로 언급한 것만으로 `CHAR:` 시드가 즉시 소모되고, `StatusAI`가 미대면 인물을 `Chars` 및 `CustomStats`에 선등록하여 실제 조우 기회가 소멸함. 또한 Pool A에서 `Priority` 정렬이 공간적 접점 정렬보다 앞선 탓에 현재 장소와 연결된 인물이 후순위로 밀림.
+- **이슈 2 (`StatusUpdateGuide` 인물별 규칙 분리에 따른 상승폭 편차)**: 시작 히로인과 신규 조우 인물의 호감도 규칙이 분리 서술되어 일반 턴 상승폭이 비대칭으로 작동함.
+- **이슈 3 (단독 로어북 채택 시 교차 참조 개체 정체성 왜곡)**: 장소나 타 인물 로어북 본문에 미채택 인물의 이름만 언급될 때 서사 모델이 해당 인물의 종족·신분을 알지 못해 설정과 다르게 묘사함.
+- **이슈 4 (백그라운드 상태창 UI 스레드 충돌 및 JSON 타입 불일치 드랍)**:
+  - `DialogService.RunOnUIThread`의 `500ms` 타임아웃 초과 시 백그라운드 스레드에서 `action()`을 직접 실행하는 폴백이 작동하여 `ObservableCollection.Clear()` 호출 시 `NotSupportedException`이 발생하고 직후의 `Session.json` 저장이 스킵됨.
+  - `Flash-Lite`가 `uiBadges`에 숫자(`30`), `isSceneResolved`에 문자열(`"false"`), `currentPlace`에 1원소 배열(`["장소"]`)을 출력할 때 `StatusPayload` 역직렬화가 무음 실패함.
+- **이슈 5 (사건 원장 주인공 주어 불일치)**: 세계관 3번 섹션의 주인공 본명 표기 형식 편차로 본명 추출이 누락되어 사건 원장 불릿 주어가 `'플레이어'`로 기록됨.
+
+### 2. 원인 (Root Cause)
+1. `AddModelResponse`가 지문과 큰따옴표 대사를 구분하지 않고 단순 이름 포함 여부만 검사했으며, `UpdateContextStatus`에 미조우 로어북 인물 등록 차단 가드가 없었음.
+2. `CognitivePromptAssembler`가 채택된 로어북 본문만 주입하고 본문 내 언급된 미채택 로어북 개체의 최소 정체성 정보를 제공하지 않았음.
+3. `IDialogService.RunOnUIThread`가 단위 테스트 Deadlock 회피를 위해 넣었던 `500ms` 타임아웃 + 백그라운드 직접 실행 폴백을 실제 WPF 앱(`Application.Current is App`)에도 동일 적용했음.
+4. `LlmJsonParser.LenientOptions`에 `string` 및 `bool` 프로퍼티에 대한 관용 컨버터가 없었음.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+- **지문/대사 분리 및 미조우 인물 상태창 가드 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
+  - `SplitNarrationAndQuotes`와 `IsCharacterEncounteredInNarrative`를 통해 지문(`narrationOnly`) 등장 또는 대사(`quotesOnly`) 내 1인칭 자기소개(`내 이름은 ...`, `나는 ...`, `...라고 합니다`)일 때만 현장 조우로 판정.
+  - `UpdateContextStatus`에서 이번 턴에 실제 조우하지 않은 미대면 로어북 인물은 `StatusAI`가 반환하더라도 `Chars` 및 `CustomStats` 등록을 차단.
+  - Pool A 정렬 순서를 `OrderBy(OfferCount).ThenByDescending(IsSpatiallyMatchedToCurrentPlaces).ThenBy(Priority)`로 교정.
+- **1-hop 참조 개체 1줄 요약 자동 주입 ([CognitivePromptAssembler.cs](../../GRC/GRC/Services/Cognitive/CognitivePromptAssembler.cs))**:
+  - 채택된 로어북 본문에 언급된 미채택 로어북 개체의 `RoleSummary` / `IdentitySummary` 1줄을 `<world_lore>` 하단에 `- [참조 개체 요약] {Name} ({Category}): {Summary}`로 비재귀 병기.
+- **STA 디스패처 안전 실행 및 관용 JSON 컨버터 ([IDialogService.cs](../../GRC/GRC/Services/IDialogService.cs), [ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs), [LlmJsonParser.cs](../../GRC/GRC/Helpers/LlmJsonParser.cs))**:
+  - `RunOnUIThread`에서 `500ms` 타임아웃 및 백그라운드 직접 실행 폴백을 제거하고, `Application.Current is not App`(단위 테스트)일 때만 인라인 실행하며 실제 WPF 앱에서는 반드시 `dispatcher.Invoke(action)`으로 STA 스레드에서 실행.
+  - `LenientStringConverter`(`ReadAsPropertyName` 포함) 및 `LenientBooleanConverter`를 `LlmJsonParser.LenientOptions`에 등록하고, `ChatWorkflowService`는 `result.IsSuccess`일 때만 상태창 API를 호출.
+- **4턴 주기 앵커(`_requiresHighQualityAnchor` / `ThinkingLevel.high`) 제거 및 `ThinkingLevel.medium` 단일화 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs), [ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs))**:
+  - 단기 기억 슬라이싱(4턴 주기)마다 프리픽스 캐시 초기화와 `ThinkingLevel.high`(추론 토큰 1,000~3,100개)가 겹쳐 15~25초 지연이 발생하는 병목을 제거하고, 전 구간 `ThinkingLevel.medium`으로 통일.
+- **핵심 부정 제약 (Never use X)**:
+  - **절대 실제 WPF 앱(`Application.Current is App`)에서 Dispatcher 타임아웃 후 백그라운드 스레드에서 UI 컬렉션 변경 액션을 직접 폴백 실행하지 말 것.** `NotSupportedException` 크래시와 세션 저장 누락을 유발함.
+  - **절대 큰따옴표 대사 내부의 3인칭 이름 언급만으로 `CHAR:` 시드를 소모하거나 미대면 로어북 인물을 상태창에 등록하지 말 것.**
