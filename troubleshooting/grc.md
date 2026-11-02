@@ -630,6 +630,9 @@ related:
   - `LenientStringConverter`(`ReadAsPropertyName` 포함) 및 `LenientBooleanConverter`를 `LlmJsonParser.LenientOptions`에 등록하고, `ChatWorkflowService`는 `result.IsSuccess`일 때만 상태창 API를 호출.
 - **4턴 주기 앵커(`_requiresHighQualityAnchor` / `ThinkingLevel.high`) 제거 및 `ThinkingLevel.medium` 단일화 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs), [ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs))**:
   - 단기 기억 슬라이싱(4턴 주기)마다 프리픽스 캐시 초기화와 `ThinkingLevel.high`(추론 토큰 1,000~3,100개)가 겹쳐 15~25초 지연이 발생하는 병목을 제거하고, 전 구간 `ThinkingLevel.medium`으로 통일.
+- **무중복 지연 장기 이관(`LongTermArchiveTriggerBullets = 20`), 연대기 한도 확장(`2,500자`), RAG 유사 중복 불릿 제거(`DeduplicationSimilarityThreshold = 0.88f`) ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs), [GatedRAGRetriever.cs](../../GRC/GRC/Services/Cognitive/GatedRAGRetriever.cs))**:
+  - 40턴(`MediumTermThreshold = 10`) 도달 시에는 챕터 번호만 전환하고, 새 챕터 불릿이 `20개` 이상 쌓였을 때 이전 완료 챕터를 장기 연대기(`최대 2,500자`)로 요약·이관함으로써 `<macro_chronicle>`과 `<internal_chronicle_facts>` 간 중복을 0건으로 제거하고 상시 20~52개(약 25~64턴)의 불릿을 유지.
+  - `GatedRAGRetriever.RetrieveRecalledHistory`에서 이미 선택된 불릿과 코사인 유사도가 `0.88f` 이상인 인접/중복 불릿을 건너뛰어 5개 회상 슬롯의 사건 다양성을 확보.
 - **핵심 부정 제약 (Never use X)**:
   - **절대 실제 WPF 앱(`Application.Current is App`)에서 Dispatcher 타임아웃 후 백그라운드 스레드에서 UI 컬렉션 변경 액션을 직접 폴백 실행하지 말 것.** `NotSupportedException` 크래시와 세션 저장 누락을 유발함.
   - **절대 큰따옴표 대사 내부의 3인칭 이름 언급만으로 `CHAR:` 시드를 소모하거나 미대면 로어북 인물을 상태창에 등록하지 말 것.**

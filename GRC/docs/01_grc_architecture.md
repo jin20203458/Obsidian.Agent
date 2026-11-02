@@ -40,16 +40,16 @@ flowchart TB
         
         subgraph TIERS ["3-Tier Memory & Reasoning Pipeline"]
             M1["단기 기억 (Raw History): 최근 14개 메시지 (7턴 원문, ShortTermThreshold=14)"]
-            M2["사건 불릿 원장 (Single Event Ledger): 단일 불변 원장 무손실 누적 (Append-Only)<br>- 상시 노출: 장기 미요약 불릿(Chapter > LastSummarizedChapter) 전량, 최소 15개 보장 (MinActiveBullets)<br>- 과거 회상 RAG: 상시 노출의 정확한 여집합 (요약 완료 챕터 불릿)"]
-            M3["장기 기억 (Macro Chronicle): 챕터 마감(10회 누적, MediumTermThreshold=10) 즉시 Gemini Pro 1,500자 산문 병합"]
+            M2["사건 불릿 원장 (Single Event Ledger): 단일 불변 원장 무손실 누적 (Append-Only)<br>- 상시 노출: 장기 미요약 불릿(Chapter > LastSummarizedChapter) 전량 무중복 유지 (상시 20~52개)<br>- 과거 회상 RAG: 요약 완료 챕터 불릿(Chapter <= LastSummarizedChapter) 전량 (중복 0건)"]
+            M3["장기 기억 (Macro Chronicle): 신규 챕터 불릿 20개(LongTermArchiveTriggerBullets=20) 축적 시 이전 완료 챕터를 Gemini Pro 2,500자 산문 병합"]
             
             M1 -->|"14개 메시지 도달 시 8개(4턴, ChunkSize=8) 절삭 후 Flash-Lite 팩트 추출"| M2
-            M2 -->|"10회 누적(80개 메시지 = 40턴 대화) 즉시 비동기 연대기 병합"| M3
+            M2 -->|"10회 누적(40턴)마다 챕터 번호 전환, 신규 챕터 불릿 20개 도달 시 이전 챕터 비동기 연대기 병합"| M3
         end
         
         subgraph AUXILIARY ["Selective Auxiliary Cognitive Engines (2-Core RAG)"]
             HL["하이브리드 로어북 RAG (HybridLorebookRetriever)<br>- 시드 고정 인물(3-H) -> Sparse 이름/키워드 일치 -> 활성 인물/현재 장소 -> Sticky(Sparse 전용 2턴) -> Dense 순 예산 배정<br>- Dense 768차원 유사도 (>=0.75f, 최대 3개, Sticky 미부여, 미등장 인물 배제)"]
-            GR["사건 불릿포인트 RAG (GatedRAGRetriever)<br>- 단일 원장 과거 풀 대상 시맨틱 임베딩 유사도 (>=0.80f) 직결 + 원장 인덱스(Index) 시간순 정렬"]
+            GR["사건 불릿포인트 RAG (GatedRAGRetriever)<br>- 단일 원장 과거 풀 대상 시맨틱 임베딩 유사도 (>=0.80f) + 채택 불릿 간 유사 중복 필터링 (<0.88f) + 원장 인덱스(Index) 시간순 정렬"]
             BP["엔티티 상태 투영기 (BiTemporalEntityProjector)<br>- 상태창 인물 상태/수치 1줄 투영 (- 인물(이름): 상태 (수치))"]
         end
         
@@ -77,14 +77,14 @@ flowchart TB
 ### 3) 사건 불릿 원장 (Single Event Ledger 및 [제N장] 시간축 앵커)
 *   **단일 원장 무손실 누적 (Append-Only)**: 절삭된 8개 메시지는 **Gemini 3.5 Flash-Lite** 모델을 통해 대명사('그', '그녀' 등)를 배제하고 `[원인/배경 + 명시적 고유명사 주체 + 행동/대화/사건 + 결과/관계·상태 변화]`를 담은 1~2문장의 자기완결형 인과 팩트 불릿(최대 3~5개)으로 추출됩니다. 물리적 사건뿐만 아니라 인물 간의 의미 있는 감정/신뢰 변화, 호칭·태도의 전환, 공유된 정서적 순간과 개인적 약속, 그리고 대화를 통해 새로 전해 들은 미방문 장소나 미대면 인물의 핵심 정체성(신분·직책·종족·역할) 단서를 고유명사와 함께 추출하여 서브컬처 장르의 관계 서사 연속성을 보존합니다. 추출 프롬프트는 정적 규칙/TypeScript 스키마를 `SystemInstruction`으로 물리 분리하여 매 4턴마다 구글 서버의 **KV Cache를 100% 재사용**하며, `Temperature: null` 설정을 통해 Flash-Lite 모델의 무한 반복 루프를 원천 차단합니다. 응답은 `LlmJsonParser`를 통해 내결함성 파싱(프리앰블 스킵 및 잘린 JSON 복구)되며, Google의 차세대 통일 임베딩(`gemini-embedding-001`, MRL 768차원, 서울 `asia-northeast3` 리전)과 함께 `_currentContext.EventLedgers` 단일 리스트에 영구 누적됩니다.
 *   **가짜 Turn 메타태그 완전 적출**: 4턴 배치 단위로 동일하게 찍히던 왜곡된 가짜 Turn 번호를 완전히 제거하고, 단일 원장 인덱스(`Index`)를 통해 100% 발생 시간순 인과관계를 보존합니다.
-*   **장기 미요약 불릿 무손실 상시 노출(`_lastSummarizedChapter`) 및 회상 풀 여집합 분할**:
-    - **상시 노출 칸 (`<internal_chronicle_facts>`)**: 장기 연대기 병합에 실제 성공한 마지막 장 번호(`_lastSummarizedChapter`)보다 뒤의 불릿(`Chapter > _lastSummarizedChapter`)은 개수 제한 없이 전량 노출하고, 최소 15개(`MinActiveBullets = 15`)를 보장합니다. 이로써 챕터 말미에도 연대기에 아직 반영되지 않은 사건이 상시 칸에서 밀려나는 중기↔장기 기억 공백을 제거합니다. 장 번호가 변경될 때만 `[제N장]` 그룹 헤더를 1회 출력하며, 헤더에 `(현재 제N장 진행 중)`을 명시합니다.
-    - **과거 회상 RAG 풀 (`<recalled_history>`)**: `MemoryManagerService`가 상시 노출 칸의 정확한 여집합(연대기로 병합 완료된 앞쪽 불릿)을 `GatedRAGRetriever` 검색 대상으로 분할하여, 연대기 요약 이후에도 과거 챕터의 구체적 고유명사·약속을 핀포인트로 회상합니다.
-    - **영구 저장**: `_lastSummarizedChapter`는 `ExportSession` 시 `ChapterContext.LastSummarizedChapter`로 `Session.json`에 기록되고, 복원 시 그대로 사용됩니다. 필드가 없는 구버전 세션(`-1`)만 `ChapterCount - 1`로 추론합니다(요약 실패 장의 불릿이 상시 칸에서 누락되는 결함 방지).
+*   **장기 미요약 불릿 무중복 상시 노출(`_lastSummarizedChapter`) 및 회상 풀 이분할**:
+    - **상시 노출 칸 (`<internal_chronicle_facts>`)**: 장기 연대기 병합에 실제 성공한 마지막 장 번호(`_lastSummarizedChapter`)보다 뒤의 불릿(`Chapter > _lastSummarizedChapter`)을 개수 제한 없이 전량 노출합니다. 새 챕터 불릿이 20개(`LongTermArchiveTriggerBullets = 20`) 쌓일 때까지 이전 챕터의 장기 요약을 보류하므로, 요약 완료된 불릿을 중복으로 남겨두지 않고도 항상 최소 20개~최대 52개(약 25~64턴 분량)의 미요약 불릿이 무중복으로 상시 유지됩니다. 장 번호가 변경될 때만 `[제N장]` 그룹 헤더를 1회 출력하며, `current_chapter` 속성에 현재 진행 장 번호를 명시합니다.
+    - **과거 회상 RAG 풀 (`<recalled_history>`)**: 장기 연대기로 요약 완료된 챕터의 불릿(`Chapter <= _lastSummarizedChapter`) 전량을 `GatedRAGRetriever` 검색 대상으로 100% 이관하여, `<macro_chronicle>`과 `<internal_chronicle_facts>` 간의 중복을 0건으로 제거하면서도 과거 챕터의 구체적 고유명사·약속을 핀포인트로 회상합니다.
+    - **영구 저장 및 서사 열람 UI 동기화**: `_lastSummarizedChapter`는 `ExportSession` 시 `ChapterContext.LastSummarizedChapter`로 `Session.json`에 기록되고, 복원 시 그대로 사용됩니다. 필드가 없는 구버전 세션(`-1`)만 `ChapterCount - 1`로 추론합니다. 또한 `_currentContext.Plot`은 항상 미요약 활성 챕터(`Chapter > _lastSummarizedChapter`) 전체를 챕터별로 묶어 표시하며, 장기 요약 완료 시 요약된 챕터를 제거하여 서사 열람 UI에서도 공백이나 중복이 발생하지 않습니다.
 
-### 4) 장기 연대기 (Macro Chronicle 즉시 병합)
-*   과거 레거시 3개 챕터 지연 대기 큐(`_mediumBuffers`, `PrevContexts`)를 전면 폐지하고, **10회 압축 누적(80개 메시지 = 40턴 대화, `MediumTermThreshold = 10`)으로 챕터가 마감되는 즉시** 해당 장의 불릿들을 **Gemini Pro** 모델에 비동기 전달합니다.
-*   **살리언스 증발(Salience Evaporation)** 기법을 적용하여 1,500자 이내의 대서사 산문 연대기(`_longTermSummary`)로 즉시 병합 보존하고, 병합에 성공했을 때만 `_lastSummarizedChapter`를 해당 장 번호로 갱신합니다.
+### 4) 장기 연대기 (Macro Chronicle 무중복 지연 이관)
+*   **챕터 번호 전환(40턴)과 장기 요약 이관(신규 챕터 불릿 20개) 분리**: 10회 중기 압축 누적(80개 메시지 = 40턴 대화, `MediumTermThreshold = 10`) 시에는 `_chapterCount`만 다음 장으로 전환하고, 이후 새 챕터(`Chapter == _chapterCount`)에 불릿이 20개(`LongTermArchiveTriggerBullets = 20`, 약 24턴 분량) 이상 축적되었을 때 미요약 완료 챕터(`_lastSummarizedChapter < Chapter < _chapterCount`)의 불릿들을 **Gemini Pro** 모델에 비동기 전달합니다.
+*   **살리언스 증발(Salience Evaporation)** 기법을 적용하여 **2,500자 이내**의 대서사 산문 연대기(`_longTermSummary`)로 병합 보존하고, 병합에 성공했을 때만 `_lastSummarizedChapter`를 해당 장 번호로 갱신합니다(일시적 통신 오류로 실패 시 다음 중기 압축 주기에 자동 재시도).
 
 ### 5) 보조 인지 엔진 (2-Core RAG & Relational Projector)
 *   **구조화 로어북 SSOT 스키마 (`CharacterLoreDetails` / `WorldLoreDetails`), 하이브리드 로어북 RAG (`HybridLorebookRetriever`), 호감도 단계별 3중 스포일러 마스킹 (`MaskLorebooksForPrompt` & `LoreRenderer`)**:
@@ -97,7 +97,7 @@ flowchart TB
         4. **Sticky 잔존**: 직전 턴 Sparse 매칭 항목만 해당하며, Dense 매칭에는 Sticky를 부여하지 않습니다.
         5. **Dense 보충**: 시맨틱 유사도 `>= 0.75f` 항목을 유사도 내림차순 상위 최대 3개(`DefaultMaxDenseMatches = 3`)로 제한합니다. 상태창 `Chars`에 없는 인물 로어북은 Dense 경로로 인출하지 않으며, 미등장 인물 정보의 공식 유입 경로는 시드 고정(3-H)과 Sparse(본문 이름 등장)뿐입니다.
         6. **1단계 참조 개체 1줄 요약 자동 병기 (`CognitivePromptAssembler.AppendReferencedEntitySummaries`)**: 이번 턴에 채택된 로어북 본문(`Content`) 내에 이름이 언급(`EntityNameResolver.ContainsEntityMention`)되었으나 직접 채택되지 않은 타 로어북이 있을 경우, 전체 본문 인출이나 다단계 재귀 없이 해당 개체의 1줄 핵심 정의(`Character.RoleSummary` 또는 `World.IdentitySummary`)만 `- [참조 개체 요약] {Name} ({Category}): {Summary}` 형태로 `<world_lore>` 하단에 1단계 병기하여 단독 로어북 인출 시 정체성·종족·직책 오인을 차단합니다.
-*   **사건 불릿포인트 RAG (`GatedRAGRetriever`)**: 레거시 키워드 게이팅 데드코드를 전면 적출하고, 매 턴 계산된 768차원 유저 쿼리 임베딩을 실측 기반 순수 코사인 유사도(**$\ge 0.80f$**, Case 2 일상 행동 오탐 최댓값 `0.7914` 차단 및 Case 3 핀포인트 회상 `0.8627 ~ 0.9053` 보존) 스캔에 직결하여 상위 최대 5개(DefaultMaxResults=5)를 핀포인트 인출합니다. 인출 결과는 단일 원장 인덱스(`Index`) 발생 시간순으로 정렬하여 선후 인과 역전을 차단하며, 헤더에 `[떠오른 과거의 기억 - 현재 상태와 상충 시 현재 상태가 우선함]`을 명시하여 현재 상태 오판을 원천 방어합니다. (67턴 실측 Case 6에서 "동일 사건 재요약 `0.9152`"과 "같은 인물의 다른 사건 `0.9041 ~ 0.9154`" 유사도 분포가 겹쳐 MMR 중복 차단·원장 중복 드롭은 미적용 상태로 유지합니다.)
+*   **사건 불릿포인트 RAG (`GatedRAGRetriever`)**: 레거시 키워드 게이팅 데드코드를 전면 적출하고, 매 턴 계산된 768차원 유저 쿼리 임베딩을 실측 기반 순수 코사인 유사도(**$\ge 0.80f$**, Case 2 일상 행동 오탐 최댓값 `0.7914` 차단 및 Case 3 핀포인트 회상 `0.8627 ~ 0.9053` 보존) 스캔에 직결하여 상위 최대 5개(`DefaultMaxResults = 5`)를 핀포인트 인출합니다. 채택 과정에서는 이미 선택된 불릿과 코사인 유사도가 `DeduplicationSimilarityThreshold = 0.88f` 이상인 동일 장면·반복 사건 불릿을 건너뛰고 차순위 독립 사건을 채택하여 5개 슬롯의 회상 다양성을 보장합니다. 인출 결과는 단일 원장 인덱스(`Index`) 발생 시간순으로 정렬하여 선후 인과 역전을 차단하며, `<recalled_history priority="secondary">` 속성으로 현재 상태 우위를 명시합니다.
 *   **엔티티 상태 투영기 (`BiTemporalEntityProjector`), 명칭·경계 판정 엔진 (`EntityNameResolver`), 상태창 정합성 가드 (`UpdateContextStatus`)**:
     - 상태창 인물을 `- 인물(이름): 상태 (수치)` 또는 `- 인물(이름): 상태` 형태로 간결하게 투영하며, 현재 위치(`Places`), 플레이어 주요 수치(`CustomStats`), 인벤토리(`Items`)를 `<entity_relationship>` 직후의 `<current_state>` 태그로 서사 AI에 동적 공급합니다.
     - **StatusAI 출력 스키마**: `BuildStatusRequest`는 `currentPlace: string`(단일 장소, 세부 구역은 `"정식장소명 - 세부구역"`), `elapsedTime: "none" | "hours" | "days" | "months" | "years"`, `isSceneResolved`, `triggeredSeeds`를 출력합니다. 로어북의 정식 장소·아이템 명칭 목록(`<canonical_names>`)은 세션 동안 불변이므로 시스템 프롬프트의 `<custom_rules>` 뒤에 배치하여 캐시를 유지합니다. NPC 목록 규칙은 "기존 NPC 유지 및 신규 조우 NPC 추가(PC 제외)"로, 현재 장면에 없는 NPC가 목록에서 탈락하여 호감도 추적과 활성 인물 스캔이 끊기는 것을 방지합니다.
