@@ -263,6 +263,7 @@ sequenceDiagram
 * **오디오 재생 스레드 안전성 ([AudioService.cs](../../../GRC/GRC/Services/AudioService.cs))**: `MediaPlayer` 인스턴스의 STA 스레드 친화성을 보장하기 위해 생성자에서 UI `Dispatcher`를 캡처하고, 모든 재생 및 정지 명령을 디스패처로 보호했습니다.
 * **타이핑 사운드 수명주기 관리 ([ChatWorkflowService.cs](../../../GRC/GRC/Services/ChatWorkflowService.cs))**: 텍스트 타이핑 효과음의 시작과 정지를 스트리밍 루프 및 `try-finally` 블록 내부에 결합하여 예외 발생 시에도 소리가 무한 반복되는 누수를 방지했습니다.
 * **스탯 UI 파싱 팩토리 ([StatusPayload.cs](../../../GRC/GRC/Models/StatusPayload.cs))**: 뷰모델에 흩어져 있던 비정형 스탯 문자열 파싱 로직을 `CustomStatUI.Create` 도메인 팩토리 메서드로 이전하여 `CultureInfo.InvariantCulture`, finite 검증 등 방어적 파싱을 일원화했습니다.
+* **고밀도(High-SNR) 4-슬롯 답변 추천 엔진 ([ReplySuggestionService.cs](../../../GRC/GRC/Services/ReplySuggestionService.cs) & [MemoryManagerService.cs](../../../GRC/GRC/Services/MemoryManagerService.cs))**: `BuildReplySuggestionContext`를 통해 과거 누적 줄거리(`Plot`)와 서술자 전용 NPC 설정(`SpeechTone` 등)을 배제하고 `<protagonist_profile>`(주인공 설정), `<active_scene_lore>`(현장 장소·인물 외형/역할), `<inactive_world_lore>`(타 장소·이미 조우한 현장 외 인물·현재 보유 소지품 1줄 카탈로그), `<current_snapshot>`, 그리고 `IsSceneResolved` 여부와 무관하게 상시 추출(미조우 인물 본명 `'누군가'` 마스킹 포함)되는 `<available_story_seeds>`만을 경량 조립합니다. 여기에 최근 대화 2턴(`<recent_conversation>`)과 겹치지 않는 이전 순수 유저 입력 최대 6개(`<user_recent_inputs_for_style>`)를 분리 주입하여, `Flash-Lite`가 유저 고유의 말투·어미를 복제하면서도 과거 대사 재탕이나 소모 아이템 환각 없이 4가지 장르 중립 기능 슬롯(`1. 정면 호응`, `2. 주도권/환기`, `3. 현장/소지품 활용`, `4. 국면 전환/다음 동선 출발`) 선택지를 생성합니다.
 
 </domain_service_extraction>
 
