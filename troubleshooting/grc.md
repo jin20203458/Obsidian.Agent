@@ -630,9 +630,14 @@ related:
   - `LenientStringConverter`(`ReadAsPropertyName` 포함) 및 `LenientBooleanConverter`를 `LlmJsonParser.LenientOptions`에 등록하고, `ChatWorkflowService`는 `result.IsSuccess`일 때만 상태창 API를 호출.
 - **4턴 주기 앵커(`_requiresHighQualityAnchor` / `ThinkingLevel.high`) 제거 및 `ThinkingLevel.medium` 단일화 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs), [ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs))**:
   - 단기 기억 슬라이싱(4턴 주기)마다 프리픽스 캐시 초기화와 `ThinkingLevel.high`(추론 토큰 1,000~3,100개)가 겹쳐 15~25초 지연이 발생하는 병목을 제거하고, 전 구간 `ThinkingLevel.medium`으로 통일.
-- **무중복 지연 장기 이관(`LongTermArchiveTriggerBullets = 20`), 연대기 한도 확장(`2,500자`), RAG 유사 중복 불릿 제거(`DeduplicationSimilarityThreshold = 0.88f`) ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs), [GatedRAGRetriever.cs](../../GRC/GRC/Services/Cognitive/GatedRAGRetriever.cs))**:
+- **무중복 지연 장기 이관(`LongTermArchiveTriggerBullets = 20`), 연대기 한도 확장(`2,500자`), RAG 유사 중복 불릿 제거(`DeduplicationSimilarityThreshold = 0.915f`) ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs), [GatedRAGRetriever.cs](../../GRC/GRC/Services/Cognitive/GatedRAGRetriever.cs))**:
   - 40턴(`MediumTermThreshold = 10`) 도달 시에는 챕터 번호만 전환하고, 새 챕터 불릿이 `20개` 이상 쌓였을 때 이전 완료 챕터를 장기 연대기(`최대 2,500자`)로 요약·이관함으로써 `<macro_chronicle>`과 `<internal_chronicle_facts>` 간 중복을 0건으로 제거하고 상시 20~52개(약 25~64턴)의 불릿을 유지.
-  - `GatedRAGRetriever.RetrieveRecalledHistory`에서 이미 선택된 불릿과 코사인 유사도가 `0.88f` 이상인 인접/중복 불릿을 건너뛰어 5개 회상 슬롯의 사건 다양성을 확보.
+  - `GatedRAGRetriever.RetrieveRecalledHistory`에서 이미 선택된 불릿과 코사인 유사도가 `0.915f` 이상인 인접/중복 불릿을 건너뛰어 5개 회상 슬롯의 사건 다양성을 확보.
+- **131턴 실플레이 추가 검증 — 장소 `HOOK:` 대사 오탐 차단, 지연 통성명 `CHAR:` 동기화, 하룻밤 수면 `elapsedTime` 오판 교정 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
+  - **장소 `HOOK:` 시드 상태 기반 소모 일원화**: `Category == "장소"`인 `HOOK:` 시드는 `StatusAI.TriggeredSeeds`에서 제외하고 오직 실제 방문(`Places`/`currentPlace` 상태 전이 시 `SyncStateBasedSeedConsumptionLocked`)으로만 소모하도록 격리하여, 대사 내 차기 행선지 제안(`"야광초 군락..."`)으로 인한 조기 소모를 원천 차단.
+  - **지연 통성명 `CHAR:` 시드 동기화**: 첫 조우 턴(Turn 88)에 인물이 익명(`"백색 이무기"`)으로 등장하면서 동반 `HOOK:` 시드가 먼저 소모되어 시드 창이 닫힌 뒤 다음 턴(Turn 89)에 통성명(`"날 설하라 부르더구나"`)하여 `Chars`에 등재되는 경우, `SyncStateBasedSeedConsumptionLocked`가 `context.Chars`에 등록된 로어북 인물의 `CHAR:{Name}`을 `ConsumedSeeds`에 자동 동기화하도록 보강(고어체 1인칭 자기소개 `나를/날 ... 라 부르더구나` 정규식 포함).
+  - **하룻밤 수면 `elapsedTime` 판정 기준 명시**: `BuildStatusRequest` Rule 5에 `"hours": 몇 시간 경과 및 하룻밤 수면·다음 날 아침 기상`, `"days": 이번 턴 안에서 최소 이틀(2일·사흘·며칠) 이상이 새로 흐른 경우(밤새 자고 일어난 익일 아침은 제외)`를 명시하여 하룻밤 수면 후 아침 기상이 `days`로 오판되어 불필요한 `time_skip_progression`을 유발하는 현상을 해소.
 - **핵심 부정 제약 (Never use X)**:
   - **절대 실제 WPF 앱(`Application.Current is App`)에서 Dispatcher 타임아웃 후 백그라운드 스레드에서 UI 컬렉션 변경 액션을 직접 폴백 실행하지 말 것.** `NotSupportedException` 크래시와 세션 저장 누락을 유발함.
   - **절대 큰따옴표 대사 내부의 3인칭 이름 언급만으로 `CHAR:` 시드를 소모하거나 미대면 로어북 인물을 상태창에 등록하지 말 것.**
+  - **절대 `장소` 카테고리의 `HOOK:` 시드를 `StatusAI.TriggeredSeeds`로 소모하지 말 것.** 대사 내 행선지 언급만으로 미방문 장소 시드가 소멸함.
