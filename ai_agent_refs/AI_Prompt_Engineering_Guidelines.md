@@ -9,7 +9,7 @@ related:
 ---
 # AI Prompt Engineering Guidelines
 
-> **근거 및 출처 (SSOT)**: 본 지침서의 학술 논문 18편 및 Google DeepMind / Anthropic / OpenAI 등 핵심 산업 기술 가이드 13건(총 31건)의 상세 서지정보와 실증 근거는 [AI_Prompt_Engineering_References.md](./AI_Prompt_Engineering_References.md)에서 일원화 관리합니다.
+> **근거 및 출처 (SSOT)**: 본 지침서의 학술 논문 19편 및 Google DeepMind / Anthropic / OpenAI 등 핵심 산업 기술 가이드·벤치마크 12건(총 31건)의 상세 서지정보와 실증 근거는 [AI_Prompt_Engineering_References.md](./AI_Prompt_Engineering_References.md)에서 일원화 관리합니다.
 > **적용 범위**: 모든 LLM 기반 애플리케이션 및 에이전트 파이프라인 (대화형 시스템, 장기 기억 서사 요약기, 정적 코드 분석기, 호스트 보안 위협 수사, CDP 브라우징 에이전트 도구 등 전 영역)
 
 본 문서는 AI 프롬프트를 설계, 작성, 검증, 유지보수할 때 준수해야 하는 3단계 조립 수명주기, 16대 핵심 원칙, 7대 안티패턴 회피법 및 실전 보일러플레이트 템플릿을 일원화한 통합 표준 가이드라인입니다.
@@ -98,7 +98,7 @@ XML 태그를 사용하여 프롬프트의 각 구성 요소(지시문, 데이�
 프롬프트의 출력 형식은 그 출력을 소비하는 런타임 코드(JSON 파서, 다음 에이전트)의 기대 규격에 완벽히 부합해야 합니다. 프롬프트 텍스트 내에 Raw JSON Schema(`type: "object"`, `properties` 등)를 명시하면 TypeScript 인터페이스 대비 토큰을 4배 낭비하고 메타키 오염을 유발하므로, 프롬프트 본문에는 TypeScript 인터페이스를 사용합니다.
 
 * **추론형 모델(Reasoning Model)과의 상충 Trade-off 및 해결책**:
-  * **핵심 충돌**: 추론형 모델(Gemini Thinking, Claude Extended Thinking)에게 출력 첫 토큰부터 엄격한 문법 제약 디코딩(GCD)을 강제하면, 내부 사고 과정(Thinking trace)이 스키마 제약에 갇혀 탐색 트리 형성에 실패하거나 추론 성능이 급락할 수 있음.
+  * **핵심 충돌**: 비추론 모드(`reasoning.effort: "none"` 등)나 추론 채널이 분리되지 않은 환경에서 첫 토큰부터 엄격한 문법 제약 디코딩(GCD)을 강제하거나, 프롬프트로 내부 추론(Thinking) 없이 즉각적인 JSON 출력만을 강요하면 탐색 트리 형성에 실패하여 추론 성능이 급락함(`arXiv:2408.02442`). (단, Gemini의 `response_schema` 및 Claude의 `output_config.format`은 네이티브 `<thinking>` 블록에는 문법 제약을 걸지 않고 최종 응답 블록에만 적용됨).
   * **해결책 (2-Stage Decoupling & SAP)**:
     1. **단계 분리**: 모델이 자유로운 내부 사고 과정(Thinking tokens 또는 `<thought>` 블록)을 온전히 마친 뒤, 최종 블록에서만 구조화된 출력을 생성하도록 유도.
     2. **BAML Schema-Aligned Parsing (SAP)**: 엄격 디코딩 강제 대신 런타임 차원에서 경미한 포맷 에러(따옴표 누락, 후행 쉼표 등)를 자동 교정하는 유연한 파서 병행.
@@ -106,7 +106,7 @@ XML 태그를 사용하여 프롬프트의 각 구성 요소(지시문, 데이�
   * **1계층 (프롬프트 본문 - 시맨틱 가이드)**: 프롬프트 텍스트 내부에는 토큰을 절약하고 주석 작성이 용이한 **TypeScript 인터페이스**를 주입하여 모델의 의미론적 이해 유도.
     - **다중 모드 단일 루트 래핑 (Discriminated Union)**: 하나의 에이전트가 여러 유형의 작업 결과(예: 일반 응답, 거절, 분석 보고 등)를 반환해야 할 때는 독립된 루트 인터페이스를 난립시키는 대신 단일 루트 엔벨로프(`type` 디스크리미네이터 + `payload`)로 통합하여 라우팅 모호성을 제거.
     - **내부 추론 전용 검증 (Thinking-Only Verification)**: 제약 조건 준수 여부에 대한 자기 검증은 모델의 내부 추론 과정(Thinking trace)에서만 수행하며, 최종 출력 JSON에 `selfVerification: true`와 같은 무의미한 확인용 불리언 필드를 방출하지 않음.
-  * **2계층 (API 페이로드 - 물리적 강제)**: 백엔드 API 호출 시 Gemini의 `responseSchema` 또는 Claude의 스키마 강제(Structured Outputs / Tool Schema)를 등록하여 디코딩 레벨에서 100% 문법 무결성 강제.
+  * **2계층 (API 페이로드 - 물리적 강제)**: 백엔드 API 호출 시 Gemini의 `response_schema` 또는 Claude의 `output_config.format` (`type: "json_schema"`)을 등록하여 최종 응답 디코딩 레벨에서 100% 문법 무결성 강제. *(주의: 과거 JSON 강제를 위해 사용하던 마지막 턴 Assistant 메시지 `{` 사전 채우기(Prefill) 기법은 Claude 4.6+ 및 5.5 패밀리에서 전면 폐기되어 `400 Error`를 유발하므로 사용 금지).*
   * **방어적 파싱 로직 구비**: 백엔드 런타임 코드에 마크다운 코드블록 제거 파서, 안전한 역직렬화 래퍼 및 Fallback 로직 필수 구현.
 
 ### 2.4 원칙 4: 수치 연산 안전 장치 (Numerical Safety Clamping & Physical Defense)
@@ -138,14 +138,15 @@ LLM은 텍스트 추론 기반 산술 연산에서 2~15%의 체계적 오류를 
     - 적용 과제: 방대한 사내 코딩 컨벤션 체화, 특수 게임 세계관 어조 학습, 고난도 분류 작업.
     - 전제 조건: 1M 이상의 대형 컨텍스트 윈도우 및 프롬프트 캐싱(KV Cache) 활성화 (비용 절감 필수).
 
-### 2.7 원칙 7: 샘플링 파라미터 무개입 원칙 (Temperature 1.0 고정 또는 파라미터 생략)
+### 2.7 원칙 7: 샘플링 파라미터 무개입 및 완전 생략 원칙 (Omit Sampling Parameters)
 네이티브 추론(Thinking/Reasoning) 아키텍처에서는 과거 비추론 모델 시절의 과제별 `temperature` / `top_p` 미세 튜닝(`0.0`, `0.2`, `0.7` 등)을 전면 폐기합니다.
 
-* **핵심 규칙 (Omit or Lock to `1.0`)**:
-  * **API 페이로드에서 샘플링 파라미터 생략(Omit) 또는 `temperature: 1.0` 기본값 유지**: `temperature`, `top_p`, `top_k`, `presence_penalty`, `frequency_penalty` 등 레거시 샘플링 파라미터는 API 요청 시 아예 등록하지 않거나(Omit) 기본값(`1.0`)으로 두어야 합니다. (서드파티 SDK/프레임워크가 기본값으로 `temperature: 0.0` 등을 자동 주입하지 않도록 주의).
+* **핵심 규칙 (Strict Omit)**:
+  * **API 페이로드에서 샘플링 파라미터 완전 생략(Omit)**: `temperature`, `top_p`, `top_k`, `presence_penalty`, `frequency_penalty` 등 레거시 샘플링 파라미터는 API 요청 페이로드에서 아예 제거(Omit)해야 합니다. (서드파티 SDK/프레임워크가 기본값으로 `temperature: 0.0`이나 `1.0` 등을 자동 주입하지 않도록 주의).
 * **벤더별 공식 제약 및 기술적 근거**:
-  * **Google Gemini (Gemini 3.8 Flash / Gemini 4 Argon 패밀리)**: 내부 추론(Thinking process) 경로가 기본 엔트로피(`temperature: 1.0`)에 맞춰 설계되었으며, 최신 API에서는 `temperature`, `top_p`, `top_k` 등 레거시 샘플링 파라미터가 백엔드에서 무시(Deprecated/Ignored)되거나 `1.0` 미만(`0.0` 등) 강제 시 복합 과제에서 **추론 성능 급락 및 무한 토큰 생성 루프(Infinite Loop)**가 발생합니다.
-  * **Anthropic Claude (Extended / Adaptive Thinking)**: 추론 활성화 시 `temperature`, `top_p`, `top_k`에 비기본값을 전달하면 API 레벨에서 즉시 **`400 Invalid Request Error`**를 반환합니다(반드시 생략하거나 `temperature: 1.0` 유지).
+  * **Google Gemini (Gemini 3.8 Flash / Gemini 4 Argon 패밀리)**: 최신 API에서 `temperature`, `top_p`, `top_k`에 전달된 사용자 정의 값은 백엔드에서 무시(Ignored, 내부 최적 샘플링 고정)되며, `presence_penalty`, `frequency_penalty`, `logprobs`, `candidate_count` 전달 시 즉시 **`400 INVALID_ARGUMENT`** 에러가 발생합니다(레거시 Gemini 3 초기 모델에서도 `1.0` 미만 설정 시 추론 루프 결함이 발생하므로 생략이 원칙).
+  * **Anthropic Claude (Claude 5.5 패밀리 / API `2026-10-21` 이후)**: `temperature`, `top_p`, `top_k` 파라미터에 **기본값(`temperature: 1.0`)을 포함한 어떠한 값을 전달하더라도 전 모델에서 즉시 HTTP `400 Invalid Request Error`를 반환**합니다(반드시 파라미터 자체를 완전 생략).
+  * **OpenAI (GPT-6 / o-series 추론 활성 모드)**: 추론이 활성화된 상태에서 `temperature`, `top_p`, `presence_penalty`, `frequency_penalty` 전달 시 API 에러가 발생하므로 생략해야 합니다.
   * **대체 제어 수단**: 출력의 엄밀성과 탐색 깊이는 샘플링 온도가 아니라 제2.3절의 **스키마 계약(Structured Outputs)** 및 제2.8절의 **사고 깊이/예산 파라미터(`thinking_level`, `output_config.effort`, `reasoning_effort`)**로만 제어합니다.
 
 ### 2.8 원칙 8: 하이브리드 추론(Thinking) 모델 프롬프트 전략 & Thinking Effort 제어
@@ -178,7 +179,7 @@ LLM은 텍스트 추론 기반 산술 연산에서 2~15%의 체계적 오류를 
   5. **누적 대화 맥락 (`<conversation_history>`)**: 이전 턴들의 대화 기록 (턴 단위로 캐시 연장).
   6. **동적 사용자 현재 입력 및 최종 지시 (`<user_input>`, `<final_instruction>`)**: 매 턴마다 새로 유입되는 동적 데이터는 반드시 **프롬프트 맨 마지막**에 배치.
 * **Cache-Busting (캐시 무효화) 방지 절대 규칙**:
-  * 상단 정적 접두사 영역에 현재 시간(Timestamp), 임의의 세션 고유 ID, 랜덤 시드, 또는 딕셔너리 직렬화 시 키 순서가 바뀌는 가변 텍스트를 절대 삽입하지 말 것. 단 1글자나 공백 1개가 달라져도 뒤따르는 수만 토큰의 캐시가 전면 무효화됩니다(Gemini 3.8 Flash 및 Gemini 4 Argon의 자동 암묵적 캐싱(Implicit Caching, 최소 4,096 토큰 임계치) 역시 상단 정적 접두사 일치를 전제로 최대 90% 비용 절감이 작동함).
+  * 상단 정적 접두사 영역에 현재 시간(Timestamp), 임의의 세션 고유 ID, 랜덤 시드, 또는 딕셔너리 직렬화 시 키 순서가 바뀌는 가변 텍스트를 절대 삽입하지 말 것. 단 1글자나 공백 1개가 달라져도 뒤따르는 수만 토큰의 캐시가 전면 무효화됩니다(Gemini 3.8 Flash 및 Gemini 4 Argon의 자동 암묵적 캐싱(Implicit Caching)은 최소 **6,144 토큰** 임계치 및 상단 정적 접두사 일치를 전제로 90~95% 비용 절감이 작동하며, 특히 Gemini 4 Argon은 명시적 `cached_content` API를 지원하지 않으므로 정적 접두사 정렬이 유일한 캐싱 수단임).
 
 ### 2.10 원칙 10: 부정 지시문 처리 원칙 (Negative Prompting & Affirmative Framing)
 "~하지 마시오" 형태의 금지 명령은 모델의 어텐션을 금지 대상에 집중시켜 오히려 실수를 유발(흰 곰 효과 / Pink Elephant Problem)하므로, 실행 가능한 **긍정 지시문(Affirmative Framing: ~하시오)**으로 변환해야 합니다.
@@ -227,9 +228,9 @@ LLM은 텍스트 추론 기반 산술 연산에서 2~15%의 체계적 오류를 
   * 백엔드 API의 `tools` 파라미터에는 MCP JSON Schema(`inputSchema`)를 등록하되, **프롬프트 텍스트 본문(`<mcp_tools>`) 내부에 도구 명세를 기술할 때는 Raw JSON Schema 대신 TypeScript `declare function` 시그니처와 주석만 기입**하여 프롬프트 토큰 낭비를 방지합니다.
 * **도구 에러 피드백 자가 복구 (Tool Error Self-Healing)**:
   * 도구 호출이 실패(에러 코드 또는 예외 발생)했을 때, 에이전트에게 단순 실패 사실뿐 아니라 *"발생한 에러 메시지"*와 *"올바른 인자 재시도 가이드"*를 주입하여 모델이 자체 궤도 수정을 수행하도록 유도.
-* **Interleaved Thinking (`think` Tool) 실행 루프 (2026 표준)**:
-  * Anthropic Claude 5.5 및 최신 에이전틱 런타임에서 공인된 패턴으로, 도구 호출과 관찰(Observation) 사이에 모델이 중간 사고를 거칠 수 있도록 `think(thought: string)` 도구를 배치.
-  * 브라우저 상호작용 중 비동기 로딩 지연, 예상치 못한 모달 창, 요소 UID 변경 등의 이상 상태가 감지되었을 때, 맹목적인 재시도 대신 원인을 먼저 분석하고 회복(Recovery) 경로를 수립한 뒤 다음 액션을 취하도록 강제.
+* **도구 호출 간 중간 추론 (Interleaved Thinking) 및 상태 갱신 루프 (2026 표준)**:
+  * **Anthropic Claude 5.5 패밀리 (네이티브 내장)**: Adaptive Thinking 모델(`Opus 5.5`, `Sonnet 5.5`)은 별도의 커스텀 `think` 도구나 베타 헤더 없이도 도구 호출과 관찰(Observation) 사이에 **네이티브 Interleaved Thinking이 자동 수행**되므로 불필요한 no-op `think` 도구를 중복 선언하지 않습니다.
+  * **Google Gemini 3.8 Flash / Gemini 4 Argon (`update` 도구 & Thought Signatures)**: 멀티턴 도구 호출 시 이전 턴의 `thought_signature`를 손실 없이 반환(공식 SDK 자동 처리)해야 하며, 도구 실행 전 가시적인 중간 계획 및 상태 기록이 필요한 에이전트에서는 공식 가이드 표준인 `update(previous_step, plan, next_step)` 도구를 배치하여 비동기 로딩 지연이나 예외 상황 발생 시 회복(Recovery) 경로를 먼저 수립하도록 유도합니다.
 
 ### 2.14 원칙 14: 대화 맥락 압축 및 상태 체크포인트 (Context Compaction & State Checkpointing)
 장기 멀티턴 에이전트 환경에서 무제한 대화 축적은 Lost-in-the-Middle 유발, 레이턴시 급증, 그리고 프롬프트 비용 폭증을 초래하므로 체계적인 맥락 압축 패턴을 적용합니다.
@@ -405,13 +406,14 @@ LLM은 텍스트 추론 기반 산술 연산에서 2~15%의 체계적 오류를 
 
 ---
 
-### 3.7 안티패턴 7: 추론 단계에서의 조기 엄격 스키마 강제 (Premature Structuring in Thinking Trace)
+### 3.7 안티패턴 7: 추론 억제 및 조기 엄격 스키마 강제 (Premature Structuring without Thinking Trace)
 
 ```diff
 - [Bad]
-- API 요청 시: 출력 첫 토큰부터 엄격한 JSON 스키마 디코딩 강제
-- 프롬프트: "추론 과정 없이 첫 글자부터 즉시 JSON의 '{' 로 시작하십시오."
-- (결과: 복잡한 수학/알고리즘 분석 시 reasoning token 생성이 억압되어 논리 오류 급증)
+- 비추론 모드(reasoning.effort: "none")에서 분석 단계 없이 첫 토큰부터 엄격 JSON 스키마 강제
+- 마지막 턴 Assistant 메시지에 "{" 사전 채우기(Prefill -> Claude 4.6+/5.5에서 400 Error 발생)
+- 프롬프트: "내부 추론 과정 없이 첫 글자부터 즉시 JSON의 '{' 로 시작하십시오."
+- (결과: 복잡한 수학/알고리즘 분석 시 탐색 트리가 억압되어 논리 오류 급증)
 
 + [Good]
 + <instructions>
@@ -420,7 +422,7 @@ LLM은 텍스트 추론 기반 산술 연산에서 2~15%의 체계적 오류를 
 + </instructions>
 ```
 
-* **원리 및 근거**: 최신 추론형 모델은 토큰 단위 자율 탐색을 통해 고난도 과제를 해결합니다. 첫 토큰부터 엄격한 문법 제약 디코딩(GCD)으로 감싸 강제하면, 모델이 생각할 공간(Scratchpad / Reasoning Trace)을 확보하지 못해 정답률이 15~30% 이상 급락합니다. 반드시 추론 완료 후 구조화 출력을 생성하도록 단계(Phase)를 분리해야 합니다.
+* **원리 및 근거**: 최신 추론형 모델은 토큰 단위 자율 탐색을 통해 고난도 과제를 해결합니다. 비추론 모드나 추론 채널이 분리되지 않은 상태에서 첫 토큰부터 문법 제약 디코딩(GCD)을 강제하거나, 프롬프트·Prefill로 내부 사고 공간(Reasoning Trace)을 차단하면 정답률이 15~30% 이상 급락합니다(`arXiv:2408.02442`). 반면 Gemini의 `response_schema`와 Claude의 `output_config.format`은 네이티브 `<thinking>` 블록 완료 후 최종 출력 블록에만 스키마 제약을 적용하므로, 반드시 내부 추론이 선행된 뒤 구조화 출력이 생성되도록 설계해야 합니다.
 
 ---
 
