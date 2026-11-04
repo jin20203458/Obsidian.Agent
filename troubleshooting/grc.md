@@ -688,3 +688,30 @@ related:
 - **핵심 부정 제약 (Never use X)**:
   - **절대 `ScrollViewer.ScrollChanged` 내부에서 `e.VerticalChange < 0`이나 타이머 휴리스틱으로 사용자 상향 스크롤 의도를 추측해 `IsAutoScrollActive = false`로 전이하지 말 것.**
   - **절대 가상화 리스트(`VirtualizingStackPanel`) 아이템 템플릿의 `Loaded` 애니메이션에 `Margin`·`Height`·`Padding` 등 레이아웃 측정(Measure) 속성을 애니메이션하지 말 것.** 반드시 `RenderTransform`이나 `Opacity`만 사용할 것.
+
+---
+
+## 2026-11-04: [Resolved] 장문 세션·장면 로딩 시 UI 가상화 풀림(`CanContentScroll` 누락), 비가시 세그먼트 마크다운 4중 파싱, 64비트 `WndProc` 오버플로우 및 다중 슬롯 동기 갱신 병목 해결
+
+### 1. 현상 (Symptom)
+- 수백 턴 분량의 세션/장면을 로드할 때 `PresentationFramework-SystemData.dll` 로드 직후 UI 스레드가 응답 없음(Freeze)에 빠지거나 디버거 종료(`0xffffffff`) 및 `OverflowException` 크래시가 발생함.
+- `IllustrationStudioWindow`에서 장면 프리셋 선택·AI 추출·초기화 시 슬롯 변경마다 전체 칩 팔레트 스캔이 5~9회 중복 실행되고, 모달 알림창(`ShowAlert`/`ShowConfirm`)의 `Owner`가 항상 `MainWindow`로 고정되어 스튜디오 창 뒤로 열리는 현상 발생.
+
+### 2. 원인 (Root Cause)
+1. **`ChatView.xaml` 커스텀 `ControlTemplate` 내 `CanContentScroll` 바인딩 누락**: `ChatHistoryItemsControl`에 `ScrollViewer.CanContentScroll="True"`를 선언했으나 내부 `<ControlTemplate>`의 `<ScrollViewer x:Name="ChatScrollViewer">`에 `CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"`가 누락되어 `CanContentScroll == false`(무한 높이 측정)로 동작하며 `VirtualizingStackPanel` 가상화가 완전히 무력화됨(410개 메시지·4,000개 세그먼트 일괄 생성).
+2. **`ChatMessageTemplate` 내 비가시 `TextBlock` 4중 마크다운 파싱 ([ModernStyles.xaml](../../GRC/GRC/Themes/ModernStyles.xaml))**: 세그먼트당 4개의 `TextBlock`(`BubbleText`, `NarrationText`, `InnerThoughtText`, `SystemText`) 중 1개만 표시됨에도 4개 모두 기본 속성으로 `SimpleMarkdownHelper.Text="{Binding Text}"`를 평가하여 정규식 파싱 및 `Inline` 객체 생성이 4배로 증폭됨.
+3. **64비트 `WndProc` 포인터 변환 및 삭제된 초기 배경 리소스 참조 ([MainWindow.xaml.cs](../../GRC/GRC/Views/MainWindow.xaml.cs), [ChatViewModel.cs](../../GRC/GRC/ViewModels/ChatViewModel.cs))**: `WM_NCHITTEST`에서 `lParam.ToInt32()` 호출 시 음수/확장 좌표에서 `OverflowException`이 발생 가능하며, `_currentBackgroundImage` 기본값이 삭제된 `bg1.png`를 가리킴.
+4. **`IllustrationStudioViewModel` 다중 슬롯 일괄 변경 시 중복 스캔 및 미대기 로어북 로드**: 장면 프리셋·기록·AI 변환 시 5~6개 슬롯 프로퍼티가 순차 변경될 때마다 `RefreshPrompts()`와 `RefreshChipSelectionStates()`가 매번 호출되었고, `LoadSessionOptionsAsync`에서 `SelectedSessionOption` 변경이 비동기 대기 없이 실행됨.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+- **`ChatScrollViewer` 가상화 템플릿 바인딩 복원 및 조건부 마크다운 파싱 ([ChatView.xaml](../../GRC/GRC/Views/ChatView.xaml), [ModernStyles.xaml](../../GRC/GRC/Themes/ModernStyles.xaml))**:
+  - `ChatScrollViewer`에 `CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"`, `HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"`, `VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}"`를 명시적으로 연결하여 `VirtualizingStackPanel` UI 가상화를 정상 활성화.
+  - `ChatMessageTemplate`에서 `helpers:SimpleMarkdownHelper.Text="{Binding Text}"`를 각 `SegmentType`별 `DataTrigger` `Setter` 내부로 이동하여 실제 표시되는 단일 `TextBlock`에서만 마크다운 인라인을 생성하도록 최적화.
+- **64비트 `ToInt64()` 방어 및 초기 리소스·모달 소유권 보강 ([MainWindow.xaml.cs](../../GRC/GRC/Views/MainWindow.xaml.cs), [ChatViewModel.cs](../../GRC/GRC/ViewModels/ChatViewModel.cs), [IDialogService.cs](../../GRC/GRC/Services/IDialogService.cs))**:
+  - `WndProc` 내 `lParam`/`wParam`을 `ToInt64()`로 읽고 `PresentationSource.FromVisual(MaximizeButton) != null` 가드를 추가했으며, 초기 배경 경로를 `bg1.jpg`로 교정.
+  - `DialogService.SetOwner`가 현재 활성(`IsActive && IsVisible`) 창을 우선 `Owner`로 지정하도록 개선하고 `IllustrationStudioWindow`는 독립 최상위 창(`ShutdownMode.OnMainWindowClose`)으로 분리.
+- **다중 슬롯 갱신 배칭(`_suppressPromptRefresh`) 및 명시적 `DataTemplate` 일원화 ([IllustrationStudioViewModel.cs](../../GRC/GRC/ViewModels/IllustrationStudioViewModel.cs), [IllustrationStudioWindow.xaml](../../GRC/GRC/Views/IllustrationStudioWindow.xaml))**:
+  - 장면 프리셋·기록·AI 추출·슬롯 수정 시 `_suppressPromptRefresh` 가드로 슬롯 대입 후 단 1회만 프롬프트 조합 및 칩 선택 상태를 갱신하고, `DisplayMemberPath` 대신 명시적 `DataTemplate`을 사용.
+- **핵심 부정 제약 (Never use X)**:
+  - **절대 `ItemsControl.Template`을 커스텀 `<ScrollViewer>`로 재정의할 때 `CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"` 바인딩을 누락하지 말 것.** 누락 시 `VirtualizingStackPanel`이 무한 높이(`PositiveInfinity`)로 측정되어 UI 가상화가 완전히 풀리고 장문 세션 로드 시 UI 스레드가 동결됨.
+  - **절대 64비트 Windows 환경의 `WndProc`에서 `lParam`/`wParam`에 `IntPtr.ToInt32()`를 호출하지 말 것.** 반드시 `ToInt64()`와 비트 마스킹을 사용할 것.
