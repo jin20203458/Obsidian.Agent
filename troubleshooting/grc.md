@@ -641,3 +641,25 @@ related:
   - **절대 실제 WPF 앱(`Application.Current is App`)에서 Dispatcher 타임아웃 후 백그라운드 스레드에서 UI 컬렉션 변경 액션을 직접 폴백 실행하지 말 것.** `NotSupportedException` 크래시와 세션 저장 누락을 유발함.
   - **절대 큰따옴표 대사 내부의 3인칭 이름 언급만으로 `CHAR:` 시드를 소모하거나 미대면 로어북 인물을 상태창에 등록하지 말 것.**
   - **절대 `장소` 카테고리의 `HOOK:` 시드를 `StatusAI.TriggeredSeeds`로 소모하지 말 것.** 대사 내 행선지 언급만으로 미방문 장소 시드가 소멸함.
+- **190턴 분기 세션 추가 검증 — `<previous_state>` 인라인 JSON 포맷 정렬, `LenientStringDictionaryConverter` 평문/배열 폴백 및 `CustomStats` 공백 중복 키 정화 ([ChapterContext.cs](../../GRC/GRC/Models/ChapterContext.cs), [LlmJsonParser.cs](../../GRC/GRC/Helpers/LlmJsonParser.cs), [MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
+  - `ToStatusSnapshotString()`에서 `uiBadges`, `characterConditionDesc`, `items`를 인라인 JSON 포맷으로 직렬화하여 `Flash-Lite`가 `<previous_state>` 평문을 모방해 `"uiBadges": "체력: 55/100, ..."` 단일 문자열을 반환하거나 쉼표 뒤 공백(`" 벨벳 호감도"`)을 키에 포함시키는 현상을 예방.
+  - `LlmJsonParser.LenientOptions`에 `LenientStringDictionaryConverter`를 추가하여 딕셔너리 Key/Value `.Trim()`, 평문 문자열(`Key: Value` + 값 내부 쉼표·인용구·시각 보존) 및 배열 형태의 `Dictionary<string, string>` 폴백 역직렬화를 지원.
+  - `MemoryManagerService.NormalizeCustomStatsDictionary`를 통해 `RestoreSession`(공백 없는 정식 키 우선) 및 `UpdateContextStatus`(신규 payload 최신값 덮어쓰기 및 절단된 게이지 분모 복원)에서 공백 변종 중복 배지를 원천 차단.
+
+---
+
+## 2026-11-04: [Resolved] IllustrationPromptService의 `responseSchema` 대소문자(`CamelCase` vs `PascalCase`) 불일치로 인한 API 400 실패 및 로컬 한국어 폴백 보강
+
+### 1. 현상 (Symptom)
+- `IllustrationStudioWindow`에서 세션 인물의 로어북 태그 추출(`ExtractCharacterTagsAsync`) 또는 장면 태그 추출(`ExtractSceneTagsAsync`) 버튼 클릭 시 Gemini API 호출이 실패하여 추출 실패 메시지가 출력됨.
+
+### 2. 원인 (Root Cause)
+- [`GeminiApiService.cs`](../../GRC/GRC/Services/GeminiApiService.cs)의 `_jsonOptions`는 `PropertyNamingPolicy = JsonNamingPolicy.CamelCase`가 설정되어 있어 익명 객체로 선언한 `responseSchema.properties`의 키(`AppearanceTags`)는 `"appearanceTags"`(카멜케이스)로 직렬화되는 반면, 문자열 배열인 `required = new[] { "AppearanceTags", ... }`의 원소는 `"AppearanceTags"`(파스칼케이스) 그대로 직렬화됨.
+- 이로 인해 Gemini API가 `required` 배열에 선언된 프로퍼티가 `properties`에 존재하지 않는다는 `400 INVALID_ARGUMENT` 오류를 반환함.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+- **`responseSchema` 카멜케이스 키 통일 및 C# 결정론적 한국어 매퍼 폴백 ([IllustrationPromptService.cs](../../GRC/GRC/Services/IllustrationPromptService.cs))**:
+  - `ExtractCharacterTagsAsync` 및 `ExtractSceneTagsAsync`의 `responseSchema` 내 `properties`와 `required` 배열 모두 소문자 카멜케이스(`appearanceTags`, `defaultOutfitTags`, `compositionTags`, `outfitAndExposureTags`, `poseAndVibeTags`, `backgroundTags`)로 통일.
+  - 오프라인이나 API 통신 실패 시에도 즉시 작동하는 C# 결정론적 한국어-단보루 키워드 매퍼(`ExtractCharacterTagsLocalFallback`, `ExtractSceneTagsLocalFallback`)를 폴백으로 결합.
+- **핵심 부정 제약 (Never use X)**:
+  - **절대 `GeminiApiService`에 전달하는 `responseSchema`의 `properties`나 `required` 배열에 파스칼케이스(`PascalCase`) 키를 사용하지 말 것.** `_jsonOptions`의 `JsonNamingPolicy.CamelCase`로 인해 `properties`와 `required` 간 대소문자 불일치(`400 Bad Request`)가 발생함.
