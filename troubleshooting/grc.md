@@ -645,6 +645,7 @@ related:
   - `ToStatusSnapshotString()`에서 `uiBadges`, `characterConditionDesc`, `items`를 인라인 JSON 포맷으로 직렬화하여 `Flash-Lite`가 `<previous_state>` 평문을 모방해 `"uiBadges": "체력: 55/100, ..."` 단일 문자열을 반환하거나 쉼표 뒤 공백(`" 벨벳 호감도"`)을 키에 포함시키는 현상을 예방.
   - `LlmJsonParser.LenientOptions`에 `LenientStringDictionaryConverter`를 추가하여 딕셔너리 Key/Value `.Trim()`, 평문 문자열(`Key: Value` + 값 내부 쉼표·인용구·시각 보존) 및 배열 형태의 `Dictionary<string, string>` 폴백 역직렬화를 지원.
   - `MemoryManagerService.NormalizeCustomStatsDictionary`를 통해 `RestoreSession`(공백 없는 정식 키 우선) 및 `UpdateContextStatus`(신규 payload 최신값 덮어쓰기 및 절단된 게이지 분모 복원)에서 공백 변종 중복 배지를 원천 차단.
+  - `CompressToMediumTermAsync`에서 `_chapterCount++` 실행 전 `activeChapterBeforeTransition`의 불릿 개수를 먼저 산출하고, `activeChapterBulletCount >= 20`일 때는 `activeChapterBeforeTransition - 1`까지, 20개 미만이더라도 10회차(40턴) 챕터 마감으로 새 챕터가 열렸을 때는 전전 챕터(`_chapterCount - 2`)까지 확정 이관하도록 보강하여 10회차 경계 이관 누락 및 일상물 저밀도 챕터의 무한 적체를 해소.
 
 ---
 
