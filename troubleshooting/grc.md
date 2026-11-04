@@ -664,3 +664,27 @@ related:
   - 오프라인이나 API 통신 실패 시에도 즉시 작동하는 C# 결정론적 한국어-단보루 키워드 매퍼(`ExtractCharacterTagsLocalFallback`, `ExtractSceneTagsLocalFallback`)를 폴백으로 결합.
 - **핵심 부정 제약 (Never use X)**:
   - **절대 `GeminiApiService`에 전달하는 `responseSchema`의 `properties`나 `required` 배열에 파스칼케이스(`PascalCase`) 키를 사용하지 말 것.** `_jsonOptions`의 `JsonNamingPolicy.CamelCase`로 인해 `properties`와 `required` 간 대소문자 불일치(`400 Bad Request`)가 발생함.
+
+---
+
+## 2026-11-04: [Resolved] VirtualizingStackPanel 평균 높이 재산출·Margin 애니메이션·뷰포트 축소에 의한 간헐적 오토스크롤 풀림 및 상향 스크롤 반동 해결
+
+### 1. 현상 (Symptom)
+- 장문 롤플레잉 세션(190턴, 약 390개 메시지)에서 간헐적으로 새 턴 시작 직후나 스트리밍 도중 오토스크롤이 풀려 바닥을 따라가지 못하거나, 멀티라인 채팅 입력창 확장·추천 답변 노출 시 마지막 대사가 가려짐.
+- 과거 대화를 읽기 위해 마우스 휠을 위로 굴릴 때 컨테이너 실현(`Loaded`) 구간에서 스크롤이 0.3초간 바닥으로 역보정되는 현상 발생.
+
+### 2. 원인 (Root Cause)
+1. **레이아웃 결과 이벤트(`ScrollChanged`) 내 사용자 의도 추측의 한계**: 기존 `AutoScrollHelper.cs`는 `ScrollChanged` 내부에서 `e.VerticalChange < 0`과 `500ms` 타이머(`LastUserInputTick`) 조합으로 상향 스크롤을 추측했으나, 하향 휠(`e.Delta < 0`)이나 `End` 키에도 `LastUserInputTick`을 갱신하여 500ms 이내에 발생한 `VirtualizingStackPanel`의 자체 오프셋 보정(`dV < 0`)이나 공백 트림을 사용자 상향 스크롤로 오판해 오토스크롤을 해제함.
+2. **`ViewportHeightChange < 0` 미처리 및 `CollectionChanged` 미연동**: 멀티라인 입력창 확장이나 추천 답변 노출 시 `ExtentHeightChange == 0`이고 `ViewportHeightChange < 0`이 발생하는데 이를 무시했으며, 추천 답변 클릭(`UseSuggestionCommand`) 및 메시지 재전송 시 코드비하인드 스크롤 호출이 누락됨.
+3. **`ChatMessageTemplate`의 `Margin` 레이아웃 애니메이션 ([ModernStyles.xaml](../../GRC/GRC/Themes/ModernStyles.xaml))**: `Loaded` 트리거가 레이아웃 속성인 `Margin`을 `15,25,15,0`(합 25px)에서 `15,8,15,8`(합 16px)로 0.3초 동안 `ThicknessAnimation` 처리하여, 새 메시지 추가 및 과거 메시지 상향 스크롤 실현 시 매 프레임(60FPS, 18회) `VirtualizingStackPanel.MeasureOverride`를 강제 호출하며 `ExtentHeight`와 `VerticalOffset`을 흔듦.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+- **물리 입력과 레이아웃 결과의 완전 분리 ([AutoScrollHelper.cs](../../GRC/GRC/Helpers/AutoScrollHelper.cs), [ChatView.xaml.cs](../../GRC/GRC/Views/ChatView.xaml.cs))**:
+  - `IsAutoScrollActive = false` 전이는 오직 물리적 상향 입력(`PreviewMouseWheel e.Delta > 0`, `ScrollBar.ScrollEvent`의 `SmallDecrement`/`LargeDecrement`/`First` 및 비하단 `ThumbTrack`, `PreviewKeyDown`의 `Up`/`PageUp`/`Home`)에서만 수행하고, `ScrollChanged` 내부에서는 절대 오토스크롤을 해제하지 않음.
+  - `IsAutoScrollActive == true`일 때는 `ExtentHeightChange != 0`, `ViewportHeightChange != 0`, `e.VerticalChange < 0` 모두 즉시 `ScrollToBottom()`으로 보정하며, `ChatView.xaml.cs`에서 `ChatHistory.CollectionChanged`를 구독하여 모든 경로의 메시지 추가 시 하단 이동을 보장.
+  - 하향 휠(`e.Delta < 0`) 시 이미 바닥 허용오차(`24px`) 이내이면 즉시 재결합하고, 상향 물리 입력 직후 `150ms`(`UpwardBounceCooldownMs`) 이내의 레이아웃 반동(`dV > 0`)에 의한 재결합을 차단.
+- **`Margin` 애니메이션을 GPU `RenderTransform.(TranslateTransform.Y)`로 교체 ([ModernStyles.xaml](../../GRC/GRC/Themes/ModernStyles.xaml))**:
+  - `MessageContainer`의 `Margin="15,8"`을 고정하고 `RenderTransform.(TranslateTransform.Y)` (`From="17" To="0"`)로 전환하여 시각적 슬라이드업 효과는 동일하게 유지하면서 레이아웃 재측정 비용과 오프셋 흔들림을 0으로 제거.
+- **핵심 부정 제약 (Never use X)**:
+  - **절대 `ScrollViewer.ScrollChanged` 내부에서 `e.VerticalChange < 0`이나 타이머 휴리스틱으로 사용자 상향 스크롤 의도를 추측해 `IsAutoScrollActive = false`로 전이하지 말 것.**
+  - **절대 가상화 리스트(`VirtualizingStackPanel`) 아이템 템플릿의 `Loaded` 애니메이션에 `Margin`·`Height`·`Padding` 등 레이아웃 측정(Measure) 속성을 애니메이션하지 말 것.** 반드시 `RenderTransform`이나 `Opacity`만 사용할 것.

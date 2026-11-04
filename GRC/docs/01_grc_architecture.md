@@ -274,19 +274,22 @@ sequenceDiagram
 
 ## 9. 스마트 오토스크롤 (SmartAutoScroll) 무결성 알고리즘
 
-LLM 토큰 단위 스트리밍 출력과 사용자의 과거 대화 탐색(Upward Scrolling) 간의 충돌을 수학적 판정식으로 해결했습니다.
+LLM 토큰 단위 스트리밍 출력, `VirtualizingStackPanel`(`ScrollUnit="Pixel"`)의 평균 컨테이너 높이 재산출, 그리고 사용자의 과거 대화 탐색(Upward Scrolling) 간의 충돌을 **물리 입력 이벤트와 레이아웃 결과 이벤트의 엄격한 역할 분리**로 해결했습니다.
 
-`[IMPLEMENTED]` 스크롤 판정 로직은 [AutoScrollHelper.cs](../../../GRC/GRC/Helpers/AutoScrollHelper.cs)에 구현되어 있습니다.
+`[IMPLEMENTED]` 스크롤 판정 로직은 [AutoScrollHelper.cs](../../../GRC/GRC/Helpers/AutoScrollHelper.cs) 및 [ChatView.xaml.cs](../../../GRC/GRC/Views/ChatView.xaml.cs)에 구현되어 있습니다.
 
-* **ScrollViewer.Tag 오염 제거 및 사용자 의도 상태 머신 (`IsAutoScrollActive`)**: 과거 레거시에서 스크롤 상태 플래그를 컨트롤의 `Tag` 속성에 의존하던 방식을 완전히 폐기하고, ScrollViewer별 `IsAutoScrollActive` Attached DependencyProperty 기반의 유한 상태 머신으로 전환했습니다.
-* **사용자 상향 스크롤 즉각 해제 (Zero-Latency Disengage)**:
-  - 마우스 휠 상향 회전(`PreviewMouseWheel e.Delta > 0`) 또는 순수 뷰포트 상향 이동(`isPureUserScroll && e.VerticalChange < 0`) 감지 즉시 `IsAutoScrollActive = false`로 전이하여 추가 토큰 유입이나 가상화 높이 변동에 의한 하이재킹을 원천 차단합니다.
-  - 비동기 디스패처 큐잉(`DispatcherPriority.Loaded`) 실행 시점에도 `if (GetIsAutoScrollActive(sv))` 지연 재검증(Lazy Guard)을 수행하여 큐 대기 시간 중 발생한 휠 조작을 보호합니다.
-* **1틱 상향 스크롤 탈출 트랩 및 창 리사이징 오인 방어**:
-  - 스트리밍 토큰 유입(`ExtentHeightChange > 0, VerticalChange == 0`) 시 24px 이내 상향 스크롤 유저가 바닥으로 되돌아가지 않도록 능동적 하향 조작(`e.VerticalChange > 0`) 또는 스크롤바 부재(`sv.ScrollableHeight <= 0`) 시에만 재활성화합니다.
-  - 창 최대화/세로 확장(`ViewportHeightChange > 0`)으로 인한 클램핑 역방향 오프셋 변동은 사용자 상향 스크롤로 오인하지 않도록 `isPureUserScroll` 가드로 격리합니다.
-* **컨텐츠 팽창/축소 조건부 판정식**:
-  $$\text{referenceHeight} = \begin{cases} \text{scrollableHeight} - \Delta\text{extentHeight}, & \text{if } \Delta\text{extentHeight} > 0 \\ \text{scrollableHeight}, & \text{otherwise} \end{cases}$$
-  컨텐츠가 아래로 스트리밍 팽창할 때(`extentHeightChange > 0`)는 직전 프레임의 바닥 높이를 역산하여 사용자가 바닥에 있었는지를 정확히 판정(24px 허용오차 적용)하고, 접기/삭제 등 컨텐츠가 축소될 때(`extentHeightChange <= 0`)는 현재 가용 높이와 직접 비교함으로써 사용자의 스크롤 뷰포트를 강제로 하단으로 끌고 내려가는 스크롤 하이재킹(Scroll Hijacking)을 원천 차단했습니다.
+* **물리적 입력 이벤트 기반 상태 전이 (`IsAutoScrollActive`)**:
+  - `ScrollChanged`(레이아웃 결과 이벤트) 내부에서 `e.VerticalChange < 0`으로 사용자 의도를 추측하던 휴리스틱과 `500ms` 타이머(`LastUserInputTick`)를 폐기하고, 오토스크롤 해제(`IsAutoScrollActive = false`)는 오직 **물리적 상향 입력 이벤트**에서만 즉시 수행합니다:
+    1. `PreviewMouseWheel` (`e.Delta > 0`)
+    2. `ScrollBar.ScrollEvent` (`AddHandler(..., handledEventsToo: true)` — `SmallDecrement`, `LargeDecrement`, `First`, 또는 바닥 허용오차 밖으로의 `ThumbTrack`/`ThumbPosition`/`EndScroll`)
+    3. `PreviewKeyDown` (`Key.Up`, `Key.PageUp`, `Key.Home`)
+* **활성 상태(`IsAutoScrollActive == true`) 시 무조건적 하단 고정**:
+  - 스트리밍 줄바꿈(`ExtentHeightChange > 0`), 새 메시지 추가 시 `VirtualizingStackPanel`의 평균 높이 재산출 및 스트리밍 종료 트림(`ExtentHeightChange < 0`), 멀티라인 입력창 확장·추천 답변 노출(`ViewportHeightChange < 0`), 그리고 가상화 패널의 자체 음수 오프셋 드리프트(`e.VerticalChange < 0`)가 발생하더라도 흔들림 없이 즉시 `ScrollToBottom()`으로 보정합니다.
+  - `ChatView.xaml.cs`에서 `ChatViewModel.ChatHistory.CollectionChanged`(`NotifyCollectionChangedAction.Add`)를 구독하여 추천 답변 클릭이나 재전송 등 코드비하인드 이벤트를 거치지 않는 새 메시지 추가 시에도 즉시 하단 고정을 보장합니다.
+* **레이아웃 불변 GPU 슬라이드업 애니메이션 ([ModernStyles.xaml](../../../GRC/GRC/Themes/ModernStyles.xaml))**:
+  - `ChatMessageTemplate`의 `Loaded` 등장 애니메이션을 레이아웃 높이를 매 프레임 변경하던 `Margin` (`ThicknessAnimation`) 대신 GPU 렌더링 전용 속성인 `RenderTransform.(TranslateTransform.Y)` (`From="17" To="0"`)로 전환하여, 새 턴 시작 및 과거 대화 상향 스크롤(컨테이너 실현) 시 `VirtualizingStackPanel.MeasureOverride`가 60FPS로 재호출되며 오프셋을 흔드는 현상을 원천 제거했습니다.
+* **데드락 없는 바닥 재결합 (`UpwardBounceCooldownMs`)**:
+  - 하향 휠(`e.Delta < 0`)이나 키보드 하향 키(`Down`/`PageDown`) 입력 시 이미 바닥 허용오차(`24px`) 이내에 위치해 `ScrollChanged`가 발생하지 않는 경우에도 입력 핸들러에서 즉시 `IsAutoScrollActive = true`로 재결합합니다.
+  - 상향 물리 입력 직후 `150ms` 이내(`LastUpwardInputTick`)에 발생하는 가상화 레이아웃 반동(`dV > 0`)은 `ScrollChanged`에서 무시하여 상향 스크롤 중 역보정 재결합을 차단합니다.
 
 </smart_autoscroll>
