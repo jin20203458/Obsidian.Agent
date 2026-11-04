@@ -18,50 +18,60 @@ related:
 
 ---
 
-## 2026-10-14: [Resolved] Vertex AI 최신 주력 모델의 특정 리전 엔드포인트 404 오류 및 글로벌 엔드포인트 단일화
+## 2026-10-14: [Resolved] Vertex AI 및 Gemini API 모델별 리전 엔드포인트 404 오류 방어 및 리전 라우팅 단일화
 
 ### 1. 현상 (Symptom)
-* Google Cloud Vertex AI 연동 시 로컬 리전(예: `asia-northeast3`, `us-central1`)을 지정하여 최신 주력 모델(`gemini-3.8-flash`, `gemini-4-argon`)을 호출할 경우 `404 Not Found` 또는 리전 미지원 예외 발생.
+* Google Cloud Vertex AI 연동 시 로컬 리전(`asia-northeast3`, `us-central1`)을 지정하여 최신 주력 추론 모델(`gemini-3.8-flash`, `gemini-4-argon`)을 호출하거나, 구형 `text-embedding-004` 엔드포인트를 호출할 경우 `404 Not Found` 예외 발생.
 
 ### 2. 원인 (Root Cause)
-* Google Cloud Vertex AI 정책상 최신 주력 모델(Gemini 3.x/4.x)은 전역 엔드포인트(`locations/global`)에서만 우선 서비스되며 로컬 리전에는 배포되지 않음 (단, Vertex AI TTS 음성 모델은 `us-central1` 등 특정 리전에서만 지원).
+* Vertex AI 정책상 최신 주력 LLM은 전역 엔드포인트(`locations/global`)에서만 우선 서비스되며, TTS 음성 모델(`us-central1`) 및 통합 임베딩 모델(`gemini-embedding-001`, `asia-northeast3`)은 지원 리전과 출력 차원 규격이 상이함.
 
-### 3. 해결책 (Resolution)
-* **LLM 엔드포인트 전역 고정 및 부정 제약**: LLM 추론 시 개별 로컬 리전을 지정하지 말고 `locations/global` 단일 엔드포인트로 고정.
-* **TTS 리전 분리**: `GeminiTtsService`는 Google Cloud TTS 지원 리전인 `us-central1`로 분리 고정.
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+* **역할별 엔드포인트 및 차원 고정 ([GeminiApiService.cs](../../GRC/GRC/Services/GeminiApiService.cs), [GeminiTtsService.cs](../../GRC/GRC/Services/GeminiTtsService.cs))**:
+  * **LLM 추론**: 로컬 리전을 지정하지 말고 `locations/global` 단일 엔드포인트로 고정.
+  * **TTS 음성 합성**: `GeminiTtsService`는 `us-central1` 리전으로 분리 고정.
+  * **임베딩 생성**: Vertex AI 및 AI Studio 모두 `gemini-embedding-001` 단일 모델명, 서울 리전(`asia-northeast3`), `outputDimensionality: 768` (MRL)로 고정.
+* **핵심 부정 제약 (Never use X)**: **절대 LLM 추론 호출에 로컬 리전을 하드코딩하거나 폐기된 `text-embedding-004`/`002` 모델명을 사용하지 말 것.**
 
 ---
 
-## 2026-10-14: [Resolved] LlmJsonParser의 사전 잡담 괄호 오인식, 문자열형 숫자/Enum 역직렬화 실패 및 스트리밍 절단 복구
+## 2026-10-14: [Resolved] LlmJsonParser의 사전 잡담 괄호 오인식, 관용 역직렬화 및 스트리밍 절단 복구
 
 ### 1. 현상 (Symptom)
-* LLM이 JSON 페이로드 앞뒤에 설명용 템플릿 괄호(`Format {template}...`)를 출력하거나 따옴표 내부에 괄호가 포함될 때 단순 `rawText.IndexOf('{')` 방식이 오작동하여 역직렬화 실패(`null` 반환).
-* 큰따옴표로 감싸진 숫자(`"count": "42"`)나 DTO의 `enum` 문자열 역직렬화 실패 및 토큰 제한으로 스트리밍 도중 절단(Truncated)된 JSON 파싱 불가.
+* LLM이 JSON 페이로드 앞뒤에 설명용 괄호(`Format {template}...`)를 출력하거나 따옴표 내부에 괄호가 포함될 때 단순 `rawText.IndexOf('{')` 방식이 오작동하여 역직렬화 실패(`null` 반환).
+* 토큰 제한으로 스트리밍 도중 절단(Truncated)된 JSON 파싱 불가, 또는 경량 모델(`Flash-Lite`)이 `string` 필드에 숫자(`30`)/1원소 배열(`["장소"]`), `bool` 필드에 문자열(`"false"`), `Dictionary<string, string>`(`uiBadges`)에 평문 문자열(`"체력: 55/100, ..."`)을 반환할 때 역직렬화가 무음 실패함.
 
 ### 2. 원인 (Root Cause)
-* 괄호 계수기가 문자열 리터럴/이스케이프(`\"`) 상태를 추적하지 않고 단순 `IndexOf('{')`로 개시 지점을 탐색했으며, `JsonSerializerOptions` 관용 플래그 부재 및 미완성 괄호 복구 엔진이 결여됨.
+* 단순 `IndexOf('{')` 탐색이 문자열 리터럴/이스케이프(`\"`) 상태를 추적하지 못했으며, `System.Text.Json` 기본 컨버터가 LLM의 비표준 타입 변형 및 미완성 괄호 구조를 수용하지 못함.
 
-### 3. 해결책 (Resolution)
-* **`LenientOptions` 정적 캐싱**: `AllowReadingFromString`, `AllowTrailingCommas`, `ReadCommentHandling = Skip`, `JsonStringEnumConverter`를 사전 구성하여 정적 캐싱하고 struct/record 역직렬화 지원.
-* **Index 0 기준 문자열 리터럴 추적 및 다중 후보 순차 검증**: 마크다운 ```` ```json ```` 블록을 우선 파싱하고, 따옴표/이스케이프를 추적하며 후보군 스키마를 순차 검증.
-* **`RepairTruncatedJson` 엔진 탑재 및 체크포인트 롤백**: 절단된 응답 감지 시 열린 따옴표를 닫고 dangling 키/콜론/쉼표를 정제한 후 스택에 보존된 여는 괄호의 짝(`]`, `}`)을 LIFO 역순으로 닫아 구조적 유효성 복원. 미완성 토큰 발생 시 `SafeRollbackLength` 기반 체크포인트 롤백 적용.
-* **핵심 부정 제약 (Never use X)**: **절대 LLM 스트리밍 응답 파싱 시 단순 정규식이나 `rawText.IndexOf('{')`, `IndexOf("```")`에 의존하지 말 것.** 반드시 `LlmJsonParser` 전용 엔진을 사용할 것.
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+* **`LenientOptions` 및 관용 컨버터 정적 캐싱 ([LlmJsonParser.cs](../../GRC/GRC/Helpers/LlmJsonParser.cs), [ChapterContext.cs](../../GRC/GRC/Models/ChapterContext.cs))**:
+  * `AllowReadingFromString`, `AllowTrailingCommas`, `ReadCommentHandling = Skip`, `JsonStringEnumConverter`와 함께 `LenientStringConverter`(`ReadAsPropertyName` 포함), `LenientBooleanConverter`, `LenientStringDictionaryConverter`(Key/Value `.Trim()`, 평문 `Key: Value` 및 배열 폴백)를 정적 등록.
+  * `ChapterContext.ToStatusSnapshotString()`에서 `<previous_state>` 내 `uiBadges`, `characterConditionDesc`, `items`를 인라인 JSON 포맷으로 직렬화하여 LLM의 평문 모방 출력을 사전 예방.
+* **리터럴 추적 및 `RepairTruncatedJson` 절단 복구**:
+  * 마크다운 ```` ```json ```` 블록을 우선 파싱하고, 따옴표/이스케이프 상태를 추적하며 후보 스키마를 순차 검증.
+  * 절단된 응답 감지 시 `SafeRollbackLength` 체크포인트 롤백 후 열린 따옴표와 여는 괄호의 짝(`]`, `}`)을 LIFO 역순으로 닫아 구조적 유효성 복원.
+* **핵심 부정 제약 (Never use X)**: **절대 LLM 응답 파싱 시 단순 정규식이나 `rawText.IndexOf('{')`, 기본 `JsonSerializer.Deserialize`에 직접 의존하지 말 것.** 반드시 `LlmJsonParser` 전용 엔진을 사용할 것.
 
 ---
 
-## 2026-10-14: [Resolved] 백그라운드 스레드 및 단위 테스트 환경 내 WPF STA 스레드 위반 방지를 위한 AudioService / DialogService Dispatcher 사전 캡처
+## 2026-10-14: [Resolved] 백그라운드 스레드 및 단위 테스트 환경 내 WPF STA 스레드 크래시·데드락 방어 (`Dispatcher` & `RunOnUIThread`)
 
 ### 1. 현상 (Symptom)
-* `AudioService`의 `MediaPlayer` 또는 `DialogService`의 윈도우 생성이 비동기 백그라운드 작업(`Task.Run`)에서 호출될 때 `System.InvalidOperationException` (STA 스레드 선점 위반) 발생 또는 헤드리스 단위 테스트(xUnit) 환경에서 UI 디스패처 부재로 데드락 발생.
+* 비동기 백그라운드 작업(`Task.Run`)에서 `MediaPlayer` 또는 `ObservableCollection`·윈도우를 조작할 때 `System.InvalidOperationException` / `NotSupportedException` (STA 스레드 위반) 발생.
+* xUnit 전체 테스트 실행 시 앞선 테스트가 생성 후 종료한 임시 STA 스레드(`!Thread.IsAlive`)의 `Application.Current.Dispatcher`에 `Invoke`를 호출하여 무한 대기(Deadlock) 발생.
+* 반대로 타임아웃(`500ms`) 초과 시 백그라운드 스레드에서 UI 액션을 직접 폴백 실행할 경우, 실제 WPF 앱 런타임에 `ObservableCollection.Clear()`에서 `NotSupportedException` 크래시가 발생하고 후속 `Session.json` 저장이 스킵됨.
 
 ### 2. 원인 (Root Cause)
-* WPF 컨트롤 및 `MediaPlayer`는 생성된 STA 스레드 친화성을 지니며, 런타임에 임의 스레드에서 `Application.Current.Dispatcher`를 직접 참조할 경우 null 참조 또는 스레드 액세스 위반 발생.
+* WPF 컨트롤과 바인딩 컬렉션은 STA 스레드 친화성을 지니며, 헤드리스 테스트 환경의 사망한 임시 스레드 디스패처와 실제 WPF 앱(`Application.Current is App`)의 실행 경계가 분리되지 않음.
 
-### 3. 해결책 (Resolution)
-* **생성자 내 Dispatcher 사전 캡처**:
-  `_dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;`
-* **`RunOnUIThread` 스레드 스위칭 캡슐화**:
-  `_dispatcher.CheckAccess()`를 검사하여 UI 스레드인 경우 즉시 동기 실행하고, 백그라운드 스레드인 경우에만 `_dispatcher.Invoke(action)` 또는 `_dispatcher.InvokeAsync(action)`로 전환.
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+* **실제 WPF 앱과 단위 테스트 환경의 엄격한 분기 ([IDialogService.cs](../../GRC/GRC/Services/IDialogService.cs), [AudioService.cs](../../GRC/GRC/Services/AudioService.cs))**:
+  * `Application.Current is not App || dispatcher == null || dispatcher.CheckAccess() || !dispatcher.Thread.IsAlive || dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished` 조건일 때(단위 테스트/헤드리스 또는 이미 UI 스레드인 경우)만 즉시 인라인 실행.
+  * 실제 WPF 앱(`Application.Current is App`)의 백그라운드 스레드에서는 타임아웃 폴백 없이 반드시 `dispatcher.Invoke(action)`으로 STA 스레드 실행을 강제.
+* **핵심 부정 제약 (Never use X)**:
+  * **절대 `Application.Current.Dispatcher` 참조 시 스레드 생존성(`!dispatcher.Thread.IsAlive`)과 `Application.Current is not App` 검증 없이 `Invoke`를 직접 호출하지 말 것.**
+  * **절대 실제 WPF 앱(`Application.Current is App`)에서 Dispatcher 타임아웃 후 백그라운드 스레드에서 UI 컬렉션 변경 액션을 직접 폴백 실행하지 말 것.**
 
 ---
 
@@ -76,18 +86,8 @@ related:
 ### 3. 해결책 (Resolution)
 * **`EnsureApplication` 정적 가드 패턴 도입**:
   ```csharp
-  private static void EnsureApplication()
-  {
-      if (Application.Current != null) return;
-      try
-      {
-          _ = new Application();
-      }
-      catch (InvalidOperationException)
-      {
-          // 타 테스트 스레드에 의한 경쟁 인스턴스 생성 예외 안전 흡수
-      }
-  }
+  if (Application.Current != null) return;
+  try { _ = new Application(); } catch (InvalidOperationException) { /* 병렬 스레드 경쟁 생성 안전 흡수 */ }
   ```
 
 ---
@@ -101,42 +101,12 @@ related:
 * WPF `Application.LoadComponent` API는 BAML 리소스 로딩 규격상 반드시 어셈블리 상대 URI(`UriKind.Relative`)를 요구함 (XAML 마크업 내 `ResourceDictionary.Source`와 상이).
 
 ### 3. 해결책 (Resolution)
-* **상대 URI 표준화 및 부정 제약**: C# 코드에서 `Application.LoadComponent` 호출 시 절대 Pack URI(`pack://...`)를 절대 전달하지 말고 상대 경로(`UriKind.Relative`)로 강제할 것:
+* **상대 URI 표준화 및 `PackUriHelper` 스킴 사전 등록**:
   ```csharp
-  var uri = new Uri("/GRC;component/Themes/PrimitiveTokens.xaml", UriKind.Relative);
-  var dict = (ResourceDictionary)Application.LoadComponent(uri);
+  _ = PackUriHelper.UriSchemePack; // 헤드리스 테스트 환경 pack 스킴 파서 등록
+  var dict = (ResourceDictionary)Application.LoadComponent(new Uri("/GRC;component/Themes/PrimitiveTokens.xaml", UriKind.Relative));
   ```
-* **PackUriHelper 스킴 사전 등록**: 헤드리스 테스트 환경에서는 `_ = PackUriHelper.UriSchemePack;`를 사전 호출하여 pack 스킴을 파서에 등록.
-
----
-
-## 2026-10-14: [Resolved] LLM 스트리밍 및 가상화 스크롤 시 상단 스크롤 하이재킹 및 1틱 탈출 불가 트랩 해결
-
-### 1. 현상 (Symptom)
-* LLM 텍스트 실시간 스트리밍 또는 접기/삭제로 스크롤 높이(`ExtentHeight`)가 줄어들 때(`extentHeightChange < 0`), 과거 대화를 읽고 있는 사용자의 뷰포트가 최하단으로 강제 스크롤되는 현상 발생.
-* AI 스트리밍 도중 마우스 휠을 위로 회전해도 화면이 올라가지 못하고 즉시 최하단으로 강제 롤백되는 1틱 탈출 불가 트랩 발생.
-
-### 2. 원인 (Root Cause)
-1. **정적 기하학 왜곡**: 하단 판정식에서 높이 변화량에 `Math.Abs`를 차감할 경우 컨텐츠 축소 시 기준 높이가 왜곡되어 유저가 최하단에 있지 않음에도 바닥인 것으로 오판단 (`ScrollViewer.Tag` 속성 불일치 포함).
-2. **무상태 판정 한계 (1틱 트랩)**: 24px 허용오차 내에서 16ms마다 토큰이 유입되면 `extentHeightChange`로 인해 휠 1틱(15px) 조작 시 허용오차를 탈출하지 못해 순수 수학식이 계속 `true`를 반환.
-3. **가상화 패널 점프 및 디스패처 지연**: `VirtualizingStackPanel` 아이템 실체화로 높이가 수백 px 급증하고, 직전 프레임의 `ScrollToEnd()` 비동기 태스크가 휠 조작 직후 뒤늦게 실행되어 화면을 강제 텔레포트시킴.
-
-### 3. 해결책 (Resolution)
-* **순수 수학적 위치 판정 함수 교정 (`AutoScrollHelper.cs`)**:
-  ```csharp
-  public static bool CalculateIsAtBottom(double verticalOffset, double scrollableHeight, double extentHeightChange, double tolerance = 24.0)
-  {
-      if (scrollableHeight <= 0) return true;
-      double referenceHeight = extentHeightChange > 0 ? scrollableHeight - extentHeightChange : scrollableHeight;
-      return verticalOffset >= (referenceHeight - tolerance);
-  }
-  ```
-* **사용자 의도 기반 상태 머신 (`IsAutoScrollActive` Attached DP)**:
-  - `PreviewMouseWheel`: 휠 상향 회전(`e.Delta > 0`) 즉시 `SetIsAutoScrollActive(sv, false)`.
-  - `ScrollChanged`: 순수 사용자 조작(`ExtentHeightChange == 0 && ViewportHeightChange == 0`)의 상향 이동(`VerticalChange < 0`) 감지 시 비활성화.
-* **디스패처 지연 실행 가드 (Lazy Guard)**: `ScrollToEnd()` 비동기 실행 시점에 `if (GetIsAutoScrollActive(sv))`를 재확인하여 큐 대기 중 발생한 휠 조작 보호.
-* **재활성화 조건**: 능동적 하향 조작 후 바닥 도달, 스크롤바 부재, 또는 신규 메시지 전송 시에만 `true`로 복구.
-* **핵심 부정 제약 (Never use X)**: **절대 무상태 수학식(`CalculateIsAtBottom`)만 단독으로 사용하지 말 것.** 16ms 단위 토큰 스트리밍 환경에서는 휠 1틱(15px) 조작 시 24px 허용오차를 즉시 벗어날 수 없어 바닥으로 재강제 스크롤되는 1틱 감금 트랩이 발생하므로, 반드시 `IsAutoScrollActive` Attached DP 상태 머신 및 디스패처 지연 가드를 결합하여 구성할 것.
+* **핵심 부정 제약 (Never use X)**: **절대 C# `Application.LoadComponent` 호출 시 절대 Pack URI(`pack://...`)를 전달하지 말 것.**
 
 ---
 
@@ -163,555 +133,246 @@ related:
 * Gemini API 규격상 `contents[].parts[].text`는 null 및 빈 문자열을 불허하고 1자 이상의 유효 텍스트를 요구함.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-* **다단계 안전 Fallback (`CognitivePromptAssembler`)**: `string.IsNullOrWhiteSpace` 감지 시 `PlotCatalyst` 지침을 우선 채택하고, 부재 시 `"(서사를 계속 진행하십시오.)"` 대체 텍스트를 강제 주입.
+* **다단계 안전 Fallback ([CognitivePromptAssembler.cs](../../GRC/GRC/Services/Cognitive/CognitivePromptAssembler.cs))**: `string.IsNullOrWhiteSpace` 감지 시 `PlotCatalyst` 지침을 우선 채택하고, 부재 시 `"(서사를 계속 진행하십시오.)"` 대체 텍스트를 강제 주입.
 * **핵심 부정 제약 (Never use X)**: **절대 검증되지 않은 빈 유저 입력을 검사 없이 `new Part(text)`에 직접 전달하지 말 것.**
 
 ---
 
-## 2026-10-17: [Resolved] 구버전 세션 로어북 백그라운드 임베딩 백필 중 세션 전환/수정 시 데이터 손실 및 파일 오염 경합 조건 해결
+## 2026-10-17: [Resolved] ChatViewModel 백그라운드 비동기 작업(임베딩 백필·상태창 콜백) 중 세션 전환 오염 방어 및 디스크 I/O 스레드 분리
 
 ### 1. 현상 (Symptom)
-- 구버전 세션 로드 시 백그라운드 비동기 임베딩 생성 도중(1~2초), 사용자가 로어북을 신규 등록하거나 다른 세션으로 전환할 경우:
-  - 신규 등록 로어북이 백그라운드 완료 시점에 구버전 목록으로 덮어써져 영구 유실됨.
-  - 다른 세션을 열었을 때 이전 세션의 로어북 데이터가 현재 세션 파일에 덮어써져 저장되는 파일 오염 발생.
+* 백그라운드 비동기 작업(구버전 로어북 임베딩 백필 또는 상태창 갱신 API) 실행 도중 사용자가 로어북을 수정하거나 세션을 전환(`GoBack`/다른 세션 로드)할 경우, 이전 세션의 결과가 현재 세션 메모리와 디스크(`Session.json`)에 덮어써지는 파일 오염 및 신규 로어북 유실 발생.
+* `onStatusUpdated` 콜백 전체를 `Dispatcher.InvokeAsync`로 감쌀 경우 백그라운드 디스크 I/O(`SaveSessionAsync`)까지 UI 스레드에서 경합하며 헤드리스 환경에서 저장이 누락됨.
 
 ### 2. 원인 (Root Cause)
-- `ChatViewModel.cs`의 `Task.Run` 내부에서 시작 시점의 스냅샷 없이 인스턴스 멤버(`CurrentPreset`, `_currentFileName`)를 직접 참조하고, 완료 후 `CurrentPreset with { Lorebooks = updatedLores }`로 무조건 덮어씀.
+* 비동기 작업 진입 시점의 세션 식별자 스냅샷 검증이 부재했으며, 메모리/디스크 I/O와 UI 컬렉션 갱신의 스레드 경계가 분리되지 않음.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **세션 수명주기 앵커링**: `_isSessionActive` 플래그 및 `string targetFileName = _currentFileName;` 스냅샷을 캡처하고, `GoBack()` 호출 시 `_isSessionActive = false;`로 전환. 비동기 완료 후 `!_isSessionActive || _currentFileName != targetFileName`일 경우 즉시 작업 폐기.
-- **비파괴적 선택적 임베딩 병합 (Selective Merge)**: 전체 리스트를 덮어쓰지 않고, 완료된 768차원 임베딩을 `(Name, Content)` 키 딕셔너리로 구축하여 임베딩이 결여된 항목에만 선택적으로 주입. 백그라운드 실행 중 유저가 수정한 로어북 무손실 보존.
-- **WPF STA 스레드 안전 디스패칭**: `Application.Current?.Dispatcher` 가드를 통해 UI 스레드 위반 없이 안전하게 상태를 반영하고 세션 파일과 동기화.
+* **세션 수명주기 스냅샷 앵커링 및 비파괴 병합 ([ChatViewModel.cs](../../GRC/GRC/ViewModels/ChatViewModel.cs))**:
+  * 작업 시작 시 `string targetFileName = _currentFileName;`을 캡처하고, 비동기 완료 후 `!_isSessionActive || _currentFileName != targetFileName`이면 즉시 폐기.
+  * 로어북 임베딩 백필은 전체 리스트 덮어쓰기 대신 `(Name, Content)` 키 기반 선택적 병합(Selective Merge)으로 유저 수정본을 보존.
+* **백그라운드 디스크 I/O와 UI 디스패치 분리**:
+  * 스레드 안전한 `UpdateContextStatus`와 비동기 디스크 I/O `SaveSessionAsync`는 백그라운드 태스크에서 직접 실행하고, UI 컬렉션 조작만 `UpdateStatusUI` 내부의 `_dialogService.RunOnUIThread`에 위임.
+* **핵심 부정 제약 (Never use X)**: **절대 비동기 디스크 I/O(`SaveSessionAsync`)를 UI Dispatcher 스레드 안으로 감싸거나, 세션 식별자 스냅샷(`targetFileName`) 검증 없이 백그라운드 콜백 결과를 반영하지 말 것.**
 
 ---
 
 ## 2026-10-17: [Resolved] dotnet test 백그라운드 실행 시 솔루션 단위 평가로 인한 MSBuild/VSTest I/O 파이프 블로킹 해결 및 테스트 프로젝트 직접 타겟팅 규격 확립
 
 ### 1. 현상 (Symptom)
-- 백그라운드 태스크로 `dotnet test GRC.sln --no-build` 실행 시 테스트 실행 자체는 완료되었으나 프로세스가 종료되지 않고 셸이 무한 대기(RUNNING/Deadlock)에 머무는 결함 발생.
+* 백그라운드 태스크로 `dotnet test GRC.sln --no-build` 실행 시 테스트 실행 자체는 완료되었으나 프로세스가 종료되지 않고 셸이 무한 대기(RUNNING/Deadlock)에 머무는 결함 발생.
 
 ### 2. 원인 (Root Cause)
-- `dotnet test` CLI 규격상 `-nodeReuse:false`가 VSTest(`vstest.console.exe`) 및 솔루션 그래프를 평가하는 MSBuild 백그라운드 작업자 노드에 완벽히 상속되지 않음.
-- 자식 작업자 노드가 백그라운드 셸의 표준 출력(stdout) 스트림 핸들을 점유한 채 반환하지 않아 프로세스 종료 신호(EOF)가 셸에 전달되지 않음.
+* `dotnet test` CLI 규격상 `-nodeReuse:false`가 솔루션 그래프를 평가하는 MSBuild/VSTest 자식 작업자 노드에 완벽히 상속되지 않아, 자식 노드가 백그라운드 셸의 표준 출력(stdout) 파이프 핸들을 점유한 채 종료 신호(EOF)를 블로킹함.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **테스트 프로젝트 직접 타겟팅 규격 확립**:
-  솔루션(`.sln`) 대신 테스트 프로젝트 파일(`.csproj`)을 명시적으로 직접 지정하고 일반 상세도(`-v n`)를 적용하여 불필요한 솔루션 중계 노드 생성을 차단:
+* **테스트 프로젝트(`.csproj`) 직접 타겟팅 규격 확립**:
   ```powershell
   dotnet test tests/GRC.Tests/GRC.Tests.csproj --filter "Category!=Integration" --no-build -v n
   ```
-- **핵심 부정 제약 (Never use X)**: **백그라운드 터미널에서 `dotnet test` 실행 시 절대 솔루션 파일(`.sln`)을 타겟으로 지정하지 말 것.** 반드시 해당 테스트 프로젝트 파일(`tests/GRC.Tests/GRC.Tests.csproj`)을 직접 지정하여 VSTest/MSBuild I/O 파이프 데드락을 방지할 것.
+* **핵심 부정 제약 (Never use X)**: **백그라운드 터미널에서 `dotnet test` 실행 시 절대 솔루션 파일(`.sln`)을 타겟으로 지정하지 말 것.** 반드시 `tests/GRC.Tests/GRC.Tests.csproj`를 직접 지정할 것.
 
 ---
 
-## 2026-10-17: [Resolved] 메타 지시문(MetaDirective) 합성에 따른 768차원 임베딩 쿼리 벡터 오염 해결 및 EventLedgerExtractor 정적 SystemInstruction KV Cache 분리
+## 2026-10-17: [Resolved] 메타 지시문(MetaDirective) 합성에 따른 768차원 임베딩 쿼리 벡터 오염(Vector Dilution) 해결
 
 ### 1. 현상 (Symptom)
-- 시스템 이벤트나 챕터 전환, 자동 이어쓰기 시 `[시스템 개입: ...]` 메타 텍스트가 `userMessage.Text`에 직접 병합되어 `GetEmbeddingAsync`로 전달됨에 따라, 순수 유저 의도 검색이어야 할 768차원 쿼리 임베딩 벡터가 메타 단어로 희석(Vector Dilution)되어 로어북/과거 기억 RAG 검색 정확도가 저하됨.
-- 4턴 주기 백그라운드 사건 팩트 추출기(`EventLedgerExtractor`)가 `SystemInstruction: null`로 호출되어 약 400토큰의 정적 규칙과 스키마가 매번 캐시 미스(Cache Miss)를 일으켜 API 비용 및 지연 누적.
+* 시스템 이벤트, 챕터 전환, 자동 이어쓰기 시 `[시스템 개입: ...]` 메타 텍스트가 `userMessage.Text`에 직접 병합되어 `GetEmbeddingAsync`로 전달됨에 따라, 순수 유저 의도 검색이어야 할 768차원 쿼리 임베딩 벡터가 메타 단어로 희석(Vector Dilution)되어 RAG 검색 정확도가 저하됨.
 
 ### 2. 원인 (Root Cause)
-1. `MemoryManagerService.cs`에서 `userMessage.Text`와 `metaDirective`를 단순 문자열 결합하여 임베딩 및 프롬프트 조립에 공용 사용.
-2. `EventLedgerExtractor.cs`가 단일 `user` 메시지에 모든 지침과 이력을 연결하여 `SystemInstruction` 캐싱 인프라 미활용.
+* `MemoryManagerService.cs`에서 `userMessage.Text`와 `metaDirective`를 단순 문자열 결합하여 임베딩 생성과 프롬프트 조립에 공용 사용함.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-1. **메타 지시문 독립 데이터 파이프라인 및 순수 유저 임베딩 복원**:
-   - `CognitiveContext`에 `MetaDirective` 프로퍼티를 신설하여 메타 지시문을 독립 전달.
-   - `MemoryManagerService.cs`에서 순수 `userMessage.Text`로만 768차원 임베딩 및 `loreScanQuery`를 생성하여 쿼리 벡터 희석 원천 차단.
-   - `CognitivePromptAssembler.cs`에서 메타 지시문이 존재할 때만 `<current_action>` 앞쪽에 `<meta_directive>` 독립 상위 태그로 조건부 조립.
-2. **EventLedgerExtractor SystemInstruction 분리 및 샘플링 최적화**:
-   - 무인격 기능 명세, 5대 인과 규칙 및 TypeScript 인터페이스를 `SystemInstruction`으로 물리 분리하여 4턴 주기 KV Cache 100% 적중 달성.
-   - `GenerationConfig.Temperature: null`로 교정하여 구글 Gemini 기본 최적화 샘플링 엔진에 위임.
-3. **핵심 부정 제약 (Never use X)**: **절대 시스템 메타 지시문을 유저 발화 원문에 병합하여 임베딩을 생성하지 말 것(Vector Dilution 방지).**
-
----
-
-## 2026-10-17: [Resolved] 단위 테스트 환경에서 종료된 임시 STA 스레드의 Application.Current Dispatcher Invoke 호출로 인한 무한 대기(Deadlock) 해결
-
-### 1. 현상 (Symptom)
-- `dotnet test` 전체 테스트 스위트 실행 시 특정 테스트 통과 후 `DialogServiceTests`에서 프로세스가 멈추고 무한 대기(Hang/Deadlock)에 빠지는 결함 발생 (단독 실행 시에는 정상 통과).
-
-### 2. 원인 (Root Cause)
-- 앞서 실행된 XAML 리소스 검증 테스트가 임시 STA 스레드에서 `new Application()`을 호출하고 종료됨에 따라, 전역 `Application.Current.Dispatcher`가 이미 종료된 스레드(`Thread.IsAlive == false`)에 바인딩된 상태로 잔존함.
-- 뒤이어 xUnit 작업자 스레드에서 `DialogService.RunOnUIThread`가 호출되었을 때, `Application.Current != null` 및 `CheckAccess() == false`로 인해 `dispatcher.Invoke(action)`를 호출했으나 대상 스레드가 사망하여 메시지 펌프가 돌지 못해 영원히 블로킹됨.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **스레드 생존성 및 종료 상태 가드 보강 (`IDialogService.cs`)**:
-  - `dispatcher == null || dispatcher.CheckAccess() || !dispatcher.Thread.IsAlive || dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished` 조건을 추가하여, UI 스레드가 사망했거나 셧다운된 테스트/헤드리스 환경에서는 백그라운드 스레드에서 즉시 인라인 실행하도록 방어.
-  - `RunOnUIThread`에 500ms 비동기 타임아웃(`dispatcher.InvokeAsync(action).Task.Wait(500)`) 및 `try-catch` 가드를 적용하여 실패 시에도 즉시 인라인 폴백 보장.
-- **핵심 부정 제약 (Never use X)**: **절대 `Application.Current.Dispatcher` 참조 시 스레드 생존성(`Thread.IsAlive`)과 셧다운 여부 검증 없이 `dispatcher.Invoke`를 직접 호출하지 말 것.** (상단 2026-10-14 Dispatcher 캡처 엔트리 참조)
+* **메타 지시문 독립 파이프라인 분리 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs), [CognitivePromptAssembler.cs](../../GRC/GRC/Services/Cognitive/CognitivePromptAssembler.cs))**:
+  * `CognitiveContext.MetaDirective` 프로퍼티로 메타 지시문을 분리 전달하고, 768차원 임베딩 및 `loreScanQuery`는 순수 `userMessage.Text`로만 생성.
+* **핵심 부정 제약 (Never use X)**: **절대 시스템 메타 지시문을 유저 발화 원문에 병합하여 임베딩을 생성하지 말 것(Vector Dilution 방지).**
 
 ---
 
 ## 2026-10-17: [Resolved] Gemini Thinking 모델 MaxOutputTokens 축소 시 JSON 절단 방어 및 TTS 프롬프트 순수 구어체 자연어 보존
 
-### 1. 현상 및 잠재적 장애 모드 (Symptom & Failure Modes)
-- **Thinking 모델의 MaxOutputTokens 축소 시 JSON 파손**: Gemini Thinking 아키텍처에서 `maxOutputTokens`는 생각 토큰(Thought Tokens)과 가시적 응답 토큰(Visible Output Tokens)의 통합 총합이므로, 이를 1,024~2,048로 강제 축소할 경우 생각 토큰에 예산이 잠식되어 JSON 페이로드가 중간에 잘려 파싱 에러(`LlmJsonParser` 예외) 발생.
-- **TTS 음성 변조 및 태그 음독 결함**: 음성 합성 모델(`gemini-3.1-flash-tts-preview`) 및 사전 번역기에 XML 태그나 불릿포인트를 주입하면 음성의 운율(Prosody) 왜곡, 기계음 발생, 태그 음독 결함 발생.
+### 1. 현상 (Symptom)
+* Gemini Thinking 아키텍처에서 `maxOutputTokens`를 1,024~2,048(일반 구조화 작업) 또는 8,192(`ThinkingLevel.high` 장문 설계 작업)로 작게 제한할 경우, 내부 추론 토큰(Thought Tokens)이 출력 예산을 잠식하여 가시적 JSON 페이로드가 중간에 절단됨.
+* 음성 합성 모델(`gemini-3.1-flash-tts-preview`) 및 사전 번역기에 XML 태그나 불릿포인트를 주입하면 운율(Prosody) 왜곡, 기계음 및 태그 음독 결함 발생.
 
 ### 2. 원인 (Root Cause)
-1. 백그라운드 구조화 출력 작업에 Thinking 예산과 가시적 토큰의 통합 메커니즘을 고려하지 않고 `maxOutputTokens`를 과도하게 제한함.
-2. TTS 사전 번역 및 합성 프롬프트에 마크다운/XML 구조화 태그를 주입하여 오디오 생성 모델의 자연어 운율 인코딩을 왜곡함.
+* Thinking 토큰과 가시 출력 토큰이 합산 차감되는 예산 구조를 고려하지 않고 `maxOutputTokens`를 축소했으며, 오디오 합성 프롬프트에 마크다운/XML 구조화 기호를 주입함.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-1. **Thinking 토큰 상한 보존 및 저비용 추론 가드**:
-   - 지연 시간 및 연산 비용 제어는 오직 `ThinkingConfig(ThinkingLevel.low)`로만 통제하며, `MaxOutputTokens`는 8,192의 넉넉한 상한을 유지하여 생각 토큰 소모로 인한 JSON 페이로드 잘림을 원천 방어.
-2. **TTS 프롬프트 100% 순수 자연어 구어체 보존**:
-   - 사전 번역 프롬프트와 음성 합성 프롬프트(`dynamicPrompt`)는 일체의 태그/기호 없이 **100% 순수 자연어 구어체 지시문**으로만 유지하여 운율 왜곡 및 태그 음독 원천 차단.
-3. **핵심 부정 제약 (Never use X)**: **절대 Thinking이 활성화된 모델의 `MaxOutputTokens`를 1,024~2,048 수준으로 임의 축소하지 말 것(JSON 절단 트랩 방어).**
-
----
-
-## 2026-10-18: [Resolved] text-embedding-004(AI Studio EOL) 및 002(Vertex 레거시) 대응 차세대 통합 gemini-embedding-001(서울, 768 MRL) 전환 및 RAG 임계치(0.75f, 0.78f) 재보정
-
-### 1. 현상 및 배경 (Symptom & Background)
-- Google AI Studio의 구형 `text-embedding-004` 서비스 종료(HTTP 404) 및 Vertex AI `text-multilingual-embedding-002` 레거시 지정.
-- `gemini-embedding-001` 전환 시 한국어/다국어 표현력 향상으로 코사인 유사도 점수 분포가 전반적으로 +0.07~+0.09 상향 이동(Scale Shift)하여 기존 임계치(0.68f, 0.71f) 유지 시 오탐(False-Positive) 급증 위험 발생.
-- 로어북 엔트리의 키워드가 비어 있을 때 캐릭터 이름(`Name`) 직접 언급 시 0ms 즉각 인출이 누락되는 위험 존재.
-
-### 2. 해결책 및 아키텍처 SSOT 규격 (Resolution & Invariants)
-1. **차세대 통합 임베딩 모델 일원화 (`GeminiApiService.cs`)**:
-   - Vertex AI 및 AI Studio 양쪽 모두 `gemini-embedding-001` 단일 모델명 및 `outputDimensionality: 768` (MRL)로 통일.
-   - 서울(`asia-northeast3`) 리전 직결을 통해 레이턴시 단축 및 768차원 float 벡터 연산 효율 보존.
-2. **RAG 임계치 전면 재보정**:
-   - `GatedRAGRetriever.cs` (사건 불릿 렛저 RAG): **`0.78f`**
-   - `HybridLorebookRetriever.cs` (로어북 RAG): **`0.75f`**
-3. **하이브리드 로어북 이름(Name) 1차 스파스 매칭 보강**:
-   - `entry.Keywords` 누락 시에도 `entry.Name`에 대한 단어 경계(`\b`) 매칭을 기본 수행하여 0ms 즉각 인출 보장 및 `DistinctBy` 중복 제거.
-4. **아키텍처 불변식**:
-   - **임베딩 모델은 반드시 `gemini-embedding-001` (서울 asia-northeast3 리전) 및 `outputDimensionality: 768`을 사용할 것.**
-   - **로어북 시맨틱 임계치는 `0.75f`, 사건 렛저 RAG 임계치는 `0.78f`를 유지할 것.** (상단 2026-10-15 리전 분리 규격 참조)
+* **Thinking 토큰 예산 상한 보존 ([SessionArchitectService.cs](../../GRC/GRC/Services/SessionArchitectService.cs))**:
+  * 지연/비용 제어는 `ThinkingConfig`(`ThinkingLevel`)로만 통제하며, `MaxOutputTokens`는 일반 추론 최소 `8,192`, `SessionArchitectService` 장문 JSON 생성은 `ArchitectMaxOutputTokens = 32,768` 상한을 유지하고 단계별 검증은 LLM 재호출 대신 100% C# 정규식·파서(`ReviewStepContentAsync`)로 수행.
+* **TTS 프롬프트 100% 순수 구어체 보존**: 사전 번역 및 음성 합성 프롬프트(`dynamicPrompt`)는 일체의 XML 태그·불릿 기호 없이 순수 자연어 구어체 지시문으로만 구성.
+* **핵심 부정 제약 (Never use X)**: **절대 Thinking이 활성화된 모델의 `MaxOutputTokens`를 1,024~2,048 수준으로 임의 축소하지 말 것.**
 
 ---
 
 ## 2026-10-18: [Resolved] 동적 상태창 갱신 파이프라인의 Nullable DTO 빈 배열 소거 및 비동기 체이닝 확립
 
 ### 1. 현상 (Symptom)
-- 인벤토리 마지막 아이템 소비 시 LLM이 `"items": []`를 반환해도 `StatusPayload` 기본값(`new()`)과 `Count > 0` 조건으로 인해 빈 배열 덮어쓰기가 무시되어 아이템이 영구 잔존하는 결함 발생.
-- `ChatWorkflowService` 내 `_ = Task.Run(...)`이 완료를 보장하지 않아 유저가 연속 턴 입력 시 이전 턴 상태창 반영 전에 다음 턴 프롬프트가 조립되는 비동기 타이밍 누수 발생.
+* 인벤토리 마지막 아이템 소비 시 LLM이 `"items": []`를 반환해도 `StatusPayload` 기본값(`new()`)과 `Count > 0` 조건으로 인해 빈 배열 덮어쓰기가 무시되어 소모품이 영구 잔존함.
+* `onStatusUpdated` 콜백이 동기 `Action`으로 선언되어 연속 턴 입력 시 이전 턴 상태창 반영 및 저장 완료 전에 다음 턴 프롬프트가 조립되는 타이밍 누수 발생.
 
 ### 2. 원인 (Root Cause)
-1. `StatusPayload` DTO 프로퍼티가 `new()`로 강제 초기화되어 부분 갱신과 전체 소거(빈 배열)를 구분할 수 없었음.
-2. `onStatusUpdated` 콜백이 동기 `Action`으로 선언되어 UI 디스패치 및 디스크 저장을 순차 비동기 체이닝하지 못함.
+* `StatusPayload` DTO 컬렉션이 `new()`로 강제 초기화되어 미제공(`null`, 부분 갱신)과 빈 배열(`[]`, 전체 소거)을 구분할 수 없었으며, 비동기 대기 체인이 단절됨.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-1. **Nullable StatusPayload 컬렉션 전환 (`StatusPayload.cs`, `MemoryManagerService.cs`)**:
-   - `CustomStats`, `Chars`, `Items`, `Places`를 nullable(`? = null`)로 전환하고, `payload.Items != null` 조건으로 빈 리스트(`[]`) 수신 시 인벤토리를 정상 소거.
-2. **완전 비동기 체이닝 및 세이프가드 확립 (`IChatWorkflowService.cs`, `ChatWorkflowService.cs`)**:
-   - `onStatusUpdated`를 `Func<StatusPayload, Task>?`로 변경하고, `statusTask` 내부에서 `await onStatusUpdated(payload)`를 통해 네트워크 통신~UI 디스패치~디스크 영구 저장까지 단일 비동기 파이프라인으로 안전 대기.
-3. **핵심 부정 제약 (Never use X)**: **동적 상태창 DTO의 컬렉션 프로퍼티를 `new()`로 사전 초기화하지 말 것.** 미제공(null, 부분 갱신)과 빈 컬렉션(`[]`, 전체 소거)의 의미론적 차이를 보존할 것.
+* **Nullable 컬렉션 전환 및 `Func<StatusPayload, Task>?` 비동기 체이닝 ([StatusPayload.cs](../../GRC/GRC/Models/StatusPayload.cs), [ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs))**:
+  * `CustomStats`, `Chars`, `Items`, `Places`를 nullable(`? = null`)로 선언하여 `payload.Items != null`일 때 빈 배열(`[]`) 소거를 정상 반영하고, `await onStatusUpdated(payload)`로 상태 갱신~디스크 저장까지 단일 파이프라인으로 대기.
+* **핵심 부정 제약 (Never use X)**: **절대 동적 상태창 DTO(`StatusPayload`)의 컬렉션 프로퍼티를 `new()`로 사전 초기화하지 말 것.**
 
 ---
 
-## 2026-10-18: [Resolved] ChatViewModel 백그라운드 상태창 콜백의 세션 이탈 오염 방어 및 백그라운드 I/O 스레드 분리
+## 2026-10-25: [Resolved] Session Architect 다국어 토크나이저 글리치 문자 혼입 제거 및 2단계 스탯 Prefix 바인딩·게이지 클램핑
 
 ### 1. 현상 (Symptom)
-- 상태창 비동기 API가 실행되는 도중 유저가 세션을 나가거나(`GoBack`) 다른 세션 파일로 전환했을 때 세션 활성화 가드가 없어 이전 세션의 상태창 결과가 새 세션 메모리와 디스크에 덮어써지는 파일/상태 오염 발생.
-- `onStatusUpdated` 콜백 내부 전체가 `Application.Current.Dispatcher.InvokeAsync`로 묶여 있어, 백그라운드에서 돌아야 할 `SaveSessionAsync` 파일 I/O까지 UI 스레드에서 경합하고 헤드리스 환경에서 데이터 저장이 스킵됨.
+* 다국어 토크나이저 글리치로 한국어 산문 중간에 데바나가리·아랍·태국·키릴 문자(`सिर` 등)가 간헐 방출됨.
+* 인물명이 풀네임(`아리아 폰 블랑셰`)이고 스탯명이 첫 어절 약칭(`아리아 호감도`)일 때 `<entity_relationship>` 바인딩에 실패하고 `<current_state>`에 중복 노출되며, `"120/100"`, `"-15/100"` 등 범위 초과 게이지가 무검증 반영됨.
 
 ### 2. 원인 (Root Cause)
-1. `ChatViewModel.SendMessageAsync` 내 `onStatusUpdated` 콜백에 세션 활성 플래그 및 파일명 일치 가드가 누락됨.
-2. UI 갱신과 순수 데이터/디스크 저장(`SaveSessionAsync`)의 실행 스레드 경계가 분리되지 않고 통째로 UI Dispatcher에 바인딩됨.
+* 출력 정제기에 비한국어 글리치 유니코드 블록 제거 정규식이 없었으며, `MemoryManagerService`가 단일 키 완전 일치만 검사하고 게이지 클램핑을 수행하지 않음.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-1. **세션 식별자 스냅샷 및 활성 가드 보강 (`ChatViewModel.cs`)**:
-   - `SendMessageAsync` 진입 시 `string targetFileName = _currentFileName;`을 캡처하고, `onStatusUpdated` 진입 즉시 `if (!_isSessionActive || _currentFileName != targetFileName) return;` 방어로 세션 이탈/전환 시 즉각 폐기.
-2. **디스패처 의존성 제거 및 백그라운드 I/O 분리**:
-   - `onStatusUpdated` 외부의 Dispatcher 래핑을 걷어내고, 스레드 안전한 `UpdateContextStatus`와 비동기 디스크 I/O `SaveSessionAsync`는 백그라운드 태스크에서 즉시 실행.
-   - UI 컬렉션 조작만 `UpdateStatusUI` 내부의 `_dialogService.RunOnUIThread`에 위임하여 완벽한 스레드 분리 달성.
-3. **핵심 부정 제약 (Never use X)**: **절대 비동기 디스크 I/O(`SaveSessionAsync`)를 UI Dispatcher 스레드 안으로 감싸지 말 것.** 비동기 콜백 처리 시 반드시 세션 식별자 스냅샷(`targetFileName`)과 활성 상태(`_isSessionActive`)를 선행 검증할 것. (상단 2026-10-17 세션 전환 경합 조건 참조)
+* **비정상 유니코드 스크립트 일괄 스트리핑 ([SessionArchitectService.cs](../../GRC/GRC/Services/SessionArchitectService.cs))**: `StripForeignGlitchScripts`를 통해 데바나가리·아랍·태국·키릴·히브리 블록(`[\u0400-\u06FF\u0900-\u0E7F]+`)을 모든 `Sanitize*` 파이프라인에서 제거.
+* **2단계 스탯 Prefix 매칭 및 게이지 클램핑 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**: Exact Match 실패 시 풀네임(`charName + " "`) 및 고유 첫 어절(`firstToken + " "`) 접두사로 `<entity_relationship>`에 바인딩 후 `remainingCustomStats`에서 제외하며, `ClampGaugeValue`로 범위형 게이지를 `0~max`로 클램핑.
 
 ---
 
-## 2026-10-18: [Resolved] 프롬프트 문자열 들여쓰기 공백 유입, 초기 시나리오 중복 헤더 오염 및 구조화 디코딩 스키마 강제
+## 2026-10-25: [Resolved] ExportSession/RestoreSession 시 _cachedLorebooks 복원 누락 해결 및 ChapterContext.Clone() 백그라운드 직렬화 동시성 격리
 
 ### 1. 현상 (Symptom)
-- C# `@""` 축어적 리터럴 및 문자열 결합(`+`) 사용 시 소스코드 들여쓰기 공백이 LLM 프롬프트에 그대로 유입되어 토큰 낭비 및 어텐션 오염 발생.
-- `ChatViewModel`에서 `InjectInitialScenario` 호출 시 `[초기 상황]\n` 헤더를 중복 부착하여 `<initial_scenario>\n[초기 상황]\n...` 이중 헤더 오염 발생.
+* `ExportSession`이 디스크 중복 방지를 위해 `Preset with { Lorebooks = null }`로 직렬화함에 따라 세션 복원 시 `_cachedLorebooks`가 비어 있게 되고, 백그라운드 JSON 직렬화 도중 컬렉션 변경 시 `InvalidOperationException` 경합 위험이 발생함.
 
 ### 2. 원인 (Root Cause)
-- `@""` 리터럴은 좌측 들여쓰기 공백을 스트리핑하지 않으며, 초기 시나리오 주입 경로에 멱등성 가드 및 디코딩 레벨 스키마(`responseSchema`)가 누락됨.
+* 세션 스냅샷 내보내기/복원 시 프리셋 로어북 재결합 및 상태 컨테이너(`ChapterContext`)의 깊은 복사 격리가 누락됨.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **C# 11 원시 문자열 리터럴(`"""` / `$$"""`) 전면 일원화**: 컴파일 타임 자동 들여쓰기 스트리핑으로 공백 토큰 유입 원천 차단.
-- **초기 시나리오 멱등성 가드 및 `responseSchema` 등록**: `InjectInitialScenario`에서 순수 시나리오 원문만 `Trim()` 후 주입하고, `LorebookService`·`ReplySuggestionService`·`SessionArchitectService`에 `responseSchema`를 등록하여 디코딩 문법 무결성 보장.
-- **핵심 부정 제약 (Never use X)**: **절대 다중 줄 프롬프트 문자열에 `@""` 축어적 리터럴을 사용하지 말 것.** 반드시 C# 11 `"""` / `$$"""` 원시 문자열 리터럴만 사용할 것.
+* **`ChapterContext.Clone()` 스냅샷 격리 및 로어북 재결합 ([ChatViewModel.cs](../../GRC/GRC/ViewModels/ChatViewModel.cs), [ChapterContext.cs](../../GRC/GRC/Models/ChapterContext.cs))**:
+  * 세션 복원 시 `savedSession with { Preset = sessionPreset }`으로 `_cachedLorebooks`를 즉시 복원하고, `ExportSession`/`RestoreSession` 및 턴 시작 스냅샷 생성 시 반드시 `ChapterContext.Clone()` 단일 깊은 복사 경로를 사용하여 백그라운드 직렬화 중 컬렉션 변경 예외를 원천 차단.
 
 ---
 
-## 2026-10-19: [Resolved] AI 답변 추천(ReplySuggestionService)의 대화 슬라이싱 하드코딩 제거 및 미압축 단기 기억 전수 연동
+## 2026-10-26: [Resolved] EntityNameResolver 및 NarrativeContract SSOT 도입 (상태창 인물 덮어쓰기 차단, 비인물 첫 어절 오탐 제거, Turn 1 오프닝 스캔)
 
 ### 1. 현상 (Symptom)
-- `ChatViewModel`에서 답변 추천 생성 시 `ChatHistory.TakeLast(9)` 고정 슬라이싱으로 인해 중기 기억(`Plot`, 18개 메시지 임계치) 압축 대기 중인 6~8턴 전 미압축 대화가 누락되는 과도기 기억 사각지대(Transitional Gap) 발생 및 `<current_snapshot>` 이중 중첩 XML 충돌 발생.
+* 비인물 복합 명칭(`"지하 유적 제단"`, `"그림자 사냥개 길드"`)의 첫 어절(`"지하"`, `"그림자"`)이 단독 키워드로 자동 추출되어 일반 명사 등장만으로 오탐 인출됨.
+* 상태창 갱신 시 `entry.Keywords` 부분 문자열 포함(`cleanKey.Contains(kw)`) 검사로 인해, `"성녀"` 키워드를 가진 주연(`"세실리아 본 로젠버그"`)의 상태창 슬롯을 단역(`"성녀 호위대장"`)이 덮어쓰는 상태 오염 발생.
+* Turn 1에 직전 `model` 응답(`InitialScenarioAckText`)만 스캔하여 `<initial_scenario>` 오프닝 본문 속 시작 장소·소품·세력 로어북이 1차 스캔에서 누락됨.
 
 ### 2. 원인 (Root Cause)
-- 중기 기억 압축 임계치(18개 메시지)와 UI 컬렉션 고정 슬라이싱(`TakeLast(9)`) 간 라이프사이클 불일치 및 래퍼 태그명 중복.
+* 엔티티 별칭 파생과 인물 키 정규화 규칙이 파편화되어 일반 직함/소속 키워드에 대해 `.Contains` 부분 매칭을 허용함.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **미압축 단기 기억 전수 연동 (`IMemoryManagerService.GetCurrentShortTermMemory`)**: UI 하드코딩 슬라이싱(`TakeLast`)을 제거하고 `_memoryService.GetCurrentShortTermMemory()`를 전달하여 `Plot`(압축 완료) + `_shortTermMemory`(미압축 최근 대화 전수) 무손실 결합 확립.
-- **태그 계층 충돌 해소 (`ReplySuggestionService.cs`)**: 외곽 래퍼를 `<session_context>`로 변경하여 내부 `<current_snapshot>`과의 중첩 제거.
-- **핵심 부정 제약 (Never use X)**: **절대 단기 기억 대화를 UI 컬렉션(`ChatHistory`)에서 임의 개수(`TakeLast`)로 잘라내지 말 것.** 반드시 `_memoryService.GetCurrentShortTermMemory()`와 동기화할 것.
+* **`EntityNameResolver` SSOT 및 Turn 1 오프닝 스캔 ([EntityNameResolver.cs](../../GRC/GRC/Helpers/EntityNameResolver.cs), [MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
+  * `DeriveAliases`: 복합 명칭 첫 어절 자동 추출은 오직 `인물` 카테고리에서만 수행.
+  * `ResolveCharacterKey`: 일반 `Keywords`(직함·소속) 부분 문자열 매칭을 전면 배제하고, 전체 엔트리명 일치 또는 고유 이름 첫 어절(`GetCharacterGivenName`) 완전 일치 시에만 매핑.
+  * Turn 1(`lastModelMessage.Text == NarrativeContract.InitialScenarioAckText`)에는 직전 `<initial_scenario>` 원문을 `loreScanQuery`에 결합하여 오프닝 로어북 즉각 인출 보장.
+* **핵심 부정 제약 (Never use X)**:
+  * **절대 비인물(`장소`, `아이템`, `세계관`) 복합 명칭의 첫 어절을 단독 키워드로 추출하지 말 것.**
+  * **절대 상태창 인물 Key 정규화(`ResolveCharacterKey`)에 일반 직함/소속 `Keywords` 부분 문자열 포함 검사(`.Contains`)를 사용하지 말 것.**
 
 ---
 
-## 2026-10-24: [Resolved] Session Architect 추론 토큰 잠식 방어, Turn 0 시딩 및 반플레이어 억지 저항 가드레일 제거
+## 2026-10-27: [Resolved] 에이전트 생성 세션 자산 결정론적 검증 게이트(SessionAssetValidator) 도입 및 PowerShell 5.1 CP949 인코딩 함정 방어
 
 ### 1. 현상 (Symptom)
-- `gemini-4-argon` (`ThinkingLevel.high`) 호출 시 `maxOutputTokens: 8192` 제한으로 인해 내부 추론 토큰이 출력 예산을 잠식하여 장문 JSON 절단 위험 발생 및 단계별 LLM 자가 검수 재호출로 인한 자기강화 환각·지연 누적.
-- 세션 생성 시 `ChapterContext`(`Chars`, `Places`, `Items`)가 빈 컬렉션(`new()`)으로 방치되어 Turn 1 엔티티 기반 인출이 작동하지 않음.
-- 구버전 프롬프트의 적대적 가드레일("인물의 가치관에 어긋날 시 거절·경계 반응")이 고성능 추론 모델에서 역량 격차를 무시한 반플레이어 억지 실패 및 시간 경과 정체(마이크로 스톨링) 유발.
+* 외부 에이전트 워크플로우에서 생성된 세션 자산(`Preset.json`, `Session.json`, `FullHistory.json`)을 일회성 PowerShell 스크립트로 검수할 때 `NarrativeContract` 정규식이 복제되어 SSOT가 파손되고, Windows PowerShell 5.1에서 BOM 없는 UTF-8 `.ps1` 내 한글 리터럴이 CP949로 오독되어 파싱 에러가 발생함.
 
 ### 2. 원인 (Root Cause)
-- Thinking 토큰과 가시 출력 토큰이 합산 차감되는 예산 구조 미반영, Turn 0 초기 상태 시딩 누락, 초기 LLM의 예스맨 방어용 적대적 가드레일이 고성능 모델에서 과보정됨.
+* 외부 에이전트 세션 생성 파이프라인에 앱의 실제 C# 모델·정규식·정제기 고정점을 그대로 실행하는 결정론적 테스트 러너 게이트가 없었음.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **`ArchitectMaxOutputTokens = 32768` 상향 및 100% C# 결정론적 검수 관문 (`ReviewStepContentAsync`)**: 전 단계 출력 상한을 `32768`로 일원화하고, LLM 자가 감사 호출을 폐기하여 C# 정규식·파서 기반 무결성 관문(결함 시에만 핀포인트 재생성)으로 전환.
-- **Turn 0 `ChapterContext` 시딩 및 역량 기반 인과율 정립**: 오프닝 기반 `InitialChars`·`InitialPlaces`·`InitialItems`를 Turn 0에 즉시 시딩하고, 코어 GM 헌법을 당사자 간 실제 역량·상황 격차에 부합하는 현실적 인과율 판정으로 일원화.
-- **핵심 부정 제약 (Never use X)**: **절대 NPC에게 무조건적 적대·억지 저항을 지시하는 인위적 실패 가드레일을 주입하거나, 단계마다 LLM 감사관을 재호출하지 말 것.**
+* **C# 결정론적 검증 게이트 확립 ([NarrativeContract.cs](../../GRC/GRC/Services/Cognitive/NarrativeContract.cs), [SessionAssetValidator.cs](../../GRC/tests/GRC.Tests/SessionAssetValidator.cs), [SessionAuditTests.cs](../../GRC/tests/GRC.Tests/SessionAuditTests.cs))**:
+  * 관계도 판별 키워드(`NarrativeContract.AffinityStatTerms`)와 `CoreSystemDirectivesHeader`(코어 규칙 1~3, `F04_SYSPROMPT` 바이트 일치 검증 대상)를 SSOT로 통합(구버전 세션은 `CompileHybridSystemPrompt` 재컴파일 시 신규 헤더로 자동 교체).
+  * `SessionAuditFactAttribute`를 통해 `GRC_AUDIT_SESSION_DIR` 미지정 시 명시적 `Skip` 처리.
+* **핵심 부정 제약 (Never use X)**: **절대 세션 자산 검수를 위해 일회성 PowerShell 정규식 스크립트(`.ps1`)를 작성하지 말 것.** 반드시 `GRC_AUDIT_SESSION_DIR` 환경변수를 지정하고 `dotnet test --filter "Category=SessionAudit"` C# 검증 게이트를 실행할 것.
 
 ---
 
-## 2026-10-24: [Resolved] Session Architect 동적 GM 수칙의 PC 주체성 침해(God-modding 유도) 및 지시문 상충 해소
+## 2026-11-02: [Resolved] 서브컬처 시드 엔진 상태 전이·지문 조우 소모, 로어북 인출 우선순위 및 상태창 공백 중복 키 정화
 
 ### 1. 현상 (Symptom)
-- `SessionArchitectService`가 생성한 동적 GM 수칙(`genreDirectives`) 및 세계관 톤에 유저 캐릭터(PC)의 성격, 감정, 살기 표출, 전투 행동을 규정하는 명령문이 포함되어 코어 2번 수칙(PC 대사·행동·내면 대리 서술 금지)과 상충(Instruction Collision)하며 런타임 God-modding 유발.
+* **시드 조기 소모 및 경합**: `AddModelResponse`가 `_lastOfferedSeeds`를 즉시 비워 비동기 `UpdateContextStatus`와 경합 조건(Race Condition)이 발생하거나, 큰따옴표 대사(`"..."`) 내 3인칭 소문·차기 행선지 언급만으로 미대면 인물(`CHAR:`)·미방문 장소(`HOOK:`) 시드가 소모되고 `StatusAI`가 미대면 인물을 상태창에 선등록함.
+* **익명 조우 후 지연 통성명 누락**: 첫 조우 턴에 익명 칭호로 등장한 뒤 다음 턴에 통성명하여 `Chars`에 등재된 인물의 `CHAR:` 시드가 미소모로 남음.
+* **로어북 예산 역전 및 프롬프트 캐시 파손**: 활성 인물/장소 보충 로어북이 Sparse 직접 매칭을 밀어내거나 미등장 인물이 Dense 유사도로 유입되며, `SystemInstruction`에 동적 태그명이 포함될 경우 정적 캐시 불변식이 파손됨.
+* **공백 변종 중복 배지**: `StatusAI`가 쉼표 뒤 공백이 포함된 키(`" 벨벳 호감도"`)를 반환할 때 기존 `"벨벳 호감도"`와 별개 키로 공존하여 UI 배지가 중복 생성됨.
 
 ### 2. 원인 (Root Cause)
-- 생성기 프롬프트에서 GM 통제 영역(배경 환경·NPC 태도)과 유저 통제 영역(PC 행동·감정)의 주어 경계가 분리되지 않음.
+* 타이핑 완료 시점(`AddModelResponse`)과 비동기 상태창 콜백(`UpdateContextStatus`) 간 시드 버퍼 수명주기가 분리되지 않았고, 지문(실제 조우)과 대사(소문/행선지 언급)의 소모 경계 및 딕셔너리 키 공백 정규화가 부재했음.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **GM 연출 대상과 PC 통제 영역의 물리적 분리**: `surfaceTone`, `coreWeight`, `worldviewOutline` 및 동적 GM 수칙(4·5번)의 주어를 오직 **배경 환경의 감각 묘사, NPC의 대사 템포·태도, 행동에 따른 세계/세력의 반응 판정**으로만 한정.
-- **핵심 부정 제약 (Never use X)**: **절대 시스템 프롬프트의 GM 연출 지침(`genreDirectives`, `worldviewOutline`)에 유저 캐릭터(PC)의 성격, 태도, 감정, 살기 표출, 무력 사용을 기정사실화하거나 주어로 삼는 명령문을 포함하지 말 것.**
+* **시드 버퍼 분리 및 지문 조우·상태 전이 기반 소모 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs), [LoreDetails.cs](../../GRC/GRC/Models/LoreDetails.cs))**:
+  * `_pendingStatusSeeds` 버퍼를 `AddModelResponse`에서 비우지 않고 `UpdateContextStatus`까지 유지.
+  * `CHAR:` 시드는 지문(`narrationOnly`) 등장, 대사(`quotesOnly`) 내 1인칭 자기소개(`IsCharacterEncounteredInNarrative`), 또는 `Chars` 상태 등재(`SyncStateBasedSeedConsumptionLocked`) 시에만 소모하며, 미조우 로어북 인물의 `Chars`/`CustomStats` 등록을 차단.
+  * `장소` 카테고리 `HOOK:` 시드는 `StatusAI.TriggeredSeeds`에서 제외하고 오직 실제 방문(`Places`/`currentPlace` 상태 전이)으로만 소모.
+  * `NormalizeCustomStatsDictionary`로 `RestoreSession` 및 `UpdateContextStatus`에서 공백 변종 중복 키를 정화하고 절단된 게이지 분모를 복원.
+* **로어북 인출 계층 우선순위 고정 ([HybridLorebookRetriever.cs](../../GRC/GRC/Services/Cognitive/HybridLorebookRetriever.cs))**:
+  * 예산 배정 순서를 **시드 고정 로어북(3-H) ➔ Sparse 직접 매칭 ➔ 현재 장소·활성 인물 보충 ➔ Sticky(Sparse 전용 2턴) ➔ Dense(최대 3개, 미등장 인물 제외)** 순으로 고정.
+* **핵심 부정 제약 (Never use X)**:
+  * **절대 `AddModelResponse`에서 비동기 `UpdateContextStatus`가 참조할 `_pendingStatusSeeds` 버퍼를 조기 초기화하거나, 평문 불릿 정규식(`LegacyLoreParser`)/단어 출현 추측(`BondHookStopwords`)을 사용하지 말 것.**
+  * **절대 큰따옴표 대사 내부의 3인칭 이름 언급만으로 `CHAR:` 시드를 소모하거나, `장소` 카테고리 `HOOK:` 시드를 `StatusAI.TriggeredSeeds`로 소모하지 말 것.**
+  * **절대 `SystemInstruction`(`FormatRuleBlock` 포함)에 `<world_lore>` 같은 동적 태그명을 넣거나, 활성 인물·장소 보충 로어북이 Sparse 직접 매칭보다 앞서도록 순서를 변경하지 말 것.**
 
 ---
 
-## 2026-10-25: [Resolved] Session Architect 런타임 정제·스탯 바인딩 불일치 및 다국어 토크나이저 글리치 문자 혼입 해결
+## 2026-11-04: [Resolved] IllustrationPromptService의 responseSchema 대소문자(CamelCase vs PascalCase) 불일치로 인한 API 400 실패 해결
 
 ### 1. 현상 (Symptom)
-- LLM이 `worldviewOutline` 번호 섹션과 하이픈 불릿을 줄바꿈 없이 단일 줄로 평탄화하거나, 다국어 토크나이저 글리치로 한국어 산문 중간에 데바나가리 문자(`सिर` 등)를 방출.
-- 인물명이 풀네임(`아리아 폰 블랑셰`)이고 스탯명이 첫 어절 약칭(`아리아 호감도`)이거나 접미사형(`엘레나 발렌타인 신뢰도`)일 때 `<entity_relationship>` 바인딩에 실패하고 `<current_state>`의 `주요 수치`에 중복 잔류.
-- 상태창 갱신 시 `"120/100"`, `"-15/100"` 등 범위 초과 게이지가 무검증 반영되고, `initialChars.value`에 `"초기 태도(...)"` 래퍼 및 장문 복장 묘사가 중복 포함됨.
+* `IllustrationStudioWindow`에서 로어북 인물 태그 추출(`ExtractCharacterTagsAsync`) 또는 장면 태그 추출(`ExtractSceneTagsAsync`) 실행 시 Gemini API가 `400 INVALID_ARGUMENT` 오류를 반환하며 실패함.
 
 ### 2. 원인 (Root Cause)
-- `Sanitize*` 정제기에 줄바꿈 복원 및 비한국어 글리치 유니코드 블록 제거 정규식이 부재했으며, `MemoryManagerService.cs`가 `CustomStats` 단일 키 완전 일치만 검사하고 게이지 클램핑을 수행하지 않음.
+* [`GeminiApiService.cs`](../../GRC/GRC/Services/GeminiApiService.cs)의 `_jsonOptions`에 `PropertyNamingPolicy = JsonNamingPolicy.CamelCase`가 설정되어 있어 익명 객체로 선언한 `responseSchema.properties`의 키(`AppearanceTags`)는 `"appearanceTags"`(카멜케이스)로 직렬화되는 반면, 문자열 배열 값인 `required = new[] { "AppearanceTags", ... }`의 원소는 파스칼케이스 그대로 직렬화되어 스키마 불일치가 발생함.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **결정론적 줄바꿈 복원 및 다국어 글리치 스크립트 제거 (`SessionArchitectService.cs`)**:
-  - `SanitizeWorldview`에서 번호 섹션 앞(`\n\n`) 및 하이픈 불릿 앞(`\n- `) 줄바꿈을 정규식으로 강제 복원하고, `SanitizeInitialCharValue`로 `초기 태도(...)` 래퍼를 제거.
-  - `StripForeignGlitchScripts`를 통해 데바나가리·아랍·태국·키릴·히브리 등 비정상 유니코드 블록(`[\u0400-\u06FF\u0900-\u0E7F]+`)을 모든 `Sanitize*` 파이프라인에서 일괄 제거.
-- **2단계 스탯 Prefix 매칭 및 게이지 클램핑 (`MemoryManagerService.cs`)**:
-  - Exact Match 실패 시 풀네임(`charName + " "`) 및 고유 첫 어절(`firstToken + " "`) 접두사 매칭으로 스탯을 `<entity_relationship>`에 결합하고, 매칭된 키(`matchedStatKeys`)는 `remainingCustomStats`에서 제외하여 중복 노출을 차단.
-  - `ClampGaugeValue`로 범위형 게이지를 `0~max`로 즉시 클램핑하고 `statusUpdateGuide`는 순수 `<custom_rules>` XML 태그로만 주입.
+* **`responseSchema` 카멜케이스 키 통일 ([IllustrationPromptService.cs](../../GRC/GRC/Services/IllustrationPromptService.cs))**: `responseSchema` 내 `properties`와 `required` 배열 원소를 모두 소문자 카멜케이스(`appearanceTags`, `defaultOutfitTags`, `compositionTags`, `outfitAndExposureTags`, `poseAndVibeTags`, `backgroundTags`)로 통일.
+* **핵심 부정 제약 (Never use X)**: **절대 `GeminiApiService`에 전달하는 `responseSchema`의 `properties`나 `required` 배열에 파스칼케이스(`PascalCase`) 키를 사용하지 말 것.**
 
 ---
 
-## 2026-10-25: [Resolved] 스토리 시드 엔진(`<story_seeds>`) 오탐 소모 방어, 2단계 유대 키 분리 및 세션 직렬화 동시성 격리
+## 2026-11-04: [Resolved] VirtualizingStackPanel 내부 오프셋 보정·Margin 애니메이션·뷰포트 축소에 의한 오토스크롤 풀림 및 1틱 탈출 불가 트랩 해결
 
 ### 1. 현상 (Symptom)
-- 일반 명사 키워드 등장이나 일상 동료 대사만으로 미등장 인물/유대 심화 시드가 연쇄 오탐 소모(False-Positive Consumption)되며, 호감도 30+ 유대 에피소드와 60+ 내면 비밀 해금이 단일 `BOND:{Name}` 키를 공유하여 30+ 소모 후 60+ 시드가 영구 잠김.
-- `ExportSession`이 디스크 중복 방지를 위해 `Preset with { Lorebooks = null }`로 직렬화함에 따라 복원 시 `_cachedLorebooks`가 비어 있게 되고, 백그라운드 JSON 직렬화 중 컬렉션 변경 예외 위험 존재.
+* 16ms 단위 토큰 스트리밍 중 마우스 휠을 위로 1틱(15px) 굴려도 24px 허용오차를 벗어나지 못해 최하단으로 재감금되거나, 컨텐츠 축소(`extentHeightChange < 0`) 시 상단 스크롤이 하이재킹됨.
+* 반대로 사용자가 입력 장치를 건드리지 않았음에도 장문 스트리밍 도중 `VirtualizingStackPanel`(`ScrollUnit="Pixel"`)이 1행(`dV = -24.00px`) 자체 오프셋 보정을 수행할 때 오토스크롤이 풀려버리거나, 멀티라인 입력창 확장(`ViewportHeightChange < 0`) 시 마지막 대사가 가려지고 상향 스크롤 시 0.3초간 역보정 반동이 발생함.
 
 ### 2. 원인 (Root Cause)
-- 시드 소모 판정에 일반 명사 키워드까지 무분별하게 포함되었고 단계별 시드 키가 분리되지 않았으며, 세션 스냅샷 내보내기/복원 시 프리셋 로어북 재결합 및 깊은 복사 격리가 누락됨.
+1. **무상태 수식 및 `ScrollChanged` 내 사용자 의도 추측의 한계**: 무상태 바닥 판정식(`CalculateIsAtBottom`)만으로는 1틱(15px) 탈출이 불가능하며, `ScrollChanged` 내부에서 `e.VerticalChange < 0`이나 `500ms` 타이머(`LastUserInputTick`)로 상향 스크롤을 추측하면 프레임워크 자체 레이아웃 보정(`dV < 0`)을 사용자 조작으로 오판하여 오토스크롤을 해제함.
+2. **`ChatMessageTemplate`의 `Margin` 레이아웃 애니메이션 ([ModernStyles.xaml](../../GRC/GRC/Themes/ModernStyles.xaml))**: `Loaded` 트리거가 레이아웃 측정 속성인 `Margin`을 0.3초간 애니메이션하여 매 프레임 `VirtualizingStackPanel.MeasureOverride`를 강제 호출하며 `ExtentHeight`와 `VerticalOffset`을 흔듦.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **고유명사/핵심어 이원화 소모 판정 및 `BOND:` / `BOND_SECRET:` 키 분리 (`MemoryManagerService.cs`)**:
-  - Pool A/B는 고유명사 매칭으로만 소모 판정하고, Pool C(유대 심화)는 동료 이름(`PrimaryKeywords`)과 유대/내면 본문 핵심 명사(`SecondaryKeywords`)가 **동시에** 등장할 때만 소모.
-  - 호감도 30~59 구간(`BOND:{Name}`)과 60+ 구간(`BOND_SECRET:{Name}`)의 소모 키를 분리.
-- **`ChapterContext.Clone()` 스냅샷 격리 및 `_cachedLorebooks` 복원 (`ChatViewModel.cs`)**:
-  - 세션 복원 시 `savedSession with { Preset = sessionPreset }`으로 `_cachedLorebooks`를 즉시 초기화하고, `ExportSession`/`RestoreSession` 시 `ChapterContext.Clone()` 깊은 복사로 백그라운드 직렬화 중 컬렉션 변경 예외를 원천 차단.
+* **물리적 상향 입력 전용 상태 전이 및 기하학 판정 ([AutoScrollHelper.cs](../../GRC/GRC/Helpers/AutoScrollHelper.cs), [ChatView.xaml.cs](../../GRC/GRC/Views/ChatView.xaml.cs))**:
+  * `CalculateIsAtBottom`: `referenceHeight = extentHeightChange > 0 ? scrollableHeight - extentHeightChange : scrollableHeight` 수식으로 컨텐츠 축소 왜곡을 방지.
+  * `IsAutoScrollActive = false` 해제는 오직 물리적 상향 입력 이벤트(`PreviewMouseWheel e.Delta > 0`, `ScrollBar.ScrollEvent`의 `SmallDecrement`/`LargeDecrement`/`First` 및 비하단 `ThumbTrack`, `PreviewKeyDown`의 `Up`/`PageUp`/`Home`)에서만 수행하고, `ScrollChanged` 내부에서는 절대 해제하지 않음.
+  * `IsAutoScrollActive == true`일 때는 `ExtentHeightChange != 0`, `ViewportHeightChange != 0`, `e.VerticalChange < 0` 및 `ChatHistory.CollectionChanged` 모두 즉시 `ScrollToBottom()`(`DispatcherPriority.Render`)으로 보정하며, 상향 물리 입력 직후 `150ms`(`UpwardBounceCooldownMs`) 이내의 레이아웃 반동 재결합을 차단.
+* **GPU `RenderTransform.(TranslateTransform.Y)` 교체 ([ModernStyles.xaml](../../GRC/GRC/Themes/ModernStyles.xaml))**: `MessageContainer`의 `Margin="15,8"`을 고정하고 `RenderTransform.(TranslateTransform.Y)`(`From="17" To="0"`)로 전환하여 레이아웃 재측정 비용과 오프셋 흔들림을 제거.
+* **핵심 부정 제약 (Never use X)**:
+  * **절대 무상태 수학식(`CalculateIsAtBottom`)만 단독으로 사용하거나, `ScrollViewer.ScrollChanged` 내부에서 `e.VerticalChange < 0`·타이머 휴리스틱으로 사용자 상향 스크롤을 추측해 `IsAutoScrollActive = false`로 전이하지 말 것.**
+  * **절대 가상화 리스트(`VirtualizingStackPanel`) 아이템 템플릿의 `Loaded` 애니메이션에 `Margin`·`Height`·`Padding` 등 레이아웃 측정(Measure) 속성을 애니메이션하지 말 것.** 반드시 `RenderTransform`이나 `Opacity`만 사용할 것.
 
 ---
 
-## 2026-10-26: [Resolved] EntityNameResolver 및 NarrativeContract SSOT 도입 (상태창 인물 덮어쓰기 차단, 비인물 첫 어절 오염 제거, Turn 1 오프닝 스캔)
+## 2026-11-04: [Resolved] 장문 세션 로딩 시 비가시 세그먼트 마크다운 4중 파싱, 커스텀 템플릿 바인딩 누락 및 64비트 WndProc 오버플로우 해결
 
 ### 1. 현상 (Symptom)
-- 비인물 복합 명칭(`"지하 유적 제단"`, `"그림자 사냥개 길드"`)의 첫 어절(`"지하"`, `"그림자"`)이 단독 키워드 및 `HOOK:` 시드 트리거로 자동 추출되어 일반 단어 등장만으로 미방문 장소 시드가 오탐 소모됨.
-- 상태창 갱신 시 `entry.Keywords` 부분 문자열 포함(`cleanKey.Contains(kw)`) 검사로 인해, `"성녀"` 키워드를 가진 주연(`"세실리아 본 로젠버그"`)의 상태창 슬롯을 단역(`"성녀 호위대장"`)이 덮어쓰는 상태 오염 발생.
-- Turn 1에 직전 `model` 응답(`InitialScenarioAckText`)만 스캔하여 `<initial_scenario>` 오프닝 본문 속 시작 장소·소품·세력 로어북이 1차 스캔에서 누락됨.
+* 수백 턴 분량의 장문 세션을 로드할 때 초기 렌더링 부하로 UI 스레드가 일시 정지(Freeze)하거나 64비트 다중 모니터 환경 `WM_NCHITTEST` 처리 중 `OverflowException` 크래시가 발생함.
 
 ### 2. 원인 (Root Cause)
-- 엔티티 별칭 파생, 동일 인물 판정, 시드 소모 경계 매칭, 서사 문장부호 계약이 여러 서비스에 서로 다른 휴리스틱으로 파편화되어 있었음.
+1. **비가시(`Collapsed`) `TextBlock` 4중 마크다운 파싱 ([ModernStyles.xaml](../../GRC/GRC/Themes/ModernStyles.xaml))**: 말풍선 내부의 세그먼트 `ItemsControl`은 비가상화 상태로 실현된 메시지의 모든 세그먼트를 생성하는데, 세그먼트당 4개의 `TextBlock` 중 1개만 표시(`Visible`)됨에도 `Collapsed` 상태인 나머지 3개까지 기본 속성으로 `SimpleMarkdownHelper.Text="{Binding Text}"`를 즉시 평가하여 정규식 파싱 및 `Inline` 객체 생성 비용이 4배로 증폭됨.
+2. **커스텀 `ControlTemplate` 내 `ScrollViewer` `TemplateBinding` 누락 ([ChatView.xaml](../../GRC/GRC/Views/ChatView.xaml))**: `ChatHistoryItemsControl`에 `ScrollViewer.CanContentScroll="True"`를 선언했으나 내부 `<ControlTemplate>`의 `<ScrollViewer x:Name="ChatScrollViewer">`에 `CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"`가 누락됨. `ScrollViewer.CanContentScrollProperty`는 상속되지 않으므로(`Inherits = False`) 레이아웃 패스(`HookupScrollingComponents`) 연결 전까지 초기 기본값(`false`) 불일치가 발생하며 표준 템플릿 계약을 위반함.
+3. **64비트 `WndProc` 포인터 변환 오버플로우 ([MainWindow.xaml.cs](../../GRC/GRC/Views/MainWindow.xaml.cs))**: `WM_NCHITTEST`에서 `lParam.ToInt32()` 호출 시 음수/확장 좌표에서 `OverflowException` 발생.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **`EntityNameResolver` (`GRC/Helpers/EntityNameResolver.cs`) & `NarrativeContract` (`GRC/Services/Cognitive/NarrativeContract.cs`) SSOT 확립**:
-  - `DeriveAliases`: 복합 명칭 첫 어절 자동 추출은 오직 `인물` 카테고리에서만 수행.
-  - `ResolveCharacterKey`: 일반 `Keywords`(직함·소속) 부분 문자열 매칭을 전면 배제하고, 전체 엔트리명 일치 또는 고유 이름 첫 어절(`GetCharacterGivenName`) 완전 일치 시에만 매핑.
-  - `DeriveHookPrimaryKeywords` & `ContainsEntityMention`: Pool B(`HOOK:`) 시드는 전체 엔트리명 등장 또는 2어절 이상 핵심 구분자 + 서사 훅 본문 핵심어 동시 등장 시에만 한국어 조사 경계 정규식으로 소모 판정.
-  - `SanitizeScenario`: 로어북 고유명사를 감싼 강조용 낫표(`「...」`)를 결정론적으로 스트리핑(`「」`는 속마음/독백 전용).
-- **Turn 1 `<initial_scenario>` 자동 스캔 연동 (`MemoryManagerService.cs`)**: `lastModelMessage.Text == NarrativeContract.InitialScenarioAckText`인 Turn 1에는 직전 `<initial_scenario>` 원문을 `loreScanQuery`에 결합하여 오프닝 장소·소품 로어북 즉각 인출 보장.
-- **핵심 부정 제약 (Never use X)**:
-  - **절대 비인물(`장소`, `아이템`, `세계관`) 복합 명칭의 첫 어절을 단독 키워드나 시드 소모 트리거로 추출하지 말 것.**
-  - **절대 상태창 인물 Key 정규화(`ResolveCharacterKey`)에 일반 직함/소속 `Keywords` 부분 문자열 포함 검사(`.Contains`)를 사용하지 말 것.**
-
----
-
-## 2026-10-26: [Resolved] `<world_lore>` 미해금 스포일러 조기 노출 및 유대 심화 완료형 문구에 의한 인과 건너뛰기(보상 선지급 환각) 차단
-
-### 1. 현상 (Symptom)
-- 친밀도 미달(30 미만) 상태에서도 인출된 인물 로어북의 심화 내면 동기와 유대 에피소드, 감정 개방 대사가 `<world_lore>`에 그대로 노출되어 초기 대사에 후반부 본심이 조기 반영됨.
-- 인물 유대 심화 설정이 과거 완료형 결과 요약문으로 작성될 경우, 친밀도 30 달성 시 `<internal_chronicle_facts>`에 선행 과업 수행 이력이 없음에도 서사 AI가 중간 의뢰 과정을 건너뛰고 최종 보상을 즉시 선지급함.
-
-### 2. 원인 (Root Cause)
-- `<world_lore>` 주입 시 인물별 현재 관계도 수치(`CustomStats`)에 따른 단계별 노출 제어가 부재했으며, `<story_seeds>` 안내문에 미발생 과거 사건 날조 금지 가드 및 `[발단 계기]`와 `[완수 후 변화]`의 구조적 분리가 결여됨.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **호감도/신뢰도 3단계 스포일러 게이팅 (`MaskLorebooksForPrompt`, `RevealStage 1 | 2 | 3`)**: 인물별 최대 관계도(`GetCharacterMaxAffinity`) 및 시드 소모 이력에 따라 **Stage 1(30 미만: 표면 페르소나·일상 대사만 공개)**, **Stage 2(30~59: 유대 발단·완수 변화 추가 공개)**, **Stage 3(60 이상: 심층 내면·감정 대사 전면 공개)**로 차등 렌더링(`CurrentActiveLorebooks`는 원본 유지).
-- **`<story_seeds>` 인과율 방어 및 발단-완수 분리**: `<story_seeds>` 헤더에 `<internal_chronicle_facts>`에 없는 과거 사건 날조 및 중간 과업 생략(보상 선지급) 절대 금지를 명시하고, 인물 로어북의 유대 발단(`BondTrigger`)과 완수 후 변화(`BondPayoff`)를 분리하여 반드시 '발단(의뢰·제안·단서 발견)'부터 개막하도록 강제.
-
----
-
-## 2026-10-27: [Resolved] 에이전트 생성 세션 자산 결정론적 검증 게이트(`SessionAssetValidator`) 도입 및 PowerShell 5.1 CP949 인코딩 함정 방어
-
-### 1. 현상 (Symptom)
-- 외부 에이전트 워크플로우에서 생성된 세션 자산(`Preset.json`, `Session.json`, `FullHistory.json`)을 눈대중(Blind Audit)으로 판정하거나, 일회성 PowerShell 스크립트로 검수할 때 `NarrativeContract` 정규식이 복제되어 SSOT가 파손되고 Windows PowerShell 5.1에서 BOM 없는 UTF-8 `.ps1` 내 한글 리터럴이 CP949로 오독되어 파싱 에러 발생.
-
-### 2. 원인 (Root Cause)
-- 외부 에이전트 세션 생성 파이프라인에 앱의 실제 C# 모델·정규식·정제기 고정점을 그대로 실행하는 결정론적 테스트 러너 게이트가 없었음.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **관계도 키워드 SSOT 승격 및 C# 검증 게이트 확립 ([NarrativeContract.cs](../../GRC/GRC/Services/Cognitive/NarrativeContract.cs), [SessionAssetValidator.cs](../../GRC/tests/GRC.Tests/SessionAssetValidator.cs), [SessionAuditTests.cs](../../GRC/tests/GRC.Tests/SessionAuditTests.cs))**:
-  - 관계도 판별 키워드(`호감`, `신뢰`, `유대`, `친밀`, `동조`, `애정`)를 `NarrativeContract.AffinityStatTerms` SSOT로 통합하고, `CoreSystemDirectivesHeader`(코어 규칙 1~3)는 `F04_SYSPROMPT` 바이트 일치 검증 대상이므로 임의 수정을 금지.
-  - 앱 저장 세션 호환을 위해 `F08_LORE_META`는 `Embedding == null || Embedding.Length == 768`만 허용하며, `SessionAuditFactAttribute`를 통해 `GRC_AUDIT_SESSION_DIR` 미지정 시 일반 테스트에서 위장 통과 대신 명시적 `Skip` 처리.
-- **핵심 부정 제약 (Never use X)**: **절대 세션 자산 검수를 위해 일회성 PowerShell 정규식 스크립트(`.ps1`)를 작성하지 말 것.** 반드시 `GRC_AUDIT_SESSION_DIR` 환경변수를 지정하고 `dotnet test --filter "Category=SessionAudit"` C# 검증 게이트를 실행할 것.
-
----
-
-## 2026-10-27: [Resolved] 로어북 문자열 내장 DSL(정규식 구분자) 및 `LegacyLoreParser` 완전 폐기, 서브컬처 시드 엔진 Option B(상태 전이 + Status LLM 화이트리스트 소모) 전환
-
-### 1. 현상 (Symptom)
-- `LorebookEntry.Content` 단일 평문 문자열 내부에 다중 구분자(`/`, `->`, `""`) DSL을 내장하거나 `LegacyLoreParser` 폴백을 유지할 경우 불필요한 정규식 부채가 잔존함.
-- 시작 거점(`Priority: 0` 장소)이나 초기 소모품이 초기 상태창(`Places`/`Items`)에만 있고 `ConsumedSeeds`에 기록되지 않아, 거점을 떠나거나 아이템을 소모한 직후 첫 막간(`isSceneResolved == true`)에 이미 방문한 시작 장소·아이템이 미방문 시드로 재주입됨(Pool B Head-of-Line Blocking).
-- 단어 출현(`BondHookStopwords` 어절 매칭)으로 `BOND:`/`HOOK:` 시드 소모를 추측함에 따라 일상 대화에서 오탐 소모가 발생하거나, 호감도가 60 이상으로 점프했을 때 `CompanionSeedKeyToMark`가 `BOND:`와 `BOND_SECRET:`을 동시에 소모 처리하여 1단계 유대 에피소드가 증발함.
-- 또한 `AddModelResponse`(타이핑 완료 시점)가 `_lastOfferedSeeds`를 즉시 비워버려 비동기로 도착하는 `UpdateContextStatus`와 경합 조건(Race Condition)이 발생함.
-
-### 2. 원인 (Root Cause)
-- 초기/현재 상태창(`Chars`, `Places`, `Items`)과 `ConsumedSeeds` 간의 결정론적 동기화가 부재했고, 시드 개시 판정을 상태창 LLM(`BuildStatusRequest`) 대신 어휘 휴리스틱에 의존함.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **강타입 구조화 스키마 단일화 및 Zero-Legacy 정리 ([LoreDetails.cs](../../GRC/GRC/Models/LoreDetails.cs), [LorebookEntry.cs](../../GRC/GRC/Models/LorebookEntry.cs), [LoreRenderer.cs](../../GRC/GRC/Services/Cognitive/LoreRenderer.cs))**:
-  - `LegacyLoreParser.cs`, `LorebookEntry.LegacyContent`, `NarrativeContract` 내 평문 불릿 정규식 6종을 전면 삭제하고, `CharacterLoreDetails`(11필드)와 `WorldLoreDetails`(4필드)만을 유일한 SSOT로 확립.
-- **상태 전이 자동 동기화 및 Status LLM 화이트리스트 시드 소모 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs), [StatusPayload.cs](../../GRC/GRC/Models/StatusPayload.cs))**:
-  - `SyncStateBasedSeedConsumptionLocked`: `Chars`, `Places`, `Items`에 존재하는 엔티티의 `CHAR:{Name}` 및 `HOOK:{Name}`을 즉시 `ConsumedSeeds`에 기록하여 방문 거점·소비 아이템 재주입 원천 차단.
-  - `_pendingStatusSeeds` & `StatusPayload.TriggeredSeeds`: `AddModelResponse`에서 비워지지 않는 `_pendingStatusSeeds` 버퍼를 유지하여 `BuildStatusRequest`에 `<offered_story_seeds>`를 주입하고, `UpdateContextStatus`에서 화이트리스트 검증을 통과한 시드만 소모 처리(UI 단독 스탯 수정 시 `IsSceneResolved` 초기화 방어 포함).
-  - `Pool A` 공간 맥락 정렬(동일 `Priority` 내 현재 `Places` 연계 인물 우선), `Pool C` `BOND:` -> `BOND_SECRET:` 순차 해금 분리, `Retrieve` 이전 선행 `MaskLorebooksForPrompt` 적용, `RestoreSession` 시 `TotalTurnCount == 0` 기준 Turn 1 `ThinkingLevel.high` 앵커 보존, `EventLedgerExtractor` 정서적/관계적 이정표 추출 규칙 추가.
-- **핵심 부정 제약 (Never use X)**:
-  - **절대 로어북 파싱이나 시드 소모 판정에 평문 불릿 정규식이나 본문 단어 출현 추측(`BondHookStopwords`)을 사용하지 말 것.**
-  - **절대 `AddModelResponse`에서 상태창 API(`UpdateContextStatus`)가 참조할 `_pendingStatusSeeds` 버퍼를 조기 초기화하지 말 것.**
+* **조건부 마크다운 파싱 및 템플릿 바인딩 명시 ([ModernStyles.xaml](../../GRC/GRC/Themes/ModernStyles.xaml), [ChatView.xaml](../../GRC/GRC/Views/ChatView.xaml))**:
+  * `ChatMessageTemplate`에서 `helpers:SimpleMarkdownHelper.Text="{Binding Text}"`를 각 `SegmentType`별 `DataTrigger` `Setter` 내부로 이동하여 실제 표시되는 단일 `TextBlock`에서만 마크다운 인라인을 생성(불필요한 파싱 오버헤드 75% 제거).
+  * `ChatScrollViewer`에 `CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"` 및 스크롤바 가시성 `TemplateBinding`을 명시적으로 연결하여 레이아웃 초기화 전후의 템플릿 계약을 일관되게 보장.
+* **64비트 `ToInt64()` 포인터 방어 ([MainWindow.xaml.cs](../../GRC/GRC/Views/MainWindow.xaml.cs))**: `WndProc` 내 `lParam`/`wParam`을 `ToInt64()`와 비트 마스킹으로 읽고 `PresentationSource.FromVisual(MaximizeButton) != null` 가드를 적용.
+* **핵심 부정 제약 (Never use X)**:
+  * **절대 다중 분기 `DataTemplate`에서 `Visibility="Collapsed"`인 비활성 요소에 비용이 큰 부착 속성(정규식 파싱 등) 바인딩을 기본값으로 걸어두지 말 것.** 반드시 활성 `DataTrigger`의 `Setter`에서만 바인딩할 것.
+  * **절대 `ItemsControl.Template`을 커스텀 `<ScrollViewer>`로 재정의할 때 `CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"` 바인딩을 누락하지 말 것.**
+  * **절대 64비트 Windows 환경의 `WndProc`에서 `lParam`/`wParam`에 `IntPtr.ToInt32()`를 호출하지 말 것.** 반드시 `ToInt64()`를 사용할 것.
 
 ---
 
 > [!NOTE]
-> **[정제 완료 기준선]** 2026-10-27 이전 상위 항목은 정제 완료됨. 신규 인시던트는 이 아래에 추가됩니다.
-
-
+> **[정제 완료 기준선]** 2026-11-04 이전 상위 항목은 정제 완료됨. 신규 인시던트는 이 아래에 추가됩니다.
 
 ---
-
-## 2026-10-28: [Resolved] VirtualizingStackPanel 픽셀 스크롤 내부 보정으로 인한 오토스크롤 오탐 비활성화 및 도중 멈춤 결함 해결
-
-### 1. 현상 (Symptom)
-- LLM 모델이 긴 답변을 실시간 스트리밍으로 출력할 때, 오토스크롤이 바닥을 잘 따라가다가 답변 중간에 갑자기 멈추는(Freeze) 현상 발생.
-- 텍스트가 계속 아래로 출력되어도 스크롤이 더 이상 내려가지 않다가, 답변이 완전히 끝나 메시지 교체 시점이 되면 맨 아래로 다시 스크롤됨.
-- 사용자가 마우스나 키보드를 전혀 건드리지 않은 상태에서도 재현됨.
-
-### 2. 원인 (Root Cause)
-1. **VirtualizingStackPanel 자체 오프셋 보정의 오탐**:
-   - `ItemsControl`의 `VirtualizingStackPanel`(`ScrollUnit="Pixel"`)이 긴 스트리밍 텍스트 렌더링 중 레이아웃 패스에서 스스로 뷰포트 오프셋을 정확히 1행(`LineHeight=24px`)만큼 위로 보정(`dV = -24.00, dExt = 0.00, dVp = 0.00`).
-   - 기존 `AutoScrollHelper.cs`는 `ExtentHeightChange == 0 && ViewportHeightChange == 0 && VerticalChange < 0` 조건을 "순수 사용자 조작(`isPureUserScroll`)"으로 간주하도록 작성되어 있었음.
-   - 프레임워크 자체의 1행 재배치(`dV = -24.00`)를 사용자의 상향 스크롤 의도로 오인하여 `SetIsAutoScrollActive(sv, false)`를 호출함으로써 오토스크롤이 꺼짐.
-2. **동결 상태 고착**:
-   - `IsAutoScrollActive`가 `false`가 되면 이후 스트리밍 텍스트가 늘어나도(`dExt > 0`) 스크롤을 시도하지 않음.
-   - 스트리밍 종료 시점에 `StreamingPanel`이 숨겨지고 `FinalText`가 반영되면서 컨텐츠 높이 급증(`dV = 64.00`)과 함께 바닥 판정(`isAtBottomNow`)이 만족되어 `IsAutoScrollActive`가 뒤늦게 `true`로 복구되었던 것.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **실제 물리적 사용자 입력 기반 상태 전이 확립 ([AutoScrollHelper.cs](../../GRC/GRC/Helpers/AutoScrollHelper.cs))**:
-  - `e.VerticalChange < 0` 부호만으로 사용자 의도를 추정하는 휴리스틱을 전면 폐기.
-  - 실제 사용자 입력(`PreviewMouseWheel`, 스크롤바 Thumb/Track 마우스 클릭, 방향키/PgUp/PgDn/Home/End)이 최근 500ms 이내에 발생했거나 스크롤바 Thumb을 드래그 중인 경우에만 `isUserDriven = true`로 판정하여 오토스크롤을 비활성화.
-  - 사용자 입력이 수반되지 않은 프레임워크 자체 상향 오프셋 보정(`dV < 0`)은 무시하고, 오토스크롤 활성 상태라면 즉시 최하단으로 재정렬(`QueueScrollToEnd`).
-- **디스패처 우선순위 동기화**:
-  - `ScrollToEnd` 호출을 60FPS UI 렌더 타이머와 동일한 `DispatcherPriority.Render`로 정렬하여 스트리밍 텍스트와의 렌더링 지연(Lag) 제거.
-- **핵심 부정 제약 (Never use X)**: **절대 `ExtentHeightChange == 0 && VerticalChange < 0`이라는 기하학적 조건만으로 사용자 상향 스크롤 여부를 단정하지 말 것.** 가상화 패널(`VirtualizingStackPanel`)의 픽셀 스크롤 환경에서는 레이아웃 재배치로 인한 내부 오프셋 조정이 빈번하므로, 반드시 실제 입력 디바이스 이벤트(마우스 캡처/휠/키 입력) 타임스탬프와 결합하여 검증할 것.
-
-
----
-
-## 2026-10-30: [Resolved] 67턴 실플레이 세션 감사 — 시드 생명주기, 로어북 인출 계층, 기억 공백, 상태창 정합성, 서사 말투 일괄 보정
-
-### 1. 현상 (Symptom)
-- **시드 엔진**:
-  - 이름 없는 실루엣만 등장한 턴에 StatusAI가 `CHAR:리네아`를 `triggeredSeeds`로 보고하여 소모되고, 다음 턴에는 시드와 로어북이 모두 빠져 외형 환각("토끼 귀")이 발생함.
-  - 신규 인물 시드 문장에 요약만 담기고 전체 로어북은 Dense 유사도 운에 의존하여 묘사 품질이 턴마다 달라짐.
-  - `Places`에 수식어 변형(`"지열이 피어오르는 온천 호수"`)이 기록되어 `HOOK:안개비 온천 호수`가 방문 후에도 소모되지 않고 9회 반복 주입됨. `세계관` 로어북이 Pool B를 영구 점유함.
-  - 풀마다 `Priority` 순 첫 미소모 시드만 고르고 중단하여, 채택되지 않은 시드 1개가 후순위 전체를 차단(Head-of-Line Blocking)함. 호감도 30 이전에 선행 플레이된 `BOND:` 시드가 60을 넘어서도 Pool C 1순위를 점유함.
-  - `isSceneResolved` 오판(대화 진행 중 `true`) 다음 턴에 같은 시드 묶음이 연속 재추출되고, "1달여가 지났다", "수년이 지났다" 같은 시간 경과에도 세계 변화가 없음.
-- **로어북·기억**:
-  - 미등장 인물 로어북이 Dense 유사도만으로 유입되어 예산을 점유함. Dense 매칭에도 Sticky가 부여됨.
-  - 상시 불릿 칸이 고정 15개라, 챕터 말미에 장기 연대기에 아직 반영되지 않은 사건이 상시 칸에서 밀려나는 중기↔장기 공백이 발생함.
-  - 메시지 삭제·재생성 시 상태가 롤백되지 않아 호감도가 중첩 상승함(`12 → 15`).
-- **상태창**: 이동 후에도 이전 장소가 누적되어 `Places` 4곳 동시 존재, 주인공 이름이 `Chars`에 혼입, 시간 경과 턴에 호감도 `+20` 급등, 섭취·수선된 소모품의 영구 잔류.
-- **서사**: 단답형 인물의 장문화와 말투 동질화, 다인 장면에서 비지목 인물의 의무 발화(19/20턴), 유저 입력 첫 줄 복창(11/39턴), 직전 외양 묘사 자기복제, 자동 진행 시 직전 장면 재서술.
-
-### 2. 원인 (Root Cause)
-1. **시드 소모 경로 혼재**: `CHAR:`가 StatusAI `triggeredSeeds`와 `Chars` 등록으로도 소모되어 "언급·등록"과 "실제 등장"이 구분되지 않았음. 시드 창(window) 개념이 없어 오판 턴마다 재추출되었고, 제시 횟수 기록이 없어 순환 정렬이 불가능했음.
-2. **로어북 인출 계층 미분리**: 시드 대상 인물을 `Retrieve`에 전달할 경로가 없었고, 시드 추출이 로어북 인출보다 늦게 실행되었음. Dense 매칭과 Sparse 매칭이 같은 Sticky 규칙을 공유했음.
-3. **고정 크기 상시 칸**: 상시 불릿 분할이 장기 요약 성공 여부와 무관한 `TakeLast(15)` 고정이었음.
-4. **배열 장소 스키마와 정규화 부재**: `places: string[]`가 방문 이력 누적을 유도했고, `Places`/`Items`에 로어북 정식 명칭 정규화 단계가 없었음. 시간 경과 정보(`elapsedTime`)가 없어 시간 경과 턴만의 상한을 걸 수 없었음.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **상태 모델 ([ChapterContext.cs](../../GRC/GRC/Models/ChapterContext.cs), [MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
-  - 상태 복사를 `Clone()` 단일 경로로 통일하고 `SeedOfferCounts`, `ActiveSeedKeys`, `SeedWindowStartTurn`, `PendingTimeSkip`, `LastSummarizedChapter`를 추가.
-  - 턴 시작 시 스냅샷을 보관하고, 마지막 턴 삭제 시 상태창·소모 시드·시드 창·제시 횟수를 함께 롤백.
-- **시드 생명주기**:
-  - `CHAR:`는 모델 응답 본문에 이름이 등장했을 때만 소모. `HOOK:`은 정규화된 `Places`/`Items` 상태 동기화, `BOND:`/`BOND_SECRET:`은 StatusAI 화이트리스트 판정과 호감도 60 도달 시 1단계 자동 소모.
-  - 시드 창: 장면 종료(LLM 판정 또는 로어북 장소 엔티티 변경) + 2턴 쿨다운 통과 시 개설, 진행 중 장면 종료 판정은 기존 창 유지, 3턴 경과 시 종료, `elapsedTime >= days`·`fast_forward`는 쿨다운을 무시하고 재개설.
-  - 풀 정렬은 제시 횟수 오름차순 → `Priority` 오름차순. Pool B에서 `세계관` 제외. Turn 0에는 `아이템` 카테고리만 오프닝 소모 등록.
-  - 시간 경과 턴은 다음 턴에 화면 밖 변화 반영 지시를 결합하며, 실제로 제시될 시드가 있을 때만 시드 개막 문구를 포함.
-- **로어북 인출 ([HybridLorebookRetriever.cs](../../GRC/GRC/Services/Cognitive/HybridLorebookRetriever.cs))**:
-  - 예산 배정 순서: 시드 고정 로어북(3-H) → Sparse 직접 매칭 → 현재 장소·활성 인물 보충 → Sticky(Sparse 전용 2턴) → Dense(최대 3개). 미등장 인물은 Dense로 인출하지 않음.
-  - 활성 인물 광역 스캔(단기 기억 전체 + 최근 불릿 3개)은 대명사 구간 로어북 증발 방지를 위해 유지(4-E 미적용 결정).
-- **기억**: 상시 칸은 장기 미요약 불릿 전량(최소 15개), 회상 풀은 그 정확한 여집합. `_lastSummarizedChapter`는 `Session.json`에 저장되어 복원 시 그대로 쓰이며, 필드가 없는 구버전 세션만 `ChapterCount - 1`로 추론. `ShortTermThreshold = 14`, `TokenLog.csv`에 `CachedTokens` 추가. `gemini-embedding-001` 3대 영역 실측(Case 1~6) 결과에 따라 로어북 Dense(`0.75f`, `MaxDenseMatches = 3`)는 유지하고, 원장 회상 임계치(`GatedRAGRetriever.SemanticSimilarityThreshold`)는 일상 행동 오탐(최대 `0.7914`)을 차단하고 핀포인트 회상(`0.8627 ~ 0.9053`)을 보존하는 `0.80f`로 상향했으며, 2-A 원장 중복 드롭·1-C MMR은 분포 중첩(`0.9152` vs `0.9041 ~ 0.9154`)으로 미적용 확정.
-- **상태창**: `currentPlace` 단일 문자열·`elapsedTime` 스키마, 로어북 정식 명칭 정규화 및 명칭 목록 제공, 주인공 필터, 시간 경과 턴에만 `최대치 × 비율(5%/12%/20%) × (1 - 이전값/최대치)` 상승 상한(일반 턴 무상한).
-- **서사 프롬프트 ([NarrativeContract.cs](../../GRC/GRC/Services/Cognitive/NarrativeContract.cs), [CognitivePromptAssembler.cs](../../GRC/GRC/Services/Cognitive/CognitivePromptAssembler.cs), [ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs))**: `FormatRuleBlock` 3번(로어북 말투 준수)·4번(무관 인물 의무 발화 억제), `FinalInstruction`에 복창·외양 비유 반복 금지 결합, 자동 진행은 `metaDirective` 기준으로만 판정하여 `<current_action>` 정규화, `auto_continue` 지시문에 재서술 금지 보강.
-- **세션 생성기·검증기 ([SessionArchitectService.cs](../../GRC/GRC/Services/SessionArchitectService.cs), [SessionAssetValidator.cs](../../GRC/tests/GRC.Tests/SessionAssetValidator.cs))**: 단일 시작 장소, PC 실소유 소지품 0~4개, `speechTone` 종결어미·호흡 명시와 앙상블 분산 지침, `W09`/`W10`/`W11` 경고 추가.
-- **핵심 부정 제약 (Never use X)**:
-  - **절대 StatusAI 판정이나 `Chars` 등록만으로 `CHAR:` 시드를 소모하지 말 것.** 이름 없는 등장에서 시드와 로어북이 함께 사라져 환각이 재발함.
-  - **절대 `SystemInstruction`(`FormatRuleBlock` 포함)에 `<world_lore>` 같은 동적 태그명을 넣지 말 것.** `AssemblePrompt_SystemInstruction_RemainsStaticWithoutDynamicContext` 불변식 위반.
-  - **절대 활성 인물·장소 보충 로어북이 Sparse 직접 매칭을 밀어내도록 순서를 바꾸지 말 것.** Sparse보다 앞설 수 있는 것은 시드 고정 로어북(3-H)뿐임.
-  - **절대 말줄임표 횟수 같은 숫자 상한을 공통 프롬프트에 넣지 말 것.** 의도된 말투 설계와 충돌함(장르 중립 원칙).
-
-
----
-
-## 2026-10-30: [Resolved] 자동 진행 정체 해소를 위한 코어 헌법 2번 조건부 완화(L2) 및 위임 신호 추가
-
-### 1. 현상 (Symptom)
-- 유저가 입력 없이 "계속"(`auto_continue`)이나 빠른 진행(`fast_forward`)만 연속으로 누르면, 서사가 PC의 결정이 필요한 지점(예: NPC의 질문)에서 주변 묘사만 반복하며 정체됨.
-
-### 2. 원인 (Root Cause)
-- `CoreSystemDirectivesHeader` 2번 조항("PC의 대사·행동·내면을 대신 서술하지 말고, PC의 선택이나 대응이 필요한 시점에서 서술을 멈추고 턴을 넘길 것")이 `auto_continue` 메타 지시("시간과 사건을 한 단계 진행")와 충돌하여, 모델이 PC 반응을 넘기지 못하고 같은 지점에 머무름.
-
-### 3. 조치 및 관찰 포인트 (Action & Observation)
-- **조치 ([SessionArchitectService.cs](../../GRC/GRC/Services/SessionArchitectService.cs), [ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs))**: `CoreSystemDirectivesHeader` 2번을 조건부 L2 조항("PC의 속마음과 관계·수위·위험 결정은 대신 서술하지 말고 그 지점에서 멈추되, 유저가 입력한 행동·대사는 임의로 덧붙이지 않고, 유저가 진행을 위임한 턴에만 이전 대화에서 드러난 유저의 판단 기조·말투·태도를 일관되게 유지한 채 최소한의 일상 행동·이동과 짧은 기능성 대답만 이어 서술")으로 교체하고, `auto_continue`·`fast_forward` 메타 지시에 `"이번 턴은 유저가 진행을 위임한 턴입니다."` 신호와 함께 PC의 독자적 상황 주도 금지 및 이전 대화의 유저 판단 기조·말투·태도 참조 제약을 명시.
-- **기존 세션 호환**: 헤더는 세션 생성 시 `Preset.json`의 `SystemPrompt`에 복사되므로 코드 변경만으로는 기존 세션에 반영되지 않음. 기존 세션을 재적용(재컴파일)하면 `CompileHybridSystemPrompt`의 고정 헤더 중복 필터(`유저 캐릭터` 패턴)가 구버전 2번 조항을 제거하고 신규 2번 조항으로 자동 교체함(`CompileHybridSystemPrompt_WhenRecompilingLegacyHeader_DropsPcProxyRuleAndRenumbersGenreRules`). 재적용하지 않은 구버전 세션은 `Category=SessionAudit`에서 `F04_SYSPROMPT` 헤더 불일치로 실패하는 것이 정상임.
-- **실험 중 관찰 항목**: (1) 유저가 직접 입력한 턴에도 PC 대사·행동을 이어 쓰는지, (2) 고백·스킨십 진행·위험 감수 같은 관계·수위 결정을 PC 대신 내리는지, (3) PC 속마음(「」) 서술 발생 여부, (4) 턴당 출력 길이·`TokenLog.csv` 출력 토큰 증가, (5) `ReplySuggestionService` 추천 답변과 이미 서술된 PC 반응의 중복, (6) "계속" 연타 시 정체 해소 여부.
-- **잔존 PC 불간섭 지침**: `GenreDirectivesSpec`(장르 수칙 주어를 환경·NPC로 한정)과 기획 단계 폴백 수칙의 "PC의 태도·행동은 유저 선택에 맡길 것" 문구는 세션 설정이 PC 성격을 단정하지 않도록 하는 생성 규칙이므로 유지함.
-- **관찰 포인트**: 위임 턴(`auto_continue`·`fast_forward`)에서 일상 반응이 자연스럽게 넘어가면서 고백·스킨십 진행·위험 감수 지점에서만 멈추는지, 일반 유저 입력 턴에서 PC 대사·행동 임의 추가가 없는지 확인.
-
-
----
-
-## 2026-11-02: [Resolved] 76턴 실플레이 세션 감사 — 3인칭 대사 소문 시드 오탐, 단독 로어북 교차 참조 정체성 누락, RunOnUIThread 타임아웃 크래시 및 StatusPayload 관용 역직렬화 보강
-
-### 1. 현상 (Symptom)
-- **이슈 1 (소문 언급 시드 소진 및 미대면 인물 상태창 등재)**: 동료 NPC가 대사(`"..."`) 안에서 미대면 인물을 소문·경고로 언급한 것만으로 `CHAR:` 시드가 즉시 소모되고, `StatusAI`가 미대면 인물을 `Chars` 및 `CustomStats`에 선등록하여 실제 조우 기회가 소멸함. 또한 Pool A에서 `Priority` 정렬이 공간적 접점 정렬보다 앞선 탓에 현재 장소와 연결된 인물이 후순위로 밀림.
-- **이슈 2 (`StatusUpdateGuide` 인물별 규칙 분리에 따른 상승폭 편차)**: 시작 히로인과 신규 조우 인물의 호감도 규칙이 분리 서술되어 일반 턴 상승폭이 비대칭으로 작동함.
-- **이슈 3 (단독 로어북 채택 시 교차 참조 개체 정체성 왜곡)**: 장소나 타 인물 로어북 본문에 미채택 인물의 이름만 언급될 때 서사 모델이 해당 인물의 종족·신분을 알지 못해 설정과 다르게 묘사함.
-- **이슈 4 (백그라운드 상태창 UI 스레드 충돌 및 JSON 타입 불일치 드랍)**:
-  - `DialogService.RunOnUIThread`의 `500ms` 타임아웃 초과 시 백그라운드 스레드에서 `action()`을 직접 실행하는 폴백이 작동하여 `ObservableCollection.Clear()` 호출 시 `NotSupportedException`이 발생하고 직후의 `Session.json` 저장이 스킵됨.
-  - `Flash-Lite`가 `uiBadges`에 숫자(`30`), `isSceneResolved`에 문자열(`"false"`), `currentPlace`에 1원소 배열(`["장소"]`)을 출력할 때 `StatusPayload` 역직렬화가 무음 실패함.
-- **이슈 5 (사건 원장 주인공 주어 불일치)**: 세계관 3번 섹션의 주인공 본명 표기 형식 편차로 본명 추출이 누락되어 사건 원장 불릿 주어가 `'플레이어'`로 기록됨.
-
-### 2. 원인 (Root Cause)
-1. `AddModelResponse`가 지문과 큰따옴표 대사를 구분하지 않고 단순 이름 포함 여부만 검사했으며, `UpdateContextStatus`에 미조우 로어북 인물 등록 차단 가드가 없었음.
-2. `CognitivePromptAssembler`가 채택된 로어북 본문만 주입하고 본문 내 언급된 미채택 로어북 개체의 최소 정체성 정보를 제공하지 않았음.
-3. `IDialogService.RunOnUIThread`가 단위 테스트 Deadlock 회피를 위해 넣었던 `500ms` 타임아웃 + 백그라운드 직접 실행 폴백을 실제 WPF 앱(`Application.Current is App`)에도 동일 적용했음.
-4. `LlmJsonParser.LenientOptions`에 `string` 및 `bool` 프로퍼티에 대한 관용 컨버터가 없었음.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **지문/대사 분리 및 미조우 인물 상태창 가드 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
-  - `SplitNarrationAndQuotes`와 `IsCharacterEncounteredInNarrative`를 통해 지문(`narrationOnly`) 등장 또는 대사(`quotesOnly`) 내 1인칭 자기소개(`내 이름은 ...`, `나는 ...`, `...라고 합니다`)일 때만 현장 조우로 판정.
-  - `UpdateContextStatus`에서 이번 턴에 실제 조우하지 않은 미대면 로어북 인물은 `StatusAI`가 반환하더라도 `Chars` 및 `CustomStats` 등록을 차단.
-  - Pool A 정렬 순서를 `OrderBy(OfferCount).ThenByDescending(IsSpatiallyMatchedToCurrentPlaces).ThenBy(Priority)`로 교정.
-- **1-hop 참조 개체 1줄 요약 자동 주입 ([CognitivePromptAssembler.cs](../../GRC/GRC/Services/Cognitive/CognitivePromptAssembler.cs))**:
-  - 채택된 로어북 본문에 언급된 미채택 로어북 개체의 `RoleSummary` / `IdentitySummary` 1줄을 `<world_lore>` 하단에 `- [참조 개체 요약] {Name} ({Category}): {Summary}`로 비재귀 병기.
-- **STA 디스패처 안전 실행 및 관용 JSON 컨버터 ([IDialogService.cs](../../GRC/GRC/Services/IDialogService.cs), [ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs), [LlmJsonParser.cs](../../GRC/GRC/Helpers/LlmJsonParser.cs))**:
-  - `RunOnUIThread`에서 `500ms` 타임아웃 및 백그라운드 직접 실행 폴백을 제거하고, `Application.Current is not App`(단위 테스트)일 때만 인라인 실행하며 실제 WPF 앱에서는 반드시 `dispatcher.Invoke(action)`으로 STA 스레드에서 실행.
-  - `LenientStringConverter`(`ReadAsPropertyName` 포함) 및 `LenientBooleanConverter`를 `LlmJsonParser.LenientOptions`에 등록하고, `ChatWorkflowService`는 `result.IsSuccess`일 때만 상태창 API를 호출.
-- **4턴 주기 앵커(`_requiresHighQualityAnchor` / `ThinkingLevel.high`) 제거 및 `ThinkingLevel.medium` 단일화 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs), [ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs))**:
-  - 단기 기억 슬라이싱(4턴 주기)마다 프리픽스 캐시 초기화와 `ThinkingLevel.high`(추론 토큰 1,000~3,100개)가 겹쳐 15~25초 지연이 발생하는 병목을 제거하고, 전 구간 `ThinkingLevel.medium`으로 통일.
-- **무중복 지연 장기 이관(`LongTermArchiveTriggerBullets = 20`), 연대기 한도 확장(`2,500자`), RAG 유사 중복 불릿 제거(`DeduplicationSimilarityThreshold = 0.915f`) ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs), [GatedRAGRetriever.cs](../../GRC/GRC/Services/Cognitive/GatedRAGRetriever.cs))**:
-  - 40턴(`MediumTermThreshold = 10`) 도달 시에는 챕터 번호만 전환하고, 새 챕터 불릿이 `20개` 이상 쌓였을 때 이전 완료 챕터를 장기 연대기(`최대 2,500자`)로 요약·이관함으로써 `<macro_chronicle>`과 `<internal_chronicle_facts>` 간 중복을 0건으로 제거하고 상시 20~52개(약 25~64턴)의 불릿을 유지.
-  - `GatedRAGRetriever.RetrieveRecalledHistory`에서 이미 선택된 불릿과 코사인 유사도가 `0.915f` 이상인 인접/중복 불릿을 건너뛰어 5개 회상 슬롯의 사건 다양성을 확보.
-- **131턴 실플레이 추가 검증 — 장소 `HOOK:` 대사 오탐 차단, 지연 통성명 `CHAR:` 동기화, 하룻밤 수면 `elapsedTime` 오판 교정 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
-  - **장소 `HOOK:` 시드 상태 기반 소모 일원화**: `Category == "장소"`인 `HOOK:` 시드는 `StatusAI.TriggeredSeeds`에서 제외하고 오직 실제 방문(`Places`/`currentPlace` 상태 전이 시 `SyncStateBasedSeedConsumptionLocked`)으로만 소모하도록 격리하여, 대사 내 차기 행선지 제안(`"야광초 군락..."`)으로 인한 조기 소모를 원천 차단.
-  - **지연 통성명 `CHAR:` 시드 동기화**: 첫 조우 턴(Turn 88)에 인물이 익명(`"백색 이무기"`)으로 등장하면서 동반 `HOOK:` 시드가 먼저 소모되어 시드 창이 닫힌 뒤 다음 턴(Turn 89)에 통성명(`"날 설하라 부르더구나"`)하여 `Chars`에 등재되는 경우, `SyncStateBasedSeedConsumptionLocked`가 `context.Chars`에 등록된 로어북 인물의 `CHAR:{Name}`을 `ConsumedSeeds`에 자동 동기화하도록 보강(고어체 1인칭 자기소개 `나를/날 ... 라 부르더구나` 정규식 포함).
-  - **하룻밤 수면 `elapsedTime` 판정 기준 명시**: `BuildStatusRequest` Rule 5에 `"hours": 몇 시간 경과 및 하룻밤 수면·다음 날 아침 기상`, `"days": 이번 턴 안에서 최소 이틀(2일·사흘·며칠) 이상이 새로 흐른 경우(밤새 자고 일어난 익일 아침은 제외)`를 명시하여 하룻밤 수면 후 아침 기상이 `days`로 오판되어 불필요한 `time_skip_progression`을 유발하는 현상을 해소.
-- **핵심 부정 제약 (Never use X)**:
-  - **절대 실제 WPF 앱(`Application.Current is App`)에서 Dispatcher 타임아웃 후 백그라운드 스레드에서 UI 컬렉션 변경 액션을 직접 폴백 실행하지 말 것.** `NotSupportedException` 크래시와 세션 저장 누락을 유발함.
-  - **절대 큰따옴표 대사 내부의 3인칭 이름 언급만으로 `CHAR:` 시드를 소모하거나 미대면 로어북 인물을 상태창에 등록하지 말 것.**
-  - **절대 `장소` 카테고리의 `HOOK:` 시드를 `StatusAI.TriggeredSeeds`로 소모하지 말 것.** 대사 내 행선지 언급만으로 미방문 장소 시드가 소멸함.
-- **190턴 분기 세션 추가 검증 — `<previous_state>` 인라인 JSON 포맷 정렬, `LenientStringDictionaryConverter` 평문/배열 폴백 및 `CustomStats` 공백 중복 키 정화 ([ChapterContext.cs](../../GRC/GRC/Models/ChapterContext.cs), [LlmJsonParser.cs](../../GRC/GRC/Helpers/LlmJsonParser.cs), [MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
-  - `ToStatusSnapshotString()`에서 `uiBadges`, `characterConditionDesc`, `items`를 인라인 JSON 포맷으로 직렬화하여 `Flash-Lite`가 `<previous_state>` 평문을 모방해 `"uiBadges": "체력: 55/100, ..."` 단일 문자열을 반환하거나 쉼표 뒤 공백(`" 벨벳 호감도"`)을 키에 포함시키는 현상을 예방.
-  - `LlmJsonParser.LenientOptions`에 `LenientStringDictionaryConverter`를 추가하여 딕셔너리 Key/Value `.Trim()`, 평문 문자열(`Key: Value` + 값 내부 쉼표·인용구·시각 보존) 및 배열 형태의 `Dictionary<string, string>` 폴백 역직렬화를 지원.
-  - `MemoryManagerService.NormalizeCustomStatsDictionary`를 통해 `RestoreSession`(공백 없는 정식 키 우선) 및 `UpdateContextStatus`(신규 payload 최신값 덮어쓰기 및 절단된 게이지 분모 복원)에서 공백 변종 중복 배지를 원천 차단.
-  - `CompressToMediumTermAsync`에서 `_chapterCount++` 실행 전 `activeChapterBeforeTransition`의 불릿 개수를 먼저 산출하고, `activeChapterBulletCount >= 20`일 때는 `activeChapterBeforeTransition - 1`까지, 20개 미만이더라도 10회차(40턴) 챕터 마감으로 새 챕터가 열렸을 때는 전전 챕터(`_chapterCount - 2`)까지 확정 이관하도록 보강하여 10회차 경계 이관 누락 및 일상물 저밀도 챕터의 무한 적체를 해소.
-
----
-
-## 2026-11-04: [Resolved] IllustrationPromptService의 `responseSchema` 대소문자(`CamelCase` vs `PascalCase`) 불일치로 인한 API 400 실패 및 로컬 한국어 폴백 보강
-
-### 1. 현상 (Symptom)
-- `IllustrationStudioWindow`에서 세션 인물의 로어북 태그 추출(`ExtractCharacterTagsAsync`) 또는 장면 태그 추출(`ExtractSceneTagsAsync`) 버튼 클릭 시 Gemini API 호출이 실패하여 추출 실패 메시지가 출력됨.
-
-### 2. 원인 (Root Cause)
-- [`GeminiApiService.cs`](../../GRC/GRC/Services/GeminiApiService.cs)의 `_jsonOptions`는 `PropertyNamingPolicy = JsonNamingPolicy.CamelCase`가 설정되어 있어 익명 객체로 선언한 `responseSchema.properties`의 키(`AppearanceTags`)는 `"appearanceTags"`(카멜케이스)로 직렬화되는 반면, 문자열 배열인 `required = new[] { "AppearanceTags", ... }`의 원소는 `"AppearanceTags"`(파스칼케이스) 그대로 직렬화됨.
-- 이로 인해 Gemini API가 `required` 배열에 선언된 프로퍼티가 `properties`에 존재하지 않는다는 `400 INVALID_ARGUMENT` 오류를 반환함.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **`responseSchema` 카멜케이스 키 통일 및 C# 결정론적 한국어 매퍼 폴백 ([IllustrationPromptService.cs](../../GRC/GRC/Services/IllustrationPromptService.cs))**:
-  - `ExtractCharacterTagsAsync` 및 `ExtractSceneTagsAsync`의 `responseSchema` 내 `properties`와 `required` 배열 모두 소문자 카멜케이스(`appearanceTags`, `defaultOutfitTags`, `compositionTags`, `outfitAndExposureTags`, `poseAndVibeTags`, `backgroundTags`)로 통일.
-  - 오프라인이나 API 통신 실패 시에도 즉시 작동하는 C# 결정론적 한국어-단보루 키워드 매퍼(`ExtractCharacterTagsLocalFallback`, `ExtractSceneTagsLocalFallback`)를 폴백으로 결합.
-- **핵심 부정 제약 (Never use X)**:
-  - **절대 `GeminiApiService`에 전달하는 `responseSchema`의 `properties`나 `required` 배열에 파스칼케이스(`PascalCase`) 키를 사용하지 말 것.** `_jsonOptions`의 `JsonNamingPolicy.CamelCase`로 인해 `properties`와 `required` 간 대소문자 불일치(`400 Bad Request`)가 발생함.
-
----
-
-## 2026-11-04: [Resolved] VirtualizingStackPanel 평균 높이 재산출·Margin 애니메이션·뷰포트 축소에 의한 간헐적 오토스크롤 풀림 및 상향 스크롤 반동 해결
-
-### 1. 현상 (Symptom)
-- 장문 롤플레잉 세션(190턴, 약 390개 메시지)에서 간헐적으로 새 턴 시작 직후나 스트리밍 도중 오토스크롤이 풀려 바닥을 따라가지 못하거나, 멀티라인 채팅 입력창 확장·추천 답변 노출 시 마지막 대사가 가려짐.
-- 과거 대화를 읽기 위해 마우스 휠을 위로 굴릴 때 컨테이너 실현(`Loaded`) 구간에서 스크롤이 0.3초간 바닥으로 역보정되는 현상 발생.
-
-### 2. 원인 (Root Cause)
-1. **레이아웃 결과 이벤트(`ScrollChanged`) 내 사용자 의도 추측의 한계**: 기존 `AutoScrollHelper.cs`는 `ScrollChanged` 내부에서 `e.VerticalChange < 0`과 `500ms` 타이머(`LastUserInputTick`) 조합으로 상향 스크롤을 추측했으나, 하향 휠(`e.Delta < 0`)이나 `End` 키에도 `LastUserInputTick`을 갱신하여 500ms 이내에 발생한 `VirtualizingStackPanel`의 자체 오프셋 보정(`dV < 0`)이나 공백 트림을 사용자 상향 스크롤로 오판해 오토스크롤을 해제함.
-2. **`ViewportHeightChange < 0` 미처리 및 `CollectionChanged` 미연동**: 멀티라인 입력창 확장이나 추천 답변 노출 시 `ExtentHeightChange == 0`이고 `ViewportHeightChange < 0`이 발생하는데 이를 무시했으며, 추천 답변 클릭(`UseSuggestionCommand`) 및 메시지 재전송 시 코드비하인드 스크롤 호출이 누락됨.
-3. **`ChatMessageTemplate`의 `Margin` 레이아웃 애니메이션 ([ModernStyles.xaml](../../GRC/GRC/Themes/ModernStyles.xaml))**: `Loaded` 트리거가 레이아웃 속성인 `Margin`을 `15,25,15,0`(합 25px)에서 `15,8,15,8`(합 16px)로 0.3초 동안 `ThicknessAnimation` 처리하여, 새 메시지 추가 및 과거 메시지 상향 스크롤 실현 시 매 프레임(60FPS, 18회) `VirtualizingStackPanel.MeasureOverride`를 강제 호출하며 `ExtentHeight`와 `VerticalOffset`을 흔듦.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **물리 입력과 레이아웃 결과의 완전 분리 ([AutoScrollHelper.cs](../../GRC/GRC/Helpers/AutoScrollHelper.cs), [ChatView.xaml.cs](../../GRC/GRC/Views/ChatView.xaml.cs))**:
-  - `IsAutoScrollActive = false` 전이는 오직 물리적 상향 입력(`PreviewMouseWheel e.Delta > 0`, `ScrollBar.ScrollEvent`의 `SmallDecrement`/`LargeDecrement`/`First` 및 비하단 `ThumbTrack`, `PreviewKeyDown`의 `Up`/`PageUp`/`Home`)에서만 수행하고, `ScrollChanged` 내부에서는 절대 오토스크롤을 해제하지 않음.
-  - `IsAutoScrollActive == true`일 때는 `ExtentHeightChange != 0`, `ViewportHeightChange != 0`, `e.VerticalChange < 0` 모두 즉시 `ScrollToBottom()`으로 보정하며, `ChatView.xaml.cs`에서 `ChatHistory.CollectionChanged`를 구독하여 모든 경로의 메시지 추가 시 하단 이동을 보장.
-  - 하향 휠(`e.Delta < 0`) 시 이미 바닥 허용오차(`24px`) 이내이면 즉시 재결합하고, 상향 물리 입력 직후 `150ms`(`UpwardBounceCooldownMs`) 이내의 레이아웃 반동(`dV > 0`)에 의한 재결합을 차단.
-- **`Margin` 애니메이션을 GPU `RenderTransform.(TranslateTransform.Y)`로 교체 ([ModernStyles.xaml](../../GRC/GRC/Themes/ModernStyles.xaml))**:
-  - `MessageContainer`의 `Margin="15,8"`을 고정하고 `RenderTransform.(TranslateTransform.Y)` (`From="17" To="0"`)로 전환하여 시각적 슬라이드업 효과는 동일하게 유지하면서 레이아웃 재측정 비용과 오프셋 흔들림을 0으로 제거.
-- **핵심 부정 제약 (Never use X)**:
-  - **절대 `ScrollViewer.ScrollChanged` 내부에서 `e.VerticalChange < 0`이나 타이머 휴리스틱으로 사용자 상향 스크롤 의도를 추측해 `IsAutoScrollActive = false`로 전이하지 말 것.**
-  - **절대 가상화 리스트(`VirtualizingStackPanel`) 아이템 템플릿의 `Loaded` 애니메이션에 `Margin`·`Height`·`Padding` 등 레이아웃 측정(Measure) 속성을 애니메이션하지 말 것.** 반드시 `RenderTransform`이나 `Opacity`만 사용할 것.
-
----
-
-## 2026-11-04: [Resolved] 장문 세션·장면 로딩 시 UI 가상화 풀림(`CanContentScroll` 누락), 비가시 세그먼트 마크다운 4중 파싱, 64비트 `WndProc` 오버플로우 및 다중 슬롯 동기 갱신 병목 해결
-
-### 1. 현상 (Symptom)
-- 수백 턴 분량의 세션/장면을 로드할 때 `PresentationFramework-SystemData.dll` 로드 직후 UI 스레드가 응답 없음(Freeze)에 빠지거나 디버거 종료(`0xffffffff`) 및 `OverflowException` 크래시가 발생함.
-- `IllustrationStudioWindow`에서 장면 프리셋 선택·AI 추출·초기화 시 슬롯 변경마다 전체 칩 팔레트 스캔이 5~9회 중복 실행되고, 모달 알림창(`ShowAlert`/`ShowConfirm`)의 `Owner`가 항상 `MainWindow`로 고정되어 스튜디오 창 뒤로 열리는 현상 발생.
-
-### 2. 원인 (Root Cause)
-1. **`ChatView.xaml` 커스텀 `ControlTemplate` 내 `CanContentScroll` 바인딩 누락**: `ChatHistoryItemsControl`에 `ScrollViewer.CanContentScroll="True"`를 선언했으나 내부 `<ControlTemplate>`의 `<ScrollViewer x:Name="ChatScrollViewer">`에 `CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"`가 누락되어 `CanContentScroll == false`(무한 높이 측정)로 동작하며 `VirtualizingStackPanel` 가상화가 완전히 무력화됨(410개 메시지·4,000개 세그먼트 일괄 생성).
-2. **`ChatMessageTemplate` 내 비가시 `TextBlock` 4중 마크다운 파싱 ([ModernStyles.xaml](../../GRC/GRC/Themes/ModernStyles.xaml))**: 세그먼트당 4개의 `TextBlock`(`BubbleText`, `NarrationText`, `InnerThoughtText`, `SystemText`) 중 1개만 표시됨에도 4개 모두 기본 속성으로 `SimpleMarkdownHelper.Text="{Binding Text}"`를 평가하여 정규식 파싱 및 `Inline` 객체 생성이 4배로 증폭됨.
-3. **64비트 `WndProc` 포인터 변환 및 삭제된 초기 배경 리소스 참조 ([MainWindow.xaml.cs](../../GRC/GRC/Views/MainWindow.xaml.cs), [ChatViewModel.cs](../../GRC/GRC/ViewModels/ChatViewModel.cs))**: `WM_NCHITTEST`에서 `lParam.ToInt32()` 호출 시 음수/확장 좌표에서 `OverflowException`이 발생 가능하며, `_currentBackgroundImage` 기본값이 삭제된 `bg1.png`를 가리킴.
-4. **`IllustrationStudioViewModel` 다중 슬롯 일괄 변경 시 중복 스캔 및 미대기 로어북 로드**: 장면 프리셋·기록·AI 변환 시 5~6개 슬롯 프로퍼티가 순차 변경될 때마다 `RefreshPrompts()`와 `RefreshChipSelectionStates()`가 매번 호출되었고, `LoadSessionOptionsAsync`에서 `SelectedSessionOption` 변경이 비동기 대기 없이 실행됨.
-
-### 3. 해결책 및 불변식 (Resolution & Invariants)
-- **`ChatScrollViewer` 가상화 템플릿 바인딩 복원 및 조건부 마크다운 파싱 ([ChatView.xaml](../../GRC/GRC/Views/ChatView.xaml), [ModernStyles.xaml](../../GRC/GRC/Themes/ModernStyles.xaml))**:
-  - `ChatScrollViewer`에 `CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"`, `HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"`, `VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}"`를 명시적으로 연결하여 `VirtualizingStackPanel` UI 가상화를 정상 활성화.
-  - `ChatMessageTemplate`에서 `helpers:SimpleMarkdownHelper.Text="{Binding Text}"`를 각 `SegmentType`별 `DataTrigger` `Setter` 내부로 이동하여 실제 표시되는 단일 `TextBlock`에서만 마크다운 인라인을 생성하도록 최적화.
-- **64비트 `ToInt64()` 방어 및 초기 리소스·모달 소유권 보강 ([MainWindow.xaml.cs](../../GRC/GRC/Views/MainWindow.xaml.cs), [ChatViewModel.cs](../../GRC/GRC/ViewModels/ChatViewModel.cs), [IDialogService.cs](../../GRC/GRC/Services/IDialogService.cs))**:
-  - `WndProc` 내 `lParam`/`wParam`을 `ToInt64()`로 읽고 `PresentationSource.FromVisual(MaximizeButton) != null` 가드를 추가했으며, 초기 배경 경로를 `bg1.jpg`로 교정.
-  - `DialogService.SetOwner`가 현재 활성(`IsActive && IsVisible`) 창을 우선 `Owner`로 지정하도록 개선하고 `IllustrationStudioWindow`는 독립 최상위 창(`ShutdownMode.OnMainWindowClose`)으로 분리.
-- **다중 슬롯 갱신 배칭(`_suppressPromptRefresh`) 및 명시적 `DataTemplate` 일원화 ([IllustrationStudioViewModel.cs](../../GRC/GRC/ViewModels/IllustrationStudioViewModel.cs), [IllustrationStudioWindow.xaml](../../GRC/GRC/Views/IllustrationStudioWindow.xaml))**:
-  - 장면 프리셋·기록·AI 추출·슬롯 수정 시 `_suppressPromptRefresh` 가드로 슬롯 대입 후 단 1회만 프롬프트 조합 및 칩 선택 상태를 갱신하고, `DisplayMemberPath` 대신 명시적 `DataTemplate`을 사용.
-- **핵심 부정 제약 (Never use X)**:
-  - **절대 `ItemsControl.Template`을 커스텀 `<ScrollViewer>`로 재정의할 때 `CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"` 바인딩을 누락하지 말 것.** 누락 시 `VirtualizingStackPanel`이 무한 높이(`PositiveInfinity`)로 측정되어 UI 가상화가 완전히 풀리고 장문 세션 로드 시 UI 스레드가 동결됨.
-  - **절대 64비트 Windows 환경의 `WndProc`에서 `lParam`/`wParam`에 `IntPtr.ToInt32()`를 호출하지 말 것.** 반드시 `ToInt64()`와 비트 마스킹을 사용할 것.
