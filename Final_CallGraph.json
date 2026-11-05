@@ -1,6 +1,0 @@
-[
-  {
-    "caller": "read_line_nc",
-    "callee": "gets"
-  }
-]

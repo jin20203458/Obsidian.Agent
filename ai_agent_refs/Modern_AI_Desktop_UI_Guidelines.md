@@ -319,6 +319,8 @@ private void OnSplitterDragCompleted(object sender, DragCompletedEventArgs e)
 ```
 
 ### 무프리징 토큰 증분 렌더링 파이프라인 (`StreamingNarrativeBuffer.cs`)
+> **용도 구분**: 본 섹션의 `StreamingNarrativeBuffer`는 LLM의 **단일 텍스트 응답 스트림을 토큰 단위로 이어붙일 때** 사용합니다. (초당 수천 건의 구조화된 텔레메트리/로그 아이템을 `ObservableCollection<T>` 컬렉션에 배치 추가할 때는 [WPF_Architecture_Guidelines.md](./WPF_Architecture_Guidelines.md) 제8장의 `ThrottledStreamProjector<T>`를 참조하십시오.)
+
 LLM 토큰이 초당 50~100개씩 유입될 때 전체 문자열을 매번 다시 바인딩하면 렌더 트리 재구성으로 인해 UI 스레드가 마비됩니다. 채널 기반 버퍼링과 증분 렌더링을 적용해야 합니다.
 
 ```csharp

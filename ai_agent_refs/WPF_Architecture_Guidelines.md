@@ -2,6 +2,7 @@
 description: WPF 현대적 MVVM 아키텍처, Generic Host DI, 수명주기, 유효성 검사, 제네릭 모달, 고성능 스트리밍 및 Windows 11 DWM 통합 마스터 지침서.
 related:
   - ../README.md
+  - ./Modern_AI_Desktop_UI_Guidelines.md
 ---
 # WPF Architecture Guidelines
 
@@ -374,7 +375,7 @@ WPF 기본 빨간 테두리는 AdornerLayer에 그려져 팝업에 가려지거�
         <AdornedElementPlaceholder x:Name="placeholder" />
         <TextBlock Margin="0,4,0,0"
                    FontSize="11"
-                   Foreground="{DynamicResource AccentDangerBrush}"
+                   Foreground="{DynamicResource StatusErrorTextBrush}"
                    Text="{Binding [0].ErrorContent}" />
     </StackPanel>
 </ControlTemplate>
@@ -649,42 +650,22 @@ public partial class ConfirmDialogViewModel : ObservableObject, IDialogAware<boo
 
 ---
 
-## 7. 3계층 디자인 토큰 및 컨트롤 스타일 아키텍처
+## 7. 3계층 디자인 토큰 및 기본 컨트롤 스타일 아키텍처
 
 무거운 외부 UI 라이브러리 없이 순수 XAML로 일관된 테마를 구축하기 위해, **Primitive Tokens -> Semantic Theme Brushes -> Control Styles**의 3계층 분리를 준수합니다.
 
+> [!IMPORTANT]
+> **디자인 토큰 및 팔레트 단일 진실 공급원 (SSOT 위임)**  
+> 구체적인 3계층 컬러/치수/폰트 토큰 사전(`PrimitiveTokens.xaml`, `DarkTheme.xaml`), 루미넌스 스태킹, 마이크로 타이포그래피 및 순수 벡터 아이콘(`VectorIcons.xaml`)의 전체 명세는 **[Modern_AI_Desktop_UI_Guidelines.md](./Modern_AI_Desktop_UI_Guidelines.md) 제2장~제4장**에서 단일 진실 공급원(SSOT)으로 일원화 관리합니다. 본 장에서는 3계층 바인딩 원칙과 범용 기본 컨트롤(`Button`, `ScrollBar`) 재정의 템플릿만 규정합니다.
+
 ### A. 3계층 분리 및 DynamicResource vs StaticResource 원칙
-* **Primitive Tokens (`PrimitiveTokens.xaml`)**: 불변 Color 및 치수 정의. 자체적으로 완결되며 `{StaticResource}`로 참조됩니다.
-* **Semantic Theme (`DarkTheme.xaml`, `LightTheme.xaml`)**: 테마별 시맨틱 `SolidColorBrush`를 정의하며 `po:Freeze="True"`로 동결합니다.
+* **Primitive Tokens (`PrimitiveTokens.xaml`)**: 불변 `Color`, `CornerRadius`, `FontFamily` 정의. `{StaticResource}`로만 참조됩니다.
+* **Semantic Theme (`DarkTheme.xaml`, `LightTheme.xaml`)**: `PrimitiveTokens.xaml`의 컬러를 `{StaticResource}`로 바인딩하여 테마별 시맨틱 `SolidColorBrush`를 정의하며, 렌더 스레드 오버헤드 제거를 위해 `po:Freeze="True"`로 동결합니다(원시 Hex 코드 직접 기입 금지).
 * **Control Styles (`ControlStyles.xaml`)**:
-  * 테마 가변 속성(Background, Foreground, BorderBrush): 반드시 **`{DynamicResource BrushKey}`**로 바인딩하여 런타임 테마 전환을 지원합니다.
-  * 레이아웃 불변 속성(Padding, BorderThickness, CornerRadius): 반드시 **`{StaticResource}`**로 바인딩하여 바인딩 오버헤드를 제거합니다.
+  * 테마 가변 속성(`Background`, `Foreground`, `BorderBrush`): 반드시 **`{DynamicResource BrushKey}`**로 바인딩하여 런타임 테마 전환을 지원합니다.
+  * 레이아웃 불변 속성(`Padding`, `BorderThickness`, `CornerRadius`): 반드시 **`{StaticResource}`**로 바인딩하여 바인딩 오버헤드를 제거합니다.
 
-### B. 테마 토큰 사전 예시 (`Themes/DarkTheme.xaml`)
-```xml
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:po="http://schemas.microsoft.com/winfx/2006/xaml/presentation/options">
-
-    <!-- 시맨틱 브러시 (동결 필수) -->
-    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0B0C10" po:Freeze="True" />
-    <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#13141C" po:Freeze="True" />
-    <SolidColorBrush x:Key="CardBackgroundBrush" Color="#1A1D27" po:Freeze="True" />
-    <SolidColorBrush x:Key="CardBackgroundHoverBrush" Color="#252A38" po:Freeze="True" />
-    <SolidColorBrush x:Key="BorderSubtleBrush" Color="#22FFFFFF" po:Freeze="True" />
-    
-    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F2F4F8" po:Freeze="True" />
-    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#AAB2C0" po:Freeze="True" />
-    <SolidColorBrush x:Key="AccentPrimaryBrush" Color="#4F46E5" po:Freeze="True" />
-    <SolidColorBrush x:Key="AccentDangerBrush" Color="#EF4444" po:Freeze="True" />
-
-    <!-- 불변 치수 -->
-    <CornerRadius x:Key="DefaultCornerRadius">6</CornerRadius>
-    <Thickness x:Key="ButtonPadding">14,8</Thickness>
-</ResourceDictionary>
-```
-
-### C. 기본 컨트롤 전면 재정의 사전 (`Themes/ControlStyles.xaml`)
+### B. 기본 컨트롤 전면 재정의 사전 (`Themes/ControlStyles.xaml`)
 ```xml
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
@@ -696,8 +677,8 @@ public partial class ConfirmDialogViewModel : ObservableObject, IDialogAware<boo
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="{StaticResource ButtonPadding}" />
-        <Setter Property="FontFamily" Value="Segoe UI Variable Text, Malgun Gothic" />
+        <Setter Property="Padding" Value="14,8" />
+        <Setter Property="FontFamily" Value="{StaticResource SansFontFamily}" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
@@ -708,7 +689,7 @@ public partial class ConfirmDialogViewModel : ObservableObject, IDialogAware<boo
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{StaticResource DefaultCornerRadius}"
+                            CornerRadius="{StaticResource CornerRadiusCard}"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center"
                                           VerticalAlignment="Center"
@@ -716,7 +697,7 @@ public partial class ConfirmDialogViewModel : ObservableObject, IDialogAware<boo
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="border" Property="Background" Value="{DynamicResource CardBackgroundHoverBrush}" />
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource CardBackgroundElevatedBrush}" />
                             <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentPrimaryBrush}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
@@ -745,12 +726,12 @@ public partial class ConfirmDialogViewModel : ObservableObject, IDialogAware<boo
                                     <Thumb.Template>
                                         <ControlTemplate TargetType="Thumb">
                                             <Border x:Name="thumbBorder"
-                                                    Background="#33FFFFFF"
+                                                    Background="{DynamicResource BorderStrongBrush}"
                                                     CornerRadius="4"
                                                     Margin="1,0" />
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="thumbBorder" Property="Background" Value="#66FFFFFF" />
+                                                    <Setter TargetName="thumbBorder" Property="Background" Value="{DynamicResource TextMutedBrush}" />
                                                 </Trigger>
                                                 <Trigger Property="IsDragging" Value="True">
                                                     <Setter TargetName="thumbBorder" Property="Background" Value="{DynamicResource AccentPrimaryBrush}" />
@@ -772,7 +753,9 @@ public partial class ConfirmDialogViewModel : ObservableObject, IDialogAware<boo
 
 ---
 
-## 8. 초고속 스트리밍 데이터 및 CQRS 리드 모델
+## 8. 초고속 텔레메트리 컬렉션 스트리밍 및 CQRS 리드 모델
+
+> **용도 구분**: 본 장의 `ThrottledStreamProjector<T>`는 초당 수천 건의 **구조화된 이벤트/텔레메트리 행(Row)을 `ObservableCollection<T>` 리스트에 배치 추가**할 때 사용합니다. (LLM의 실시간 텍스트 토큰 단위 증분 스트리밍 및 생성 중단 제어는 [Modern_AI_Desktop_UI_Guidelines.md](./Modern_AI_Desktop_UI_Guidelines.md) 제6장의 `StreamingNarrativeBuffer`를 참조하십시오.)
 
 대량의 이벤트가 유입될 때 `ObservableCollection`에 이벤트를 건별로 즉시 추가하면 UI 스레드가 락에 걸려 애플리케이션이 멈춥니다. 인메모리 버퍼와 주기적 일괄 플러시를 적용합니다.
 
@@ -902,15 +885,15 @@ public sealed class ThrottledStreamProjector<T> : IDisposable
                             UseAeroCaptionButtons="False" />
     </shell:WindowChrome.WindowChrome>
 
-    <!-- 최상위 루트 컨테이너 (Mica 반투명 틴트) -->
-    <Grid Background="#E60B0C10">
+    <!-- 최상위 루트 컨테이너 (앱 배경 토큰 바인딩) -->
+    <Grid Background="{DynamicResource AppBackgroundBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="44" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
         <!-- 1. 커스텀 타이틀바 -->
-        <Border Grid.Row="0" Background="#13141C" BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="0,0,0,1">
+        <Border Grid.Row="0" Background="{DynamicResource SurfaceBackgroundBrush}" BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="0,0,0,1">
             <Grid Margin="16,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -935,7 +918,7 @@ public sealed class ThrottledStreamProjector<T> : IDisposable
         <ContentControl Grid.Row="1" Content="{Binding Nav.CurrentPage}" />
 
         <!-- 3. 최상위 In-App 다이얼로그 호스트 (ZIndex 최고층, 스모크 배경) -->
-        <Grid Grid.RowSpan="2" Panel.ZIndex="1000" Background="#80000000"
+        <Grid Grid.RowSpan="2" Panel.ZIndex="1000" Background="{DynamicResource OverlayDimBrush}"
               Visibility="{Binding Dialog.IsOpen, Converter={StaticResource BoolToVis}}">
             <Border Background="{DynamicResource CardBackgroundBrush}"
                     BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1"
