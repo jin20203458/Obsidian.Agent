@@ -376,3 +376,33 @@ related:
 > **[정제 완료 기준선]** 2026-11-04 이전 상위 항목은 정제 완료됨. 신규 인시던트는 이 아래에 추가됩니다.
 
 ---
+
+## 2026-11-05: [Resolved] Pool C 동료 유대 시드(`BOND:` / `BOND_SECRET:`) 원격 동료 역전, 3턴 창 만료 후 소진 판정 누락 및 1단계 발단 문구 중복 재연 해결
+
+### 1. 현상 (Symptom)
+1. **부재 동료(`Remote`)에 의한 현장 동료(`Local`) 시드 밀어내기**: 주인공이 성소에 머물며 현장 동료(오르페)와 교감 중임에도, 타 거점에 있는 동료(클라리스·시엘라)의 `SeedOfferCounts`가 더 낮다는 이유로 `Pool C` 단일 슬롯을 부재 동료 시드가 독점함.
+2. **4~6턴 중장기 유대 에피소드 완수 시 `ConsumedSeeds` 누락**: 유대 사건이 개막된 후 4턴 이상 이어지면 3턴 서사 윈도우(`ActiveSeedKeys`)가 먼저 닫혀, 에피소드가 실제로 완수된 턴에 StatusAI의 `<offered_story_seeds>` 화이트리스트에서 해당 시드가 빠져 `ConsumedSeeds`에 기록되지 않음.
+3. **2단계 `BOND_SECRET:{Name}`에서 1단계 발단 계기(`BondTrigger`) 반복 재연**: 이미 `BOND:오르페`가 완수되었음에도 2단계 `BOND_SECRET:오르페` 시드 문자열이 `LoreRenderer.BondClause`(1단계 `발단 계기: 날개죽지 상처 간호 -> 완수 후 변화: ...`) 원문을 그대로 재주입하여 서사 AI가 치료된 날개 상처 사건을 반복 묘사함.
+4. **StatusAI `Rule 3`(`items`) 특정 아이템 과적합 및 복합 조사(`와의`/`과의`) 매칭 누락**: `StatusUpdateGuide`가 횃불·밧줄 등 특정 예시 단어에 과적합되어 소지품을 과잉 삭제하거나, `EntityNameResolver.KoreanParticlesPattern`에 복합 조사(`와의`, `과의`, `랑의` 등)가 빠져 `"오르페와의 유대"` 스탯 키가 인물 호감도 매칭에서 누락될 위험이 존재함.
+
+### 2. 원인 (Root Cause)
+* `ExtractAvailableStorySeeds`([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))가 `Pool C`를 현장 동료와 원격 동료 구분 없이 1개만 뽑으면서 `OrderBy(OfferCount)`를 최우선 적용함.
+* 서사 주입 기간(`ActiveSeedKeys`, 최대 3턴)과 StatusAI 완수 감시 기간을 동일한 리스트로 묶어, 3턴 경과 시 감시 목록까지 함께 소거됨.
+* `AutoConsumeStage1BondsAt60Locked`가 미실행 1단계 시드를 호감도 60 도달만으로 자동 소진시키는 한편, 정작 `BOND_SECRET:` 프롬프트 조립 시에는 1단계 `BondTrigger`를 제거하지 않고 중복 결합함.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+* **Pool C 2슬롯 분리(`Slot C-Local` + `Slot C-Remote`) 및 제시 횟수 정밀화 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs), [ChapterContext.cs](../../GRC/GRC/Models/ChapterContext.cs))**:
+  * 현장 동료(`IsCompanionPresentInCurrentSceneLocked == true`)는 `Slot C-Local`로 100% 보장하고, 부재 동료는 `Slot C-Remote`(`REMOTE_` 접두어, 동선 유도 라벨, `SeedOfferCounts` 동결)로 분리 주입함.
+  * 창 개설 1턴째에 시드 미소진 상태로 즉시 장소를 이동하면 `RollbackCurrentWindowOfferCountsLocked`로 미소진 시드의 `SeedOfferCounts` 증가분을 롤백함.
+* **서사 윈도우(`ActiveSeedKeys`)와 감시 윈도우(`MonitoredSeedKeys`) 분리 및 기조우 동료 상시 감시 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
+  * 3턴 경과 시 `ActiveSeedKeys`만 닫고 `MonitoredSeedKeys`는 `sceneResolvedEffective` 시점까지 유지하며, 해당 턴 등장 동료(`_turnEncounteredChars`)의 미소진 `BOND:`/`BOND_SECRET:`을 `BuildStatusRequest`의 `<offered_story_seeds>`에 상시 합산(`CHAR:` 및 `장소` `HOOK:`은 StatusAI 감시에서 제외).
+* **`AutoConsumeStage1BondsAt60Locked` 폐지 및 `BuildBondSeedPromptText` 단계별 분리 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
+  * 1단계 미소진 시 호감도 60+에서도 `BOND:{Name}`을 유지하되 `(내면 단서 해금: ...)`을 합본 제시하며, `BOND:{Name}` 확정 소진 후 제시되는 `BOND_SECRET:{Name}`에서는 `BondTrigger`를 제거하고 `(기완수 유대: {BondPayoff}) -> 내면 단서 해금: ...`만 주입함.
+* **복합 조사 정규식 보강 및 StatusAI `Rule 3` 구조적 분리 ([EntityNameResolver.cs](../../GRC/GRC/Helpers/EntityNameResolver.cs), [MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
+  * `KoreanParticlesPattern`에 `와의|과의|랑의|이랑의|에의|에서의|에게의|한테의|로부터의|으로부터의`를 추가하고, StatusAI `Rule 3`을 `[유지 원칙]`과 `[제거 조건]`으로 구조화하여 범용 소지품 보존율을 확보함.
+* **핵심 부정 제약 (Never use X)**:
+  * **절대 미실행된 `BOND:{Name}` 1단계 서사를 StatusAI 확정 판정 없이 호감도 수치만으로 자동 소진(`ConsumedSeeds`) 처리하지 말 것.**
+  * **절대 `BOND_SECRET:{Name}` 2단계 시드 문구에 이미 완수된 1단계 `BondTrigger`(발단 계기) 원문을 재주입하지 말 것.**
+  * **절대 서사 주입용 3턴 윈도우(`ActiveSeedKeys`) 만료 시 진행 중인 에피소드의 StatusAI 감시 목록(`MonitoredSeedKeys`)까지 함께 비우지 말 것.**
+
+---
