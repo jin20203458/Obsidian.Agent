@@ -430,3 +430,23 @@ related:
 > **[정제 완료 기준선]** 2026-11-06 이전 상위 항목은 정제 완료됨. 신규 인시던트는 이 아래에 추가됩니다.
 
 ---
+
+## 2026-11-06: [Resolved] CustomMessageBoxWindow 다중 행 텍스트 절단 해결 및 IllustrationStudio 3-Window 다중 STA 스레드 안전 가드 확립
+
+### 1. 현상 (Symptom)
+* `CustomMessageBoxWindow`를 통해 여러 줄 분량의 가이드(`ShowHelpGuideCommand` 등)를 출력할 때 위아래 텍스트가 잘려 보이지 않음.
+* 병렬 xUnit STA 테스트에서 `IllustrationStudioWindow` 닫기 또는 보조 창(`IllustrationLibraryWindow`, `IllustrationAiToolsWindow`) 열기 시 `Application.Current.Windows`에 다른 STA 스레드에서 접근하여 `InvalidOperationException` 발생.
+
+### 2. 원인 (Root Cause)
+* [`CustomMessageBoxWindow.xaml`](../../GRC/GRC/Views/CustomMessageBoxWindow.xaml)이 `Width="380" Height="200"` 고정 크기 및 단일 `TextBlock`으로 선언되어 다중 행 컨텐츠에 대한 `SizeToContent` 확장 및 스크롤바가 없었음.
+* `Application.Current` 싱글톤은 최초 생성된 STA 스레드 소유이므로, 병렬 STA 테스트 스레드에서 `app.Dispatcher.CheckAccess()` 확인 없이 `app.Windows`를 열거하면 스레드 소유권 예외가 발생함.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+* **`CustomMessageBoxWindow` 동적 크기 및 스크롤 지원 ([CustomMessageBoxWindow.xaml](../../GRC/GRC/Views/CustomMessageBoxWindow.xaml), [CustomMessageBoxWindow.xaml.cs](../../GRC/GRC/Views/CustomMessageBoxWindow.xaml.cs))**:
+  * `SizeToContent="WidthAndHeight"` (`MinWidth="380" MaxWidth="680"`, `MinHeight="180" MaxHeight="640"`) 및 내부 `<ScrollViewer MaxHeight="480" VerticalScrollBarVisibility="Auto">`를 적용하고, 4줄 이상 또는 100자 초과 안내문은 `TextAlignment.Left`로 자동 정렬.
+* **`Application.Current.Windows` 접근 시 `Dispatcher.CheckAccess()` 가드 ([IllustrationStudioWindow.xaml.cs](../../GRC/GRC/Views/IllustrationStudioWindow.xaml.cs), [IllustrationStudioViewModel.cs](../../GRC/GRC/ViewModels/IllustrationStudioViewModel.cs))**:
+  * 보조 창 탐색·소유자 연결·연쇄 종료 시 반드시 `app?.Dispatcher != null && app.Dispatcher.CheckAccess()`를 먼저 확인.
+* **핵심 부정 제약 (Never use X)**:
+  * **절대 모달 알림창(`CustomMessageBoxWindow`)에 고정 `Height="200"`를 강제하여 장문 안내문을 절단시키지 말 것.**
+  * **절대 `app.Dispatcher.CheckAccess()` 가드 없이 `Application.Current.Windows` 컬렉션을 직접 순회하지 말 것.**
+
