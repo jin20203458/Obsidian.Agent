@@ -372,34 +372,27 @@ related:
 
 ---
 
-> [!NOTE]
-> **[정제 완료 기준선]** 2026-11-04 이전 상위 항목은 정제 완료됨. 신규 인시던트는 이 아래에 추가됩니다.
-
----
-
 ## 2026-11-05: [Resolved] Pool C 동료 유대 시드(`BOND:` / `BOND_SECRET:`) 원격 동료 역전, 3턴 창 만료 후 소진 판정 누락 및 1단계 발단 문구 중복 재연 해결
 
 ### 1. 현상 (Symptom)
-1. **부재 동료(`Remote`)에 의한 현장 동료(`Local`) 시드 밀어내기**: 주인공이 성소에 머물며 현장 동료(오르페)와 교감 중임에도, 타 거점에 있는 동료(클라리스·시엘라)의 `SeedOfferCounts`가 더 낮다는 이유로 `Pool C` 단일 슬롯을 부재 동료 시드가 독점함.
-2. **4~6턴 중장기 유대 에피소드 완수 시 `ConsumedSeeds` 누락**: 유대 사건이 개막된 후 4턴 이상 이어지면 3턴 서사 윈도우(`ActiveSeedKeys`)가 먼저 닫혀, 에피소드가 실제로 완수된 턴에 StatusAI의 `<offered_story_seeds>` 화이트리스트에서 해당 시드가 빠져 `ConsumedSeeds`에 기록되지 않음.
-3. **2단계 `BOND_SECRET:{Name}`에서 1단계 발단 계기(`BondTrigger`) 반복 재연**: 이미 `BOND:오르페`가 완수되었음에도 2단계 `BOND_SECRET:오르페` 시드 문자열이 `LoreRenderer.BondClause`(1단계 `발단 계기: 날개죽지 상처 간호 -> 완수 후 변화: ...`) 원문을 그대로 재주입하여 서사 AI가 치료된 날개 상처 사건을 반복 묘사함.
-4. **StatusAI `Rule 3`(`items`) 특정 아이템 과적합 및 복합 조사(`와의`/`과의`) 매칭 누락**: `StatusUpdateGuide`가 횃불·밧줄 등 특정 예시 단어에 과적합되어 소지품을 과잉 삭제하거나, `EntityNameResolver.KoreanParticlesPattern`에 복합 조사(`와의`, `과의`, `랑의` 등)가 빠져 `"오르페와의 유대"` 스탯 키가 인물 호감도 매칭에서 누락될 위험이 존재함.
+* **부재 동료(`Remote`)에 의한 현장 동료(`Local`) 시드 밀어내기**: 현장 동료와 교감 중임에도 타 거점에 있는 부재 동료의 `SeedOfferCounts`가 더 낮다는 이유로 `Pool C` 단일 슬롯을 부재 동료 시드가 독점함.
+* **중장기 유대 에피소드 완수 시 `ConsumedSeeds` 누락**: 유대 사건이 4턴 이상 이어지면 3턴 서사 윈도우(`ActiveSeedKeys`)가 먼저 닫혀, 실제 에피소드 완수 턴에 StatusAI의 `<offered_story_seeds>` 화이트리스트에서 해당 시드가 빠져 `ConsumedSeeds` 기록이 누락됨.
+* **2단계 `BOND_SECRET:{Name}`에서 1단계 발단 계기(`BondTrigger`) 반복 재연**: 이미 `BOND:{Name}`이 완수되었음에도 2단계 `BOND_SECRET:{Name}` 시드 문자열이 `LoreRenderer.BondClause`(1단계 발단 계기 원문)를 그대로 재주입하여 기완수 사건을 반복 묘사함.
+* **StatusAI `Rule 3`(`items`) 특정 예시 과적합 및 복합 조사(`와의`/`과의`) 매칭 누락**: `StatusUpdateGuide`가 특정 예시 단어에 과적합되어 소지품을 과잉 삭제하거나, `EntityNameResolver.KoreanParticlesPattern`에 복합 조사(`와의`, `과의`, `랑의` 등)가 빠져 `"{Name}와의 유대"` 스탯 키가 인물 호감도 매칭에서 누락됨.
 
 ### 2. 원인 (Root Cause)
-* `ExtractAvailableStorySeeds`([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))가 `Pool C`를 현장 동료와 원격 동료 구분 없이 1개만 뽑으면서 `OrderBy(OfferCount)`를 최우선 적용함.
-* 서사 주입 기간(`ActiveSeedKeys`, 최대 3턴)과 StatusAI 완수 감시 기간을 동일한 리스트로 묶어, 3턴 경과 시 감시 목록까지 함께 소거됨.
-* `AutoConsumeStage1BondsAt60Locked`가 미실행 1단계 시드를 호감도 60 도달만으로 자동 소진시키는 한편, 정작 `BOND_SECRET:` 프롬프트 조립 시에는 1단계 `BondTrigger`를 제거하지 않고 중복 결합함.
+* `ExtractAvailableStorySeeds`([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))가 `Pool C`를 현장/원격 동료 구분 없이 1개만 뽑으면서 `OrderBy(OfferCount)`를 최우선 적용했으며, 서사 주입 기간(`ActiveSeedKeys`, 최대 3턴)과 StatusAI 완수 감시 기간을 단일 리스트로 묶어 3턴 경과 시 감시 목록까지 소거함.
+* `AutoConsumeStage1BondsAt60Locked`가 미실행 1단계 시드를 호감도 60 도달만으로 자동 소진시키는 한편, `BOND_SECRET:` 조립 시 1단계 `BondTrigger`를 제거하지 않고 중복 결합함.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-* **Pool C 2슬롯 분리(`Slot C-Local` + `Slot C-Remote`) 및 제시 횟수 정밀화 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs), [ChapterContext.cs](../../GRC/GRC/Models/ChapterContext.cs))**:
-  * 현장 동료(`IsCompanionPresentInCurrentSceneLocked == true`)는 `Slot C-Local`로 100% 보장하고, 부재 동료는 `Slot C-Remote`(`REMOTE_` 접두어, 동선 유도 라벨, `SeedOfferCounts` 동결)로 분리 주입함.
-  * 창 개설 1턴째에 시드 미소진 상태로 즉시 장소를 이동하면 `RollbackCurrentWindowOfferCountsLocked`로 미소진 시드의 `SeedOfferCounts` 증가분을 롤백함.
-* **서사 윈도우(`ActiveSeedKeys`)와 감시 윈도우(`MonitoredSeedKeys`) 분리 및 기조우 동료 상시 감시 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
-  * 3턴 경과 시 `ActiveSeedKeys`만 닫고 `MonitoredSeedKeys`는 `sceneResolvedEffective` 시점까지 유지하며, 해당 턴 등장 동료(`_turnEncounteredChars`)의 미소진 `BOND:`/`BOND_SECRET:`을 `BuildStatusRequest`의 `<offered_story_seeds>`에 상시 합산(`CHAR:` 및 `장소` `HOOK:`은 StatusAI 감시에서 제외).
-* **`AutoConsumeStage1BondsAt60Locked` 폐지 및 `BuildBondSeedPromptText` 단계별 분리 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
-  * 1단계 미소진 시 호감도 60+에서도 `BOND:{Name}`을 유지하되 `(내면 단서 해금: ...)`을 합본 제시하며, `BOND:{Name}` 확정 소진 후 제시되는 `BOND_SECRET:{Name}`에서는 `BondTrigger`를 제거하고 `(기완수 유대: {BondPayoff}) -> 내면 단서 해금: ...`만 주입함.
-* **복합 조사 정규식 보강 및 StatusAI `Rule 3` 구조적 분리 ([EntityNameResolver.cs](../../GRC/GRC/Helpers/EntityNameResolver.cs), [MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
-  * `KoreanParticlesPattern`에 `와의|과의|랑의|이랑의|에의|에서의|에게의|한테의|로부터의|으로부터의`를 추가하고, StatusAI `Rule 3`을 `[유지 원칙]`과 `[제거 조건]`으로 구조화하여 범용 소지품 보존율을 확보함.
+* **Pool C 2슬롯 분리(`Slot C-Local` + `Slot C-Remote`) 및 즉시 이동 롤백 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs), [ChapterContext.cs](../../GRC/GRC/Models/ChapterContext.cs))**:
+  * 현장 동료(`IsCompanionPresentInCurrentSceneLocked == true`)는 `Slot C-Local`로 보장하고, 부재 동료는 `Slot C-Remote`(`REMOTE_` 접두어, `SeedOfferCounts` 동결)로 분리하며, 창 개설 1턴째 시드 미소진 상태로 즉시 장소 이동 시 `RollbackCurrentWindowOfferCountsLocked`로 `SeedOfferCounts` 증가분을 롤백함.
+* **서사 윈도우(`ActiveSeedKeys`)와 감시 윈도우(`MonitoredSeedKeys`) 분리 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
+  * 3턴 경과 시 `ActiveSeedKeys`만 닫고 `MonitoredSeedKeys`는 `sceneResolvedEffective`까지 유지하며, 해당 턴 등장 동료(`_turnEncounteredChars`)의 미소진 `BOND:`/`BOND_SECRET:`을 `<offered_story_seeds>`에 상시 합산(`CHAR:` 및 `장소` `HOOK:`은 StatusAI 감시에서 제외).
+* **`AutoConsumeStage1BondsAt60Locked` 폐지 및 단계별 문구 분리 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
+  * 1단계 미소진 시 호감도 60+에서도 `BOND:{Name}`을 유지(내면 단서 합본 제시)하고, 확정 소진 후 제시되는 `BOND_SECRET:{Name}`에서는 `BondTrigger`를 제거하여 `(기완수 유대: {BondPayoff}) -> 내면 단서 해금: ...`만 주입함.
+* **복합 조사 정규식 보강 및 StatusAI `Rule 3` 분리 ([EntityNameResolver.cs](../../GRC/GRC/Helpers/EntityNameResolver.cs), [MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
+  * `KoreanParticlesPattern`에 `와의|과의|랑의|이랑의|에의|에서의|에게의|한테의|로부터의|으로부터의`를 추가하고, StatusAI `Rule 3`을 `[유지 원칙]`과 `[제거 조건]`으로 구조화함.
 * **핵심 부정 제약 (Never use X)**:
   * **절대 미실행된 `BOND:{Name}` 1단계 서사를 StatusAI 확정 판정 없이 호감도 수치만으로 자동 소진(`ConsumedSeeds`) 처리하지 말 것.**
   * **절대 `BOND_SECRET:{Name}` 2단계 시드 문구에 이미 완수된 1단계 `BondTrigger`(발단 계기) 원문을 재주입하지 말 것.**
@@ -407,33 +400,33 @@ related:
 
 ---
 
-## 2026-11-06: [Resolved] StatusAI NPC 소유 물품 역유입(A3, 구조 원인), StatusAI 재시도·취소 토큰 분리(A2) / [Open] 원장 불릿 법칙 디테일 누락(A1, 프롬프트로 미해결)
+## 2026-11-06: [Resolved] StatusAI NPC 소유 물품 역유입 차단, 상태창 재시도·취소 토큰 수명 격리 및 EventLedgerExtractor LOW/MEDIUM 경계 보정
 
 ### 1. 현상 (Symptom)
-1. **`StatusAI`(A3) 타 인물 소유 물품의 주인공 `items` 역유입**: 오르페가 입은 `해진 삼베 가리개`가 Turn 335(수프 조리 턴)에 주인공 소지품으로 추가됨. 독립 기준표 작성자 판정상 이 의복은 Turn 174 이전부터 이미 오염 상태였고(Turn 288에 자연 삭제 후 Turn 335 재유입), Turn 290에는 근거 없이 `백은 수액 다관`이 증발했다가 Turn 296에 복귀함.
-2. **`StatusAI`(A2) 일시 파싱 실패 시 무재시도 드롭 및 스트리밍 종료 후 `CancellationTokenSource` 조기 Dispose**: 비정상 JSON 반환 시 해당 턴 상태 갱신이 영구 유실되고, 스트리밍 종료 시 즉시 `Dispose()`된 토큰이 백그라운드 `statusTask`/`onDownloadComplete`와 충돌함.
-3. **`EventLedgerExtractor`(A1) 장소 이동 없는 법칙 공개 구간 누락**: 프로덕션 압축 청크 37(FH[631:639])은 불릿 2개(LOW)로 압축되며 대봉인 닻줄·사슬 원리가 누락되었고, 청크 39(FH[647:655])는 불릿 4개였으나 순결-정화 전도율 가설이 누락됨.
+* **`StatusAI` 타 인물(NPC) 소유 물품의 주인공 `items` 역유입**: 로어북에 등록된 NPC 착용 의복·소지품이 주인공 인벤토리(`items`)로 역유입되어 오염됨.
+* **`StatusAI` 일시 파싱 실패 시 무재시도 드롭 및 `CancellationTokenSource` 조기 Dispose**: 비정상 JSON 반환 시 해당 턴 상태 갱신이 영구 유실되고, 스트리밍 종료 시 즉시 `Dispose()`된 취소 토큰이 백그라운드 `statusTask`/`onDownloadComplete`와 충돌함.
+* **`EventLedgerExtractor` 신규 법칙·비밀 구간의 `LOW` 과소 압축**: 8메시지(4턴) 원장 요약 시 새로 밝혀진 세계관 법칙·비밀·약속이 포함된 구간이 `LOW`(불릿 1~2개)로 오분류되어 핵심 설정이 누락됨.
 
 ### 2. 원인 (Root Cause)
-* **A3 (실험으로 확정)**: `BuildStatusRequest`가 로어북 `아이템` 카테고리 전체를 소유 여부와 무관하게 `<canonical_names>`에 주입하여, StatusAI가 미보유 아이템명(타 인물 착용 의복·구속구·소지품)을 추적 후보로 오인함. SessionArchitect 산출물에는 NPC 소유 아이템이 다수 존재하며(예: `흑철 각인 구속구`, `창성룡의 역린 회중시계`) 소유자 필드가 없음.
-* **A2**: `statusTask`에 재시도·유효 페이로드 검증이 없었고 스트리밍/상태창 취소 토큰이 분리되지 않았음.
-* **A1 (부분 규명)**: HEAD의 LOW 조건이 장소 이동·인물 조우만을 기준으로 하여 정보 공개 구간이 LOW로 격하됨(정보 구간 LOW 오분류 62%). 다만 LOW 격하를 해소해도 고밀도 법칙 청크의 핵심 사실 재현율은 개선되지 않아(약 26~29%), 4~5개 불릿 상한 대비 사실 밀도 초과와 경량 모델 압축 한계가 남은 원인으로 추정됨.
+* `BuildStatusRequest`가 로어북 `아이템` 카테고리 전체를 소유 여부와 무관하게 `<canonical_names>`에 주입하여, StatusAI가 미보유 NPC 물품명을 주인공 추적 후보로 오인함.
+* `statusTask`에 재시도·유효 페이로드 검증이 없었고 스트리밍 취소 토큰과 백그라운드 상태창 취소 토큰의 수명이 분리되지 않음.
+* `EventLedgerExtractor` 프롬프트에 `LOW/MEDIUM` 경계 조건(신규 규칙·비밀·약속 유무)이 명시되지 않았으며, 반대로 8메시지 청크를 `4+4` 서브윈도우나 `<turn>` 태그로 분할하면 2~3턴 경계 인과가 단절되고 동일 씬 중복 불릿이 생성됨(단, 물리적 사건 도중 대사로 스쳐 지나간 단발성 가설은 사건 요약기 특성상 추출 대상 외임).
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-* **검증 방법 (사전 등록 단일 판정 실험)**: 프로덕션 코드(`BuildStatusRequest`/`EventLedgerExtractor`/`GeminiApiService`)로 요청을 생성하고, 대조군은 사고 당시 실행 코드(git `HEAD`)로 고정. 이전 상태는 `MemoryLog.txt` 실제 상태를 복원(마지막 압축 `대상구간` 로그를 앵커로 44개 청크 경계를 복원하고 턴별 유저 메시지 인덱스를 `미압축 첫 청크 시작 + 단기기억 N - 1`로 매핑). 기대 결과는 결과 확인 전 블라인드 서브에이전트가 작성. 교차 세계 2개(별구름·잿빛 변경) 서사를 1회 생성·동결하여 포함. 총 Flash-Lite 900회.
-* **A3 구조 수정 (2x2 요인 실험 결과로 채택, [MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
-  * `<canonical_names>`의 아이템명은 `_currentContext.Items`와 `EntityNameResolver.IsSamePlaceOrItem`으로 매칭되는 보유 아이템만 주입. Rule 3·라벨 문구는 HEAD 원문 유지.
-  * 결과(타 인물 물품 턴 50회): 전체 주입+HEAD 문구 오염 `28/50` (Turn 335 실제 오염 `8/10` 재현) -> 보유분만 주입 `0/50`. 프롬프트 문구만 수정 시 `16/50`(43% 감소)에 그침. 교차 세계 회중시계 손질 턴 `10/10 -> 0/10`, NPC가 건넨 물품 정상 추가 `10/10` 유지, 보존 오류 `3.2% -> 0%`.
-  * 회귀 테스트: `BuildStatusRequest_CanonicalItemNames_IncludeOnlyHeldItems_ExcludeOtherCharactersItems`.
-* **A2 StatusAI 재시도 및 토큰 수명 격리 ([ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs), [ChatViewModel.cs](../../GRC/GRC/ViewModels/ChatViewModel.cs))**:
-  * `StatusRetryDelaysMs = [2000, 5000]` 재시도와 `isMeaningfulPayload` 검증, 재시도·실패·취소 사유 `MemoryLog.txt` 기록.
-  * 스트리밍용 `_cancellationTokenSource`와 상태창용 `_statusUpdateCts` 분리, `_isAwaitingPriorStatus` 재진입 차단, `DeleteMessageAsync`는 최신 턴 메시지 삭제 시에만 취소하고 과거 메시지 삭제 시에는 대기.
-* **A1 (미채택, HEAD 프롬프트 유지, [EventLedgerExtractor.cs](../../GRC/GRC/Services/Cognitive/EventLedgerExtractor.cs))**:
-  * Flash-Lite 단순화 후보(HEAD 대비 4구절 변경)는 정보 구간 LOW 오분류 `62% -> 19%`, 무작위 청크 사실 재현율 `49% -> 58%`, 교차 세계 핵심 재현율 `46% -> 65%`, 환각 `1.8% -> 0.8%`로 개선했으나, 사전 등록 기준 (a) 원 실패 청크 핵심 재현율 `>= 80%`(실측 `29%`, HEAD `26%`)와 (b) 일상 청크 LOW 유지율 `>= 90%`(실측 `50%`, HEAD `63%`)를 충족하지 못해 규칙에 따라 미채택.
-  * 고밀도 법칙 청크의 디테일 보존은 프롬프트 문구로 해결되지 않으므로 구조 대안(불릿 상한 조정, 법칙 전용 영구 저장소 B1)을 별도 검토 대상으로 남김.
+* **`<canonical_names>` 보유 아이템 한정 주입 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
+  * `<canonical_names>`의 아이템 목록에는 로어북 전체가 아니라 `_currentContext.Items`와 `EntityNameResolver.IsSamePlaceOrItem`으로 매칭되는 현재 보유 아이템만 주입함.
+* **StatusAI 재시도 및 취소 토큰 수명 격리 ([ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs), [ChatViewModel.cs](../../GRC/GRC/ViewModels/ChatViewModel.cs))**:
+  * `StatusRetryDelaysMs = [2000, 5000]` 재시도 및 `isMeaningfulPayload` 검증을 도입하고, 스트리밍용 `_cancellationTokenSource`와 상태창용 `_statusUpdateCts`를 분리(`_isAwaitingPriorStatus` 재진입 차단, `DeleteMessageAsync`는 최신 턴 삭제 시에만 취소하고 과거 메시지 삭제 시에는 대기).
+* **8메시지 단일 호출 유지 및 `LOW/MEDIUM` 경계 조건 명시 ([EventLedgerExtractor.cs](../../GRC/GRC/Services/Cognitive/EventLedgerExtractor.cs))**:
+  * 8메시지 단일 호출 구조를 유지한 채 새로 밝혀진 규칙·비밀·구체적 약속 유무에 따른 `LOW/MEDIUM` 분류 경계 조건과 우선순위를 프롬프트에 명시함.
 * **핵심 부정 제약 (Never use X)**:
   * **절대 `StatusAI`의 `<canonical_names>`에 주인공이 보유하지 않은 로어북 `아이템` 이름을 주입하지 말 것.** 미보유 아이템 표기 통일은 `EntityNameResolver` 키워드 별칭 매칭으로 처리할 것.
-  * **절대 프롬프트 개선 효과를 세션에서 추출한 예시 명사로 튜닝한 뒤 같은 세션 프로브로 판정하지 말 것.** 프로덕션 코드 경로·실제 이전 상태·사고 당시 대조군·블라인드 사전 기준표로 판정할 것.
+  * **절대 `EventLedgerExtractor`의 8메시지(4턴) 청크를 문맥 공유 없는 `4+4` 서브윈도우로 기계적 이등분하지 말 것.**
   * **절대 스트리밍 완료 직후 `Dispose()`되는 `_cancellationTokenSource.Token`을 백그라운드 `statusTask`나 추천 답변 프리페치에 전달하지 말 것.**
+
+---
+
+> [!NOTE]
+> **[정제 완료 기준선]** 2026-11-06 이전 상위 항목은 정제 완료됨. 신규 인시던트는 이 아래에 추가됩니다.
 
 ---

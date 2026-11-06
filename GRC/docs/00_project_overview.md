@@ -53,20 +53,21 @@ GRC는 이러한 문제들을 **단순한 클라이언트가 아닌 서버 아�
 클라이언트는 단순한 뷰어를 넘어, 크게 세 가지의 논리적 엔진 계층으로 작동합니다.
 
 ```mermaid
-graph TB
-    subgraph UI ["UI & Streaming Layer"]
-        U1["비차단(Non-blocking) 텍스트 렌더러"]
-        U2["멀티모달 오디오 동기화 재생기"]
+flowchart TB
+    subgraph UI ["UI and Streaming Layer"]
+        U1["비차단(Non-blocking) 60FPS 텍스트 렌더러"]
+        U2["멀티모달 오디오 프리페치 및 동기화 재생기"]
     end
 
     subgraph ENGINE ["Core Engine Layer (Cognitive Core 3.0)"]
-        E1["불변 접두사 동결 & 단일 사건 원장 (768차원 임베딩 / Gated RAG)"]
-        E2["O(1) 무부하 파일 로거"]
+        E1["불변 접두사 동결 및 단일 사건 원장 (768차원 임베딩 / 2-Core RAG)"]
+        E2["3대 스토리 시드 엔진 및 구조화 로어북 3단계 스포일러 마스킹"]
+        E3["O(1) 무부하 파일 로거 (FullHistoryLogger)"]
     end
 
-    subgraph ARCHITECT ["Session Architect Layer"]
-        A1["6단계 자율 세션 기획 스테이트 머신"]
-        A2["AI 자가 검수(Self-Review) 및 보정"]
+    subgraph ARCHITECT ["Session Architect 2.0 Layer"]
+        A1["4단계 통합 자율 세션 기획 스테이트 머신"]
+        A2["100% CSharp 결정론적 무결성 관문 및 외과수술식 보정"]
     end
 
     UI <--> ENGINE
@@ -75,9 +76,9 @@ graph TB
 
 | 계층 | 하는 일 |
 |---|---|
-| **UI & Streaming** | AI의 응답을 60FPS로 부드럽게 화면에 그리고, 대사에 맞춰 미리 생성된 오디오를 지연 없이 재생합니다. |
-| **Core Engine** | 수백 턴 이상의 장기 대화를 단기 원문, 단일 사건 불릿 원장(768차원 임베딩 + Gated RAG), 대서사 연대기(Macro Chronicle) 및 하이브리드 로어북으로 정밀 관리하며, 디스크 I/O 병목 없이 기록을 저장합니다. |
-| **Session Architect** | 사용자의 짧은 아이디어를 바탕으로 복잡한 TRPG 세팅(로어북, 스탯 등)을 스스로 작성하고 문맥 오류를 검수합니다. |
+| **UI & Streaming** | `System.Threading.Channels`와 60FPS `DispatcherTimer` 배치 플러시로 AI 응답을 부드럽게 화면에 그리고, 대사에 맞춰 미리 생성된 오디오(`gemini-3.1-flash-tts-preview`)를 자막 싱크에 맞춰 재생합니다. |
+| **Core Engine** | 수백 턴 이상의 장기 대화를 단기 원문(14개 메시지), 단일 사건 불릿 원장(서사 밀도 기반 2~5개 동적 추출 + 768차원 임베딩 + Gated RAG), 대서사 연대기(Macro Chronicle 무중복 지연 병합), 호감도 3단계 스포일러 마스킹이 결합된 구조화 하이브리드 로어북, 그리고 3대 스토리 시드 엔진(`Pool A/B/C`)으로 정밀 관리하며, 디스크 I/O 병목 없이 기록을 저장합니다. |
+| **Session Architect 2.0** | 사용자의 짧은 아이디어를 바탕으로 `Gemini 4.0 Pro`(`gemini-4-argon`, `ThinkingLevel.high`) 기반 4단계 통합 파이프라인(청사진·세계관 -> 2-Wave 앙상블 구조화 로어북 -> 오프닝 시나리오 -> 상태창·Turn 0 시딩·시스템 지시문)을 수행하고 C# 결정론적 무결성 관문으로 구조 결함을 핀포인트 보정합니다. |
 
 ---
 
@@ -87,9 +88,9 @@ graph TB
 
 | 과제 | 기존 웹 클라이언트 | GRC (GenAI Roleplay Chat) |
 |---|---|---|
-| **세션 준비** | 유저가 직접 수천 자의 프롬프트 작성 및 세팅 | 한 줄의 키워드만으로 AI가 6단계에 걸쳐 자율 생성 및 세팅 |
-| **기억 관리** | 단순 텍스트 잘라내기(Truncation) 또는 무차별 벡터 검색 | 접두사 동결(Prefix-Frozen), 단일 사건 원장(Flash-Lite 팩트 추출 + 768차원 임베딩 RAG), 챕터 완료 즉시 Pro 대서사 병합을 결합한 Cognitive Core 3.0 |
-| **UI 응답성** | 무거운 DOM 렌더링 및 동기적 I/O로 인한 프레임 드랍 | 채널 기반 스트리밍과 O(1) 파일 쓰기로 0초 지연(Zero-Delay) 달성 |
+| **세션 준비** | 유저가 직접 수천 자의 프롬프트 작성 및 세팅 | 한 줄의 키워드만으로 AI가 4단계 통합 파이프라인과 C# 결정론적 무결성 관문을 통해 자율 생성 및 세팅 |
+| **기억 관리** | 단순 텍스트 잘라내기(Truncation) 또는 무차별 벡터 검색 | 접두사 동결(Prefix-Frozen), 단일 사건 원장(`Flash-Lite` 밀도 기반 팩트 추출 + `gemini-embedding-001` 768차원 RAG), 신규 챕터 불릿 20개 축적 시 `Pro` 대서사 무중복 지연 병합, 구조화 로어북 3단계 해금 및 스토리 시드 엔진을 결합한 Cognitive Core 3.0 |
+| **UI 응답성** | 무거운 DOM 렌더링 및 동기적 I/O로 인한 프레임 드랍 | 채널 기반 스트리밍, 60FPS 배치 렌더링, 물리 입력 기반 스마트 오토스크롤, O(1) 파일 쓰기로 0초 지연(Zero-Delay) 달성 |
 
 ---
 
@@ -103,5 +104,5 @@ graph TB
 | [01_grc_architecture](./01_grc_architecture.md) | Cognitive Core 3.0 메모리 파이프라인, O(1) 로거, 비차단 스트리밍 및 MVVM 구현 딥다이브 |
 | [02_user_quickstart_guide](./02_user_quickstart_guide.md) | 비개발자 무설치 포터블 실행, SmartScreen 우회, API 키 가이드 |
 | [03_grc_user_guide](./03_grc_user_guide.md) | GRC 7대 핵심 기능 사용자 사용설명서 및 활용 가이드 |
-| [04_implementation_roadmap](./04_implementation_roadmap.md) | GRC 세션 아키텍트 외과수술식 부분 수정(Surgical Edit) 고도화 및 차기 엔지니어링 로드맵 |
-| [05_session_architect_agent_template](./05_session_architect_agent_template.md) | GRC 세션 아키텍트의 안티그래비티 멀티 에이전트 오케스트레이션 템플릿 및 자동화 명세 |
+| [04_implementation_roadmap](./04_implementation_roadmap.md) | GRC 장기 세션 관측 로그 기반 차기 아키텍처 검토 과제(A7, B4, B1) 및 자유도 보존 불변식 명세 |
+| [05_session_architect_agent_template](./05_session_architect_agent_template.md) | GRC 세션 아키텍트 2.0의 안티그래비티 멀티 에이전트 오케스트레이션 템플릿 및 자동화 명세 |

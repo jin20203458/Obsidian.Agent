@@ -6,6 +6,7 @@ related:
   - ./02_user_quickstart_guide.md
   - ./03_grc_user_guide.md
   - ./04_implementation_roadmap.md
+  - ./05_session_architect_agent_template.md
   - ../../troubleshooting/grc.md
 ---
 # GRC Architecture & Deep Dive
@@ -36,24 +37,24 @@ related:
 ```mermaid
 flowchart TB
     subgraph COGNITIVE_CORE ["Cognitive Core 3.0 Pipeline"]
-        SYS["불변 시스템 지시문 (Prefix-Frozen SystemInstruction)<br>- 페르소나 및 세계관 불변 동결 (Prompt Cache Hit Rate 극대화)"]
+        SYS["불변 시스템 지시문 (Prefix-Frozen SystemInstruction)"]
         
-        subgraph TIERS ["3-Tier Memory & Reasoning Pipeline"]
-            M1["단기 기억 (Raw History): 최근 14개 메시지 (7턴 원문, ShortTermThreshold=14)"]
-            M2["사건 불릿 원장 (Single Event Ledger): 단일 불변 원장 무손실 누적 (Append-Only)<br>- 상시 노출: 장기 미요약 불릿(Chapter > LastSummarizedChapter) 전량 무중복 유지 (상시 20~52개)<br>- 과거 회상 RAG: 요약 완료 챕터 불릿(Chapter <= LastSummarizedChapter) 전량 (중복 0건)"]
-            M3["장기 기억 (Macro Chronicle): 신규 챕터 불릿 20개(LongTermArchiveTriggerBullets=20) 축적 시 이전 완료 챕터를 Gemini Pro 2,500자 산문 병합"]
+        subgraph TIERS ["3-Tier Memory and Reasoning Pipeline"]
+            M1["단기 기억 (Raw History): 최근 14개 메시지 (7턴 원문)"]
+            M2["사건 불릿 원장 (Single Event Ledger): 단일 원장 Append-Only 누적"]
+            M3["장기 기억 (Macro Chronicle): Gemini Pro 2,500자 산문 병합"]
             
-            M1 -->|"14개 메시지 도달 시 8개(4턴, ChunkSize=8) 절삭 후 Flash-Lite 팩트 추출"| M2
-            M2 -->|"10회 누적(40턴)마다 챕터 번호 전환, 신규 챕터 불릿 20개 도달 시 이전 챕터 비동기 연대기 병합"| M3
+            M1 -->|"14개 도달 시 8개(4턴) 절삭 후 Flash-Lite 밀도별 2~5개 추출"| M2
+            M2 -->|"40턴마다 장 전환 및 신규 장 20개 축적 시 이전 장 비동기 병합"| M3
         end
         
         subgraph AUXILIARY ["Selective Auxiliary Cognitive Engines (2-Core RAG)"]
-            HL["하이브리드 로어북 RAG (HybridLorebookRetriever)<br>- 시드 고정 인물(3-H) -> Sparse 이름/키워드 일치 -> 활성 인물/현재 장소 -> Sticky(Sparse 전용 2턴) -> Dense 순 예산 배정<br>- Dense 768차원 유사도 (>=0.75f, 최대 3개, Sticky 미부여, 미등장 인물 배제)"]
-            GR["사건 불릿포인트 RAG (GatedRAGRetriever)<br>- 단일 원장 과거 풀 대상 시맨틱 임베딩 유사도 (>=0.80f) + 채택 불릿 간 유사 중복 필터링 (<0.90f) + 원장 인덱스(Index) 시간순 정렬"]
-            BP["엔티티 상태 투영기 (BiTemporalEntityProjector)<br>- 상태창 인물 상태/수치 1줄 투영 (- 인물(이름): 상태 (수치))"]
+            HL["하이브리드 로어북 RAG (HybridLorebookRetriever, 예산 5,000토큰)"]
+            GR["사건 불릿포인트 RAG (GatedRAGRetriever, 유사도 0.80f 이상)"]
+            BP["엔티티 상태 투영기 및 3대 스토리 시드 엔진 (Pool A/B/C)"]
         end
         
-        ASSEMBLER["인지 프롬프트 조립기 (CognitivePromptAssembler)<br>- 가짜 Turn 제거, [제N장] 그룹 헤더 및 상태 권위 가드레일 패킹"]
+        ASSEMBLER["인지 프롬프트 조립기 (CognitivePromptAssembler)"]
         
         SYS --> ASSEMBLER
         TIERS --> ASSEMBLER
@@ -89,7 +90,7 @@ flowchart TB
 ### 5) 보조 인지 엔진 (2-Core RAG & Relational Projector)
 *   **구조화 로어북 SSOT 스키마 (`CharacterLoreDetails` / `WorldLoreDetails`), 하이브리드 로어북 RAG (`HybridLorebookRetriever`), 호감도 단계별 3중 스포일러 마스킹 (`MaskLorebooksForPrompt` & `LoreRenderer`)**:
     - **순수 구조화 JSON SSOT (Zero-Legacy)**: `LorebookEntry`는 문자열 내부 구분자(`/`, `->`, `* 항목명:`)에 의존하던 평문 DSL과 레거시 파서(`LegacyLoreParser`)를 완전히 적출하고, 인물 전용 11필드 레코드(`CharacterLoreDetails`: `RoleSummary`, `Appearance`, `SurfacePersona`, `InnerMotivation`, `InitialContact`, `BondTrigger`, `BondPayoff`, `OtherRelations`, `SpeechTone`, `EverydayQuote`, `EmotionalQuote`, `Notes`), 비인물 전용 4필드 레코드(`WorldLoreDetails`: `IdentitySummary`, `SensoryDetails`, `RulesAndPrinciples`, `NarrativeHook`, `Notes`), 그리고 런타임 기억 추출용 `FreeText`(`Category == "기억"`)만을 JSON 단일 진실 공급원(SSOT)으로 저장합니다.
-    - **선행 3단계 스포일러 마스킹 및 결정론적 프롬프트 렌더링 (`LoreRenderer`)**: `entry.Content`는 `[JsonIgnore]` 계산 프로퍼티로서 `LoreRenderer.Render(entry, entry.RevealStage)`가 호출 시점에 결정론적으로 조립합니다. `HybridLorebookRetriever.Retrieve` 호출 전 `MemoryManagerService.MaskLorebooksForPrompt`가 각 인물의 현재 호감도/신뢰도를 검사하여 `entry with { RevealStage = stage }`(`1`: `< 30` 기본 프로필·일상 대사만 공개 / `2`: `30~59` `BondTrigger -> BondPayoff` 유대 심화 해금 / `3`: `>= 60` `InnerMotivation` 및 `EmotionalQuote` 완전 해금)로 선행 마스킹하므로, 5,000토큰 로어북 예산이 실제 프롬프트 주입 길이 기준으로 정확히 산정되며 UI/TTS용 `CurrentActiveLorebooks`는 원본 참조를 보존합니다.
+    - **선행 3단계 스포일러 마스킹 및 결정론적 프롬프트 렌더링 (`LoreRenderer`)**: `entry.Content`는 `[JsonIgnore]` 계산 프로퍼티로서 `LoreRenderer.Render(entry)`(`LoreRenderer.RenderCharacter(entry.Character, entry.RevealStage)`)가 호출 시점에 결정론적으로 조립합니다. `HybridLorebookRetriever.Retrieve` 호출 전 `MemoryManagerService.MaskLorebooksForPrompt`가 각 인물의 현재 호감도/신뢰도를 검사하여 `entry with { RevealStage = stage }`(`1`: `< 30` 기본 프로필·일상 대사만 공개 / `2`: `30~59` `BondTrigger -> BondPayoff` 유대 심화 해금 / `3`: `>= 60` `InnerMotivation` 및 `EmotionalQuote` 완전 해금)로 선행 마스킹하므로, 5,000토큰 로어북 예산이 실제 프롬프트 주입 길이 기준으로 정확히 산정되며 UI/TTS용 `CurrentActiveLorebooks`는 원본 참조를 보존합니다.
     - **계층적 하이브리드 인출 및 미등장 인물 Dense 배제**: 예산(5,000토큰)은 아래 순서로 배정되며, 첫 항목은 예산을 넘어도 최소 1개 포함됩니다.
         1. **시드 고정 로어북 (3-H)**: `CHAR:` 시드가 제시 중인 창 동안 해당 신규 인물의 로어북(호감도 1단계 마스킹)을 최우선 배치하여, 예산이 포화되어도 신규 인물 묘사 근거(외양·말투·표면 태도)가 빠지지 않도록 보장합니다.
         2. **Sparse 직접 매칭**: 엔트리 이름 또는 키워드가 검색 텍스트(직전 `model` 응답 + 현재 유저 입력, Turn 1에는 `<initial_scenario>` 본문)에 어절 경계로 매칭된 항목입니다. 매칭 시 `DefaultStickyTurns = 2`(트리거 턴 포함 총 3턴 활성)가 충전됩니다.
@@ -100,7 +101,7 @@ flowchart TB
 *   **사건 불릿포인트 RAG (`GatedRAGRetriever`)**: 레거시 키워드 게이팅 데드코드를 전면 적출하고, 매 턴 계산된 768차원 유저 쿼리 임베딩을 실측 기반 순수 코사인 유사도(**$\ge 0.80f$**, Case 2 일상 행동 오탐 최댓값 `0.7914` 차단 및 Case 3 핀포인트 회상 `0.8627 ~ 0.9053` 보존) 스캔에 직결하여 상위 최대 5개(`DefaultMaxResults = 5`)를 핀포인트 인출합니다. 채택 과정에서는 이미 선택된 불릿과 코사인 유사도가 `DeduplicationSimilarityThreshold = 0.90f` 이상인 동일 장면·반복 사건 불릿을 건너뛰고 차순위 독립 사건을 채택하여 5개 슬롯의 회상 다양성을 보장합니다. 인출 결과는 단일 원장 인덱스(`Index`) 발생 시간순으로 정렬하여 선후 인과 역전을 차단하며, `<recalled_history priority="secondary">` 속성으로 현재 상태 우위를 명시합니다.
 *   **엔티티 상태 투영기 (`BiTemporalEntityProjector`), 명칭·경계 판정 엔진 (`EntityNameResolver`), 상태창 정합성 가드 (`UpdateContextStatus`)**:
     - 상태창 인물을 `- 인물(이름): 상태 (수치)` 또는 `- 인물(이름): 상태` 형태로 간결하게 투영하며, 현재 위치(`Places`), 플레이어 주요 수치(`CustomStats`), 인벤토리(`Items`)를 `<entity_relationship>` 직후의 `<current_state>` 태그로 서사 AI에 동적 공급합니다.
-    - **StatusAI 출력 스키마**: `BuildStatusRequest`는 `currentPlace: string`(단일 장소, 세부 구역은 `"정식장소명 - 세부구역"`), `elapsedTime: "none" | "hours" | "days" | "months" | "years"`(하룻밤 수면·익일 아침 기상은 `"hours"`, 최소 이틀 이상 새로 흐른 경우만 `"days"`), `isSceneResolved`, `triggeredSeeds`를 출력합니다. 로어북의 정식 장소·아이템 명칭 목록(`<canonical_names>`)은 세션 동안 불변이므로 시스템 프롬프트의 `<custom_rules>` 뒤에 배치하여 캐시를 유지합니다. NPC 목록 규칙은 "기존 NPC 유지 및 신규 조우 NPC 추가(PC 제외)"로, 현재 장면에 없는 NPC가 목록에서 탈락하여 호감도 추적과 활성 인물 스캔이 끊기는 것을 방지합니다.
+    - **StatusAI 출력 스키마 및 보유 아이템 한정 `<canonical_names>` 주입**: `BuildStatusRequest`는 `currentPlace: string`(단일 장소, 세부 구역은 `"정식장소명 - 세부구역"`), `elapsedTime: "none" | "hours" | "days" | "months" | "years"`(하룻밤 수면·익일 아침 기상은 `"hours"`, 최소 이틀 이상 새로 흐른 경우만 `"days"`), `isSceneResolved`, `triggeredSeeds`를 출력합니다. `<canonical_names>`는 유저 프롬프트 하단에 주입하되, 로어북 `아이템` 카테고리 중 NPC 소유 의복·구속구·장신구가 주인공 `items`로 역유입되는 것을 원천 차단하기 위해 현재 주인공이 실제 보유 중인 아이템(`_currentContext.Items`와 `EntityNameResolver.IsSamePlaceOrItem` 매칭 항목)만 주입하며, 신규 획득 아이템의 정식 명칭 통일은 `UpdateContextStatus`의 `NormalizeItemName`이 처리합니다. NPC 목록 규칙은 "기존 NPC 유지 및 신규 조우 NPC 추가(PC 제외)"로, 현재 장면에 없는 NPC가 목록에서 탈락하여 호감도 추적과 활성 인물 스캔이 끊기는 것을 방지합니다.
     - **장소·아이템 정규화와 주인공 필터**: `ChapterContext.Places`는 하위 호환용 리스트 타입을 유지하되 항상 `[currentPlace]` 1개로 덮어쓰며(구형 `places` 배열 응답은 첫 원소로 폴백), 장소·아이템명은 `NormalizePlaceName`/`NormalizeItemName`으로 로어북 정식 명칭에 정규화합니다. 플레이어 지칭어(`당신`, `주인공`, `플레이어`, `PC`, `유저` 등)와 마스터 세계관에서 추출한 주인공 고유명사(`UpdateProtagonistNamesLocked`)는 `Chars`에서 코드로 제거합니다.
     - **시간 경과 턴 호감도 상한 (4-C)**: 일반 턴(`none`/`hours`)에는 코드 상한을 두지 않고 세션별 `StatusUpdateGuide`를 신뢰합니다. `elapsedTime`이 `days`/`months`/`years`일 때만 `NarrativeContract.AffinityStatTerms` 명칭의 `"현재/최대"` 형식 스탯 상승폭을 `최대치 × (5% / 12% / 20%) × (1 - 이전값/최대치)`로 제한하며, 하락은 제한하지 않습니다. 상한은 코드에만 존재하므로 프롬프트 문구는 두지 않습니다.
 *   **사건 해결 변수 기반 서브컬처 에피소드 & 시드 엔진 (`<story_seeds>`, `isSceneResolved`, `triggeredSeeds`)**:
@@ -154,6 +155,7 @@ flowchart TB
 ### 생산자-소비자 스트리밍 격리 (`System.Threading.Channels`)
 *   `ChatWorkflowService` 내부에서 Gemini API로부터 문자 스트림을 받아오는 스레드(생산자)와, WPF 대화창에 문자를 그리는 스레드(소비자)를 `Channel<char>`로 분리했습니다. 네트워크 지연(Lag)이 발생해도 생산자 큐만 대기할 뿐 UI 렌더러는 절대 굳지 않습니다.
 *   **실시간 마크다운 별표(*) 필터링**: 생산자 태스크에서 청크를 수신할 때 `c == '*'`를 즉시 드롭하여, AI가 실수로 출력한 `**` 기호가 스트리밍 화면에 노출되거나 완료 후 텍스트와 불일치를 일으키는 현상을 원천 방어합니다.
+*   **StatusAI 백그라운드 재시도 및 취소 토큰 수명 격리 (`_statusUpdateCts`)**: 스트리밍 종료 직후 `Dispose()`되는 스트리밍용 `_cancellationTokenSource`와 백그라운드 상태 갱신·추천 답변 프리페치용 `_statusUpdateCts`를 물리적으로 분리하여 조기 취소/ObjectDisposed 충돌을 차단합니다. `ChatWorkflowService`의 `statusTask`는 `StatusRetryDelaysMs = [2000, 5000]` 지수 백오프 재시도와 `isMeaningfulPayload`(비어 있거나 모든 필드가 비어 있는 깨진 JSON 거부) 검증을 수행하며, `ChatViewModel`은 이전 턴 `statusTask` 대기 중 `_isAwaitingPriorStatus` 재진입 가드로 중복 전송을 차단하고 `DeleteMessageAsync`는 최신 턴 메시지 삭제 시에만 `_statusUpdateCts`를 취소합니다(과거 메시지 삭제 시에는 진행 중인 상태 갱신 완료를 대기).
 
 ### 60FPS 배치 렌더링 (`StatefulStreamingHelper.cs`)
 *   문자가 들어올 때마다 WPF의 `Dispatcher`를 호출하면 윈도우 메시지 루프가 포화되어 렌더링 스레드가 마비됩니다.
@@ -173,14 +175,14 @@ flowchart TB
 `[IMPLEMENTED]` 4단계 통합 스테이트 머신은 [SessionArchitectService.cs](../../../GRC/GRC/Services/SessionArchitectService.cs) 및 [SessionArchitectViewModel.cs](../../../GRC/GRC/ViewModels/SessionArchitectViewModel.cs)에 구현되어 있습니다.
 
 *   **4단계 통합 상태 기계(4-Stage Consolidated State Machine)**:
-    1. **1단계 (청사진 및 마스터 세계관 통합 — 1회 호출)**: `<master_setting>` 전용 4대 번호 섹션 개조식 마스터 세계관(`worldviewOutline`)과 8~15개 그물망 로어북 기획(`connectedEntities`)을 단일 추론 공간에서 공동 설계(Co-Design)합니다.
+    1. **1단계 (청사진 및 마스터 세계관 통합 — 1회 호출)**: `<master_setting>` 전용 4대 번호 섹션 개조식 마스터 세계관(`worldviewOutline`)과 10~18개 그물망 로어북 기획(`lorebookPlan`: 주요 인물 4~8명, 단일 장소 3~5곳, 단일 아이템/단서 2~4개, 세계관/조직/사건 1~3개, `connectedEntities` 포함)을 단일 추론 공간에서 공동 설계(Co-Design)합니다.
     2. **2단계 (2-Wave 통합 앙상블 구조화 로어북 — 2회 호출)**: 인위적인 마이크로 배치 분할(`batchSize = 3`) 없이, Wave 1에서 모든 비인물(장소·세계관·아이템) 무대 인프라를 `WorldLorebookArrayResponseSchema`(4대 필수 필드 강제) 기반 1회 통합 호출로 먼저 확정한 뒤, Wave 2에서 확정된 무대 전문(`<established_world_lore>`) 위에서 모든 등장인물 전원을 `CharacterLorebookArrayResponseSchema`(11대 필수 필드 강제) 기반 1회 통합 앙상블 캐스팅 호출로 동시 생성합니다. 각 필드는 `SanitizeCharacterDetails` / `SanitizeWorldDetails`를 통해 중복 라벨 래퍼나 바깥쪽 따옴표 없이 순수 값으로 정제되며, `speechTone`에는 기본 종결어미(반말/존댓말 등)와 문장 길이·호흡을 명시하고 샘플 대사의 어절 단위 말줄임표 도배를 지양하며 인물 간 화법·외형 틀이 동질화되지 않도록 하는 앙상블 분산 지침이 적용됩니다(숫자 상한 없음). WPF 로어북 편집창([EditLorebookWindow.xaml](../../../GRC/GRC/Views/EditLorebookWindow.xaml)) 또한 카테고리(`인물` 11필드 / `장소·아이템·세계관` 4필드 / `기억` 자유 텍스트)에 따라 전용 구조화 입력 폼과 실시간 `<world_lore>` 렌더링 미리보기를 제공합니다.
     3. **3단계 (오프닝 시나리오 선행 집필 — 1회 호출)**: JSON 이스케이프 및 개조식 문체 전이(Style Bleed)를 차단하기 위해 독립된 `text/plain` 문학 산문 모드로 첫 직면 장면을 집필합니다.
     4. **4단계 (상태창·Turn 0 시딩 및 시스템 지시문 통합 — 1회 호출 + C# 하이브리드 컴파일러)**: 완성된 오프닝 본문(`<opening_scenario>`)을 기반으로 초기 스탯(`stats`), 수치 갱신 가이드(`guide`), Turn 0 초기 컨텍스트(`initialChars`/`initialPlaces` 단일 시작 장소 1곳/`initialItems` PC가 실제 소유·휴대 중인 소지품 0~4개, 인물 Key 정규화 및 오프닝 등장 `아이템` 카테고리 훅 `ConsumedSeeds` 선소모 포함), 그리고 세션 특화 비수치 GM 수칙 4·5번(`genreDirectives`)을 단일 JSON으로 추출하고 `CompileHybridSystemPrompt`를 통해 코어 3대 헌법(`CoreSystemDirectivesHeader`: 1번 객관적 감각 서술, 2번 속마음·중대 결정 불간섭 및 위임 턴 일상 반응 조건부 허용, 3번 현실적 인과율 판정)과 즉시 결합합니다. 기존 세션을 재적용하면 구버전 2번 조항이 신규 조건부 2번 조항으로 자동 교체됩니다. 세션 최종 적용 시 [LorebookService.cs](../../../GRC/GRC/Services/LorebookService.cs)는 런타임 쿼리와 동일한 대칭 공간(`SEMANTIC_SIMILARITY`)으로 768차원 임베딩을 순서 보장형 병렬 발급합니다.
 *   **100% C# 결정론적 무결성 관문 및 외과수술식 보정(`ReviewStepContentAsync` & `ReviseLorebooksSurgicallyAsync`)**:
     기존 단계별 LLM 자가 감사 재호출로 인한 자기강화 환각 및 토큰 낭비를 전면 제거하고, C# 파서와 정규식 기반의 즉시 결정론적 검수 관문(API 호출 0회)을 가동합니다. 기획된 로어북 항목 누락이나 인물 필수 대사(`"..."`) 누락 등 객관적 구조 결함이 적발되었을 때만 `[수정 대상: 항목명]` 태그를 생성하여 해당 항목만 핀포인트로 재생성·병합합니다.
 *   **에이전트 세션 자산 결정론적 검증 게이트 ([SessionAssetValidator.cs](../../../GRC/tests/GRC.Tests/SessionAssetValidator.cs) & [SessionAuditTests.cs](../../../GRC/tests/GRC.Tests/SessionAuditTests.cs), `Category=SessionAudit`)**:
-    [05_session_architect_agent_template.md](05_session_architect_agent_template.md) 기반 외부 에이전트가 생성한 3종 JSON 자산(`Preset.json`, `Session.json`, `FullHistory.json`)을 런타임 SSOT([NarrativeContract.cs](../../../GRC/GRC/Services/Cognitive/NarrativeContract.cs)의 `AffinityStatTerms`·`InitialScenarioAckText`, [LoreDetails.cs](../../../GRC/GRC/Models/LoreDetails.cs)의 구조화 스키마, [SessionArchitectService.cs](../../../GRC/GRC/Services/SessionArchitectService.cs)의 `CoreSystemDirectivesHeader`·정제기 고정점, 그리고 `W03_TURN0_COUNTS` 단일 시작 거점·소지품 0~4개, `W09_QUOTE_ELLIPSIS_DENSITY`·`W10_SPEECH_TONE_OVERLAP` 말투 품질 경고, 진행 세션용 `W11_UNLISTED_CHAR_KEY`)로 직접 검증하여 눈대중 검수(Blind Audit)를 원천 차단합니다.
+    [05_session_architect_agent_template.md](./05_session_architect_agent_template.md) 기반 외부 에이전트가 생성한 3종 JSON 자산(`Preset.json`, `Session.json`, `FullHistory.json`)을 런타임 SSOT([NarrativeContract.cs](../../../GRC/GRC/Services/Cognitive/NarrativeContract.cs)의 `AffinityStatTerms`·`InitialScenarioAckText`, [LoreDetails.cs](../../../GRC/GRC/Models/LoreDetails.cs)의 구조화 스키마, [SessionArchitectService.cs](../../../GRC/GRC/Services/SessionArchitectService.cs)의 `CoreSystemDirectivesHeader`·정제기 고정점, 그리고 `W03_TURN0_COUNTS` 단일 시작 거점·소지품 0~4개, `W09_QUOTE_ELLIPSIS_DENSITY`·`W10_SPEECH_TONE_OVERLAP` 말투 품질 경고, 진행 세션용 `W11_UNLISTED_CHAR_KEY`)로 직접 검증하여 눈대중 검수(Blind Audit)를 원천 차단합니다.
 
 </session_architect>
 
@@ -194,8 +196,8 @@ flowchart TB
 
 `[IMPLEMENTED]` 보이스 프리페치 및 재생은 [GeminiTtsService.cs](../../../GRC/GRC/Services/GeminiTtsService.cs)와 연동됩니다.
 
-1.  **실시간 대사 파싱**: 스트리밍 루프가 따옴표(`"..."`)를 만나면 이를 감지하여 대화 버퍼를 열고, 닫는 따옴표가 등장하면 즉시 백그라운드에서 `GeminiTtsService`로 오디오 번역 및 음성 합성(WAV)을 요청합니다.
-2.  **재생 동기화 대기 (Sync Hold)**: UI 소비자가 문자를 그리다가 닫는 따옴표에 도달하면, 프리페치 큐에서 방금 생성 완료된 음성을 꺼내 재생합니다. 이때 `TaskCompletionSource`를 사용하여 음성 재생이 완전히 끝날 때까지 다음 지문 텍스트의 출력을 멈추어(Hold) 소리와 자막의 완벽한 템포를 맞춥니다.
+1.  **실시간 대사 파싱 및 프리페치 (`gemini-3.1-flash-tts-preview`)**: 생산자 스트리밍 루프가 따옴표(`"..."`, `“...”`)를 만나면 대화 버퍼를 열고, 닫는 따옴표가 등장하면 즉시 백그라운드에서 `GeminiTtsService`로 음성 합성을 발주합니다. 일본어(`TtsLanguage.Japanese`) 모드 선택 시 `Gemini 3.5 Flash-Lite`(`ThinkingLevel.low`, `TokenLogScope.Begin("Tts_Translation")`)로 구어체 대사 선행 번역을 수행한 뒤, 활성 인물 로어북(`<character_context>`)과 직전 지문(`<acting_directing>`)을 결합해 Vertex AI(`us-central1` 리전) 또는 AI Studio 엔드포인트에서 24kHz PCM WAV(`WriteWavFileAsync`) 오디오를 생성합니다.
+2.  **재생 동기화 대기 (Sync Hold) 및 타건음 뮤트**: UI 소비자가 문자를 그리다가 대사 구간에 진입하면 타이핑 효과음(타건음)을 자동으로 멈추고, 닫는 따옴표에 도달하면 프리페치 큐에서 생성 완료된 음성을 꺼내 재생합니다. 이때 `TaskCompletionSource`를 사용하여 음성 재생이 완전히 끝날 때까지 다음 지문 텍스트의 출력을 멈추어(Hold) 소리와 자막의 완벽한 템포를 맞춥니다.
 
 </multimodal_sync>
 
@@ -211,9 +213,9 @@ flowchart TB
 
 ```mermaid
 flowchart TD
-    T1["Tier 1: Primitive Tokens (PrimitiveTokens.xaml)<br>- 불변 Color (Zinc 스케일 #09090B ~ #FAFAFA)<br>- 치수 CornerRadius, 폰트 패밀리"]
-    T2["Tier 2: Semantic Theme Brushes (DarkTheme.xaml)<br>- AppBackgroundBrush, SurfaceBackgroundBrush, TextPrimaryBrush<br>- po:Freeze='True' GPU 메모리 동결"]
-    T3["Tier 3: Component Styles (ModernStyles.xaml)<br>- BaseButtonStyle, ActionButton 계열<br>- ControlTemplate 및 VisualStateManager"]
+    T1["Tier 1: Primitive Tokens (PrimitiveTokens.xaml) - Zinc 스케일 Color, CornerRadius, FontFamily"]
+    T2["Tier 2: Semantic Theme Brushes (DarkTheme.xaml) - AppBackgroundBrush, po:Freeze GPU 메모리 동결"]
+    T3["Tier 3: Component Styles (ModernStyles.xaml) - BaseButtonStyle, ActionButton, ControlTemplate"]
     
     T1 --> T2 --> T3
 ```
@@ -267,7 +269,7 @@ sequenceDiagram
 * **타이핑 사운드 수명주기 관리 ([ChatWorkflowService.cs](../../../GRC/GRC/Services/ChatWorkflowService.cs))**: 텍스트 타이핑 효과음의 시작과 정지를 스트리밍 루프 및 `try-finally` 블록 내부에 결합하여 예외 발생 시에도 소리가 무한 반복되는 누수를 방지했습니다.
 * **스탯 UI 파싱 팩토리 ([StatusPayload.cs](../../../GRC/GRC/Models/StatusPayload.cs))**: 뷰모델에 흩어져 있던 비정형 스탯 문자열 파싱 로직을 `CustomStatUI.Create` 도메인 팩토리 메서드로 이전하여 `CultureInfo.InvariantCulture`, finite 검증 등 방어적 파싱을 일원화했습니다.
 * **고밀도(High-SNR) 4-슬롯 답변 추천 엔진 ([ReplySuggestionService.cs](../../../GRC/GRC/Services/ReplySuggestionService.cs) & [MemoryManagerService.cs](../../../GRC/GRC/Services/MemoryManagerService.cs))**: `BuildReplySuggestionContext`를 통해 과거 누적 줄거리(`Plot`)와 서술자 전용 NPC 설정(`SpeechTone` 등)을 배제하고 `<protagonist_profile>`(주인공 설정), `<active_scene_lore>`(현장 장소·인물 외형/역할), `<inactive_world_lore>`(타 장소·이미 조우한 현장 외 인물·현재 보유 소지품 1줄 카탈로그), `<current_snapshot>`, 그리고 `IsSceneResolved` 여부와 무관하게 상시 추출(미조우 인물 본명 `'누군가'` 마스킹 포함)되는 `<available_story_seeds>`만을 경량 조립합니다. 여기에 최근 대화 2턴(`<recent_conversation>`)과 겹치지 않는 이전 순수 유저 입력 최대 6개(`<user_recent_inputs_for_style>`)를 분리 주입하여, `Flash-Lite`가 유저 고유의 말투·어미를 복제하면서도 과거 대사 재탕이나 소모 아이템 환각 없이 4가지 장르 중립 기능 슬롯(`1. 정면 호응`, `2. 주도권/환기`, `3. 현장/소지품 활용`, `4. 국면 전환/다음 동선 출발`) 선택지를 생성합니다.
-* **세션 비종속 일러스트 프롬프트 스튜디오 ([IllustrationPromptService.cs](../../../GRC/GRC/Services/IllustrationPromptService.cs), [IllustrationStudioViewModel.cs](../../../GRC/GRC/ViewModels/IllustrationStudioViewModel.cs), [IllustrationStudioWindow.xaml](../../../GRC/GRC/Views/IllustrationStudioWindow.xaml))**: `WAI-illustrious-SDXL v17.0` (`128374704` 백발 용족 6인 작가 블렌딩) 규격의 3행 6슬롯 과적합 방지 마스터 프롬프트 조립기입니다. 가중치 괄호(`(tag:1.2)`)와 서양풍 안면 왜곡 태그(`mature female`, `aged up`)를 결정론적으로 제거하며, 독립 캐릭터 보관함·장면 프리셋·최근 복사 기록(`IllustrationLibrary.json`), 전체 GRC 세션 로어북 참조, 100% 자유 다중 토글 무검열 R-18 단보루 태그 팔레트, 그리고 PICCO 정적 프리픽스 규격(`AI_Prompt_Engineering_Guidelines.md`)을 준수하는 AI 슬롯 추출·부분 수정·과적합 정리(`ReviseSlotsWithAiAsync`) 기능을 시작 화면([SessionListView.xaml](../../../GRC/GRC/Views/SessionListView.xaml))에서 세션 종속 없이 제공합니다. 또한 [GRC.csproj](../../../GRC/GRC/GRC.csproj)의 `EnableIllustrationStudio` MSBuild 프로퍼티 및 `ENABLE_ILLUSTRATION_STUDIO` 조건부 컴파일 가드를 통해 단일 브랜치에서 일반 배포판(`-p:EnableIllustrationStudio=false`, 바이너리 및 UI에서 일러스트 모듈 완전 배제)과 확장 배포판(`-p:EnableIllustrationStudio=true`)을 무충돌로 동시 빌드할 수 있습니다.
+* **세션 비종속 일러스트 프롬프트 스튜디오 ([IllustrationPromptService.cs](../../../GRC/GRC/Services/IllustrationPromptService.cs), [IllustrationStudioViewModel.cs](../../../GRC/GRC/ViewModels/IllustrationStudioViewModel.cs), [IllustrationStudioWindow.xaml](../../../GRC/GRC/Views/IllustrationStudioWindow.xaml), [IllustrationLibraryWindow.xaml](../../../GRC/GRC/Views/IllustrationLibraryWindow.xaml), [IllustrationAiToolsWindow.xaml](../../../GRC/GRC/Views/IllustrationAiToolsWindow.xaml))**: `WAI-illustrious-SDXL v17.0` (`128374704` 백발 용족 6인 작가 블렌딩) 규격의 3행 6슬롯 과적합 방지 마스터 프롬프트 조립기입니다. 메인 워크벤치([IllustrationStudioWindow.xaml](../../../GRC/GRC/Views/IllustrationStudioWindow.xaml))는 모든 부연 설명 노이즈를 제거하고 6슬롯 컴팩트 그리드와 `danbooru.csv` 실측 포스트 수 기반 750+ 정규 태그 사전(5대 슬롯 대분류 × 37개 중분류 탐색기 + 한/영 실시간 통합 검색, 임신·착유·모유·결혼/육아 엔딩 중분류 포함)에 집중하며, 저빈도 관리 기능인 캐릭터 보관함·장면 프리셋·최근 복사 기록(`IllustrationLibrary.json`)은 [IllustrationLibraryWindow.xaml](../../../GRC/GRC/Views/IllustrationLibraryWindow.xaml)로, GRC 세션 로어북 연동 및 AI 추출·부분 수정·과적합 다이어트(`ReviseSlotsWithAiAsync`)는 [IllustrationAiToolsWindow.xaml](../../../GRC/GRC/Views/IllustrationAiToolsWindow.xaml)로 물리 분리했습니다. 또한 AI 프롬프트의 `<context>` 내부에 스튜디오 정규 어휘 블록(`<canonical_tag_vocabulary>`)을 주입하고 C# 후처리 동의어 정규화(`DanbooruTagCatalog.NormalizeAlias`)를 결합하여 AI가 생성한 태그와 UI 칩 하이라이트의 1:1 정합성을 보장합니다. [GRC.csproj](../../../GRC/GRC/GRC.csproj)의 `EnableIllustrationStudio` MSBuild 프로퍼티 및 `ENABLE_ILLUSTRATION_STUDIO` 조건부 컴파일 가드를 통해 단일 브랜치에서 일반 배포판(`-p:EnableIllustrationStudio=false`)과 확장 배포판(`-p:EnableIllustrationStudio=true`)을 무충돌로 동시 빌드할 수 있습니다.
 
 </domain_service_extraction>
 
