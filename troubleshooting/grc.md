@@ -407,28 +407,33 @@ related:
 
 ---
 
-## 2026-11-06: [Resolved] 원장 불릿 초반 법칙·물품 고유명사 누락(A1), StatusAI 재시도·취소 토큰 분리(A2), NPC 착용 의복 역유입(A3) 및 MemoryLog 1:1 정밀 추적(B5~B12) 해결
+## 2026-11-06: [Resolved] StatusAI NPC 소유 물품 역유입(A3, 구조 원인), StatusAI 재시도·취소 토큰 분리(A2) / [Open] 원장 불릿 법칙 디테일 누락(A1, 프롬프트로 미해결)
 
 ### 1. 현상 (Symptom)
-1. **`EventLedgerExtractor`(A1) 초반부 세계관 법칙·가설 및 물품 고유명사 누락**: 4턴(8메시지) 압축 구간에서 장소 이동이 없으면 중반부의 중요 세계관 법칙(대봉인 닻줄 이완·반발 자기장 감쇄 원리, 순결-정화 전도율 가설)이나 구체적 계획(비각 도끼 대여·나무 욕조 제작)이 후반부 스킨십 묘사에 밀려 누락(`LOW` 2개 오분류)되거나, 수선하여 양도한 `'삼베 가리개'`가 일반 명사 `'옷'`으로 추상화됨.
-2. **`StatusAI`(A2) 일시 파싱 실패 시 무재시도 드롭 및 스트리밍 종료 후 `CancellationTokenSource` 조기 Dispose**: `Flash-Lite`가 간헐적으로 비정상 JSON을 반환할 때 재시도 없이 해당 턴 상태 갱신이 영구 유실되며, `ChatViewModel.SendMessageAsync`가 스트리밍 종료 시점에 `_cancellationTokenSource.Dispose()`를 즉시 호출하여 백그라운드에서 실행 중인 `statusTask` 및 `onDownloadComplete`와 수명주기가 충돌함.
-3. **`StatusAI`(A3) `<canonical_names>` 등재 NPC 의복(`해진 삼베 가리개`)의 주인공 인벤토리(`items`) 역유입**: 로어북 `아이템` 카테고리에 등재된 NPC 착용 의복(`해진 삼베 가리개`)이 `<canonical_names>`의 `- 정식 아이템명:`에 노출될 때, 주인공이 오르페의 옷을 바늘로 꿰매어 수선해 주면 `Rule 3`(`원재료는 완성품으로 교체`)과 결합하여 타인 착용 의복이 주인공 `items`에 추가됨.
+1. **`StatusAI`(A3) 타 인물 소유 물품의 주인공 `items` 역유입**: 오르페가 입은 `해진 삼베 가리개`가 Turn 335(수프 조리 턴)에 주인공 소지품으로 추가됨. 독립 기준표 작성자 판정상 이 의복은 Turn 174 이전부터 이미 오염 상태였고(Turn 288에 자연 삭제 후 Turn 335 재유입), Turn 290에는 근거 없이 `백은 수액 다관`이 증발했다가 Turn 296에 복귀함.
+2. **`StatusAI`(A2) 일시 파싱 실패 시 무재시도 드롭 및 스트리밍 종료 후 `CancellationTokenSource` 조기 Dispose**: 비정상 JSON 반환 시 해당 턴 상태 갱신이 영구 유실되고, 스트리밍 종료 시 즉시 `Dispose()`된 토큰이 백그라운드 `statusTask`/`onDownloadComplete`와 충돌함.
+3. **`EventLedgerExtractor`(A1) 장소 이동 없는 법칙 공개 구간 누락**: 프로덕션 압축 청크 37(FH[631:639])은 불릿 2개(LOW)로 압축되며 대봉인 닻줄·사슬 원리가 누락되었고, 청크 39(FH[647:655])는 불릿 4개였으나 순결-정화 전도율 가설이 누락됨.
 
 ### 2. 원인 (Root Cause)
-* `EventLedgerExtractor`의 `LOW/MEDIUM` 판정 기준이 물리적 장소 이동·신규 인물 대면 위주로만 기술되어 동일 장소 내 세계관 법칙·가설·소유권 이전·구체적 약속이 `LOW`로 격하되었고, 일반 명사 치환 금지 지침이 없었음.
-* `ChatWorkflowService`의 `statusTask`에 지수 백오프 재시도 루프와 유효 페이로드(`isMeaningfulPayload`) 검증이 없었으며, 스트리밍 취소 토큰(`_cancellationTokenSource`)과 백그라운드 상태창 취소 토큰(`_statusUpdateCts`)이 분리되지 않았음.
-* `BuildStatusRequest`의 `<canonical_names>`가 `- 정식 아이템명:`을 단순 나열하여 `StatusAI`가 이를 추적 대상 소지품 목록으로 오인했고, `Rule 3`에 타인 착용·귀속 의복을 수선해 준 경우 주인공 소유 완성품으로 추가하지 말라는 경계가 부재했음.
+* **A3 (실험으로 확정)**: `BuildStatusRequest`가 로어북 `아이템` 카테고리 전체를 소유 여부와 무관하게 `<canonical_names>`에 주입하여, StatusAI가 미보유 아이템명(타 인물 착용 의복·구속구·소지품)을 추적 후보로 오인함. SessionArchitect 산출물에는 NPC 소유 아이템이 다수 존재하며(예: `흑철 각인 구속구`, `창성룡의 역린 회중시계`) 소유자 필드가 없음.
+* **A2**: `statusTask`에 재시도·유효 페이로드 검증이 없었고 스트리밍/상태창 취소 토큰이 분리되지 않았음.
+* **A1 (부분 규명)**: HEAD의 LOW 조건이 장소 이동·인물 조우만을 기준으로 하여 정보 공개 구간이 LOW로 격하됨(정보 구간 LOW 오분류 62%). 다만 LOW 격하를 해소해도 고밀도 법칙 청크의 핵심 사실 재현율은 개선되지 않아(약 26~29%), 4~5개 불릿 상한 대비 사실 밀도 초과와 경량 모델 압축 한계가 남은 원인으로 추정됨.
 
 ### 3. 해결책 및 불변식 (Resolution & Invariants)
-* **원장 불릿 추출 지침 정밀화 및 세션 고유명사 비과적합 보장 ([EventLedgerExtractor.cs](../../GRC/GRC/Services/Cognitive/EventLedgerExtractor.cs))**:
-  * 특정 세션 고유명사 예시 없이 일반 명사(`'옷'`, `'도구'`, `'연장'`, `'그녀'`) 치환을 금지하고 원문에 등장한 인물명·지명·아이템명 고유명사를 강제하며, 동일 장소 내 대화라도 세계관 법칙·봉인/저주 원리·가설 확인, 물품 소유 이전, 구체적 계획·약속이 포함된 구간은 `MEDIUM(3개)` 이상으로 분류하고 `HIGH(4~5개)`의 장기 시간 경과·주요 물품 획득/제작 기준을 보존함(프로덕션 동일 설정 `Temperature: null` 6개 프로브 × 5회 = 30회 더블 블라인드 라이브 벤치마크 `30/30 (100.0%)` 통과, 평균 `9.45 / 10.0`).
-* **StatusAI 지수 백오프 재시도(`2000ms -> 5000ms`) 및 전용 `_statusUpdateCts` 수명주기 격리 ([ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs), [ChatViewModel.cs](../../GRC/GRC/ViewModels/ChatViewModel.cs))**:
-  * `StatusRetryDelaysMs = [2000, 5000]` 재시도 루프와 `isMeaningfulPayload` 검증을 도입하고, 재시도·최종 실패·취소 사유를 `MemoryLog.txt`에 기록.
-  * `ChatViewModel`에서 스트리밍용 `_cancellationTokenSource`와 백그라운드 상태창용 `_statusUpdateCts`를 분리하고, `_isAwaitingPriorStatus`로 동기 재진입을 차단하며, `DeleteMessageAsync`(최신 턴 메시지 삭제 시에만 취소, 과거 메시지 삭제 시에는 `AwaitPendingStatusTaskAsync` 대기)/`ClearChatAsync`/`GoBack`/`InitializeWithSession`으로 백그라운드 상태 갱신 경합을 차단.
-* **NPC 착용·수선 의복 역유입 차단 및 표기 사전 명확화 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
-  * `<canonical_names>`의 아이템 항목에 `(<previous_state>의 items에 없던 타 인물 착용 의복·구속구나 이미 소멸한 초기 결박 잔해는 절대 items에 추가·유지 금지)` 경계를 명시하고, `Rule 3`을 `[타인 물품·수선품 추가 절대 금지]`와 `[제작 교체·소모품 및 장기 방치 잔해 삭제·도구 유지]`로 구조화하여 주인공 본인 물품 제작 교체, `days` 이상 경과 초기 결박·잔해 삭제, 본인 의복·도구 유지, 타인 의복 수선품 추가 차단을 동시에 달성(프로덕션 동일 설정 `Temperature: null`, `thinkingLevel: LOW` 핵심+Turn334 6대 프로브 × 5회 = 30회 더블 블라인드 라이브 벤치마크 `30/30 (100.0%)` 통과, 전체 35회 루브릭 `85.5 / 90.0`).
+* **검증 방법 (사전 등록 단일 판정 실험)**: 프로덕션 코드(`BuildStatusRequest`/`EventLedgerExtractor`/`GeminiApiService`)로 요청을 생성하고, 대조군은 사고 당시 실행 코드(git `HEAD`)로 고정. 이전 상태는 `MemoryLog.txt` 실제 상태를 복원(마지막 압축 `대상구간` 로그를 앵커로 44개 청크 경계를 복원하고 턴별 유저 메시지 인덱스를 `미압축 첫 청크 시작 + 단기기억 N - 1`로 매핑). 기대 결과는 결과 확인 전 블라인드 서브에이전트가 작성. 교차 세계 2개(별구름·잿빛 변경) 서사를 1회 생성·동결하여 포함. 총 Flash-Lite 900회.
+* **A3 구조 수정 (2x2 요인 실험 결과로 채택, [MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
+  * `<canonical_names>`의 아이템명은 `_currentContext.Items`와 `EntityNameResolver.IsSamePlaceOrItem`으로 매칭되는 보유 아이템만 주입. Rule 3·라벨 문구는 HEAD 원문 유지.
+  * 결과(타 인물 물품 턴 50회): 전체 주입+HEAD 문구 오염 `28/50` (Turn 335 실제 오염 `8/10` 재현) -> 보유분만 주입 `0/50`. 프롬프트 문구만 수정 시 `16/50`(43% 감소)에 그침. 교차 세계 회중시계 손질 턴 `10/10 -> 0/10`, NPC가 건넨 물품 정상 추가 `10/10` 유지, 보존 오류 `3.2% -> 0%`.
+  * 회귀 테스트: `BuildStatusRequest_CanonicalItemNames_IncludeOnlyHeldItems_ExcludeOtherCharactersItems`.
+* **A2 StatusAI 재시도 및 토큰 수명 격리 ([ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs), [ChatViewModel.cs](../../GRC/GRC/ViewModels/ChatViewModel.cs))**:
+  * `StatusRetryDelaysMs = [2000, 5000]` 재시도와 `isMeaningfulPayload` 검증, 재시도·실패·취소 사유 `MemoryLog.txt` 기록.
+  * 스트리밍용 `_cancellationTokenSource`와 상태창용 `_statusUpdateCts` 분리, `_isAwaitingPriorStatus` 재진입 차단, `DeleteMessageAsync`는 최신 턴 메시지 삭제 시에만 취소하고 과거 메시지 삭제 시에는 대기.
+* **A1 (미채택, HEAD 프롬프트 유지, [EventLedgerExtractor.cs](../../GRC/GRC/Services/Cognitive/EventLedgerExtractor.cs))**:
+  * Flash-Lite 단순화 후보(HEAD 대비 4구절 변경)는 정보 구간 LOW 오분류 `62% -> 19%`, 무작위 청크 사실 재현율 `49% -> 58%`, 교차 세계 핵심 재현율 `46% -> 65%`, 환각 `1.8% -> 0.8%`로 개선했으나, 사전 등록 기준 (a) 원 실패 청크 핵심 재현율 `>= 80%`(실측 `29%`, HEAD `26%`)와 (b) 일상 청크 LOW 유지율 `>= 90%`(실측 `50%`, HEAD `63%`)를 충족하지 못해 규칙에 따라 미채택.
+  * 고밀도 법칙 청크의 디테일 보존은 프롬프트 문구로 해결되지 않으므로 구조 대안(불릿 상한 조정, 법칙 전용 영구 저장소 B1)을 별도 검토 대상으로 남김.
 * **핵심 부정 제약 (Never use X)**:
-  * **절대 스트리밍 완료 직후 `Dispose()`되는 `_cancellationTokenSource.Token`을 백그라운드 `statusTask`나 `onDownloadComplete` 추천 답변 프리페치에 그대로 전달하지 말 것.** 반드시 수명주기가 격리된 `_statusUpdateCts.Token` / `_suggestionCts.Token`을 사용할 것.
-  * **절대 `StatusAI`의 `<canonical_names>`에 로어북 `아이템` 목록을 주입할 때 소유 판정 무관(표기 참조용 사전) 경계 문구를 생략하거나, 타인의 의복·장비를 수선해 준 행위를 주인공 소유 완성품 획득으로 취급하지 말 것.**
+  * **절대 `StatusAI`의 `<canonical_names>`에 주인공이 보유하지 않은 로어북 `아이템` 이름을 주입하지 말 것.** 미보유 아이템 표기 통일은 `EntityNameResolver` 키워드 별칭 매칭으로 처리할 것.
+  * **절대 프롬프트 개선 효과를 세션에서 추출한 예시 명사로 튜닝한 뒤 같은 세션 프로브로 판정하지 말 것.** 프로덕션 코드 경로·실제 이전 상태·사고 당시 대조군·블라인드 사전 기준표로 판정할 것.
+  * **절대 스트리밍 완료 직후 `Dispose()`되는 `_cancellationTokenSource.Token`을 백그라운드 `statusTask`나 추천 답변 프리페치에 전달하지 말 것.**
 
 ---
