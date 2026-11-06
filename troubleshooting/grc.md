@@ -406,3 +406,29 @@ related:
   * **절대 서사 주입용 3턴 윈도우(`ActiveSeedKeys`) 만료 시 진행 중인 에피소드의 StatusAI 감시 목록(`MonitoredSeedKeys`)까지 함께 비우지 말 것.**
 
 ---
+
+## 2026-11-06: [Resolved] 원장 불릿 초반 법칙·물품 고유명사 누락(A1), StatusAI 재시도·취소 토큰 분리(A2), NPC 착용 의복 역유입(A3) 및 MemoryLog 1:1 정밀 추적(B5~B12) 해결
+
+### 1. 현상 (Symptom)
+1. **`EventLedgerExtractor`(A1) 초반부 세계관 법칙·가설 및 물품 고유명사 누락**: 4턴(8메시지) 압축 구간에서 장소 이동이 없으면 중반부의 중요 세계관 법칙(대봉인 닻줄 이완·반발 자기장 감쇄 원리, 순결-정화 전도율 가설)이나 구체적 계획(비각 도끼 대여·나무 욕조 제작)이 후반부 스킨십 묘사에 밀려 누락(`LOW` 2개 오분류)되거나, 수선하여 양도한 `'삼베 가리개'`가 일반 명사 `'옷'`으로 추상화됨.
+2. **`StatusAI`(A2) 일시 파싱 실패 시 무재시도 드롭 및 스트리밍 종료 후 `CancellationTokenSource` 조기 Dispose**: `Flash-Lite`가 간헐적으로 비정상 JSON을 반환할 때 재시도 없이 해당 턴 상태 갱신이 영구 유실되며, `ChatViewModel.SendMessageAsync`가 스트리밍 종료 시점에 `_cancellationTokenSource.Dispose()`를 즉시 호출하여 백그라운드에서 실행 중인 `statusTask` 및 `onDownloadComplete`와 수명주기가 충돌함.
+3. **`StatusAI`(A3) `<canonical_names>` 등재 NPC 의복(`해진 삼베 가리개`)의 주인공 인벤토리(`items`) 역유입**: 로어북 `아이템` 카테고리에 등재된 NPC 착용 의복(`해진 삼베 가리개`)이 `<canonical_names>`의 `- 정식 아이템명:`에 노출될 때, 주인공이 오르페의 옷을 바늘로 꿰매어 수선해 주면 `Rule 3`(`원재료는 완성품으로 교체`)과 결합하여 타인 착용 의복이 주인공 `items`에 추가됨.
+
+### 2. 원인 (Root Cause)
+* `EventLedgerExtractor`의 `LOW/MEDIUM` 판정 기준이 물리적 장소 이동·신규 인물 대면 위주로만 기술되어 동일 장소 내 세계관 법칙·가설·소유권 이전·구체적 약속이 `LOW`로 격하되었고, 일반 명사 치환 금지 지침이 없었음.
+* `ChatWorkflowService`의 `statusTask`에 지수 백오프 재시도 루프와 유효 페이로드(`isMeaningfulPayload`) 검증이 없었으며, 스트리밍 취소 토큰(`_cancellationTokenSource`)과 백그라운드 상태창 취소 토큰(`_statusUpdateCts`)이 분리되지 않았음.
+* `BuildStatusRequest`의 `<canonical_names>`가 `- 정식 아이템명:`을 단순 나열하여 `StatusAI`가 이를 추적 대상 소지품 목록으로 오인했고, `Rule 3`에 타인 착용·귀속 의복을 수선해 준 경우 주인공 소유 완성품으로 추가하지 말라는 경계가 부재했음.
+
+### 3. 해결책 및 불변식 (Resolution & Invariants)
+* **원장 불릿 추출 지침 정밀화 ([EventLedgerExtractor.cs](../../GRC/GRC/Services/Cognitive/EventLedgerExtractor.cs))**:
+  * 일반 명사(`'옷'`, `'도구'`) 치환을 금지하고 명시적 고유명사(`'삼베 가리개'`, `'백은 다관'`)를 강제하며, 동일 장소 내 대화라도 세계관 법칙·봉인 해방 원리·가설 확인, 물품 소유 이전, 구체적 계획·약속이 포함된 구간은 `MEDIUM(3개)` 이상으로 분류하여 초반부 인과 단서와 후반부 사건을 모두 보존하도록 규정(더블 블라인드 라이브 벤치마크 `93.59 / 100.0` 달성).
+* **StatusAI 지수 백오프 재시도(`2000ms -> 5000ms`) 및 전용 `_statusUpdateCts` 수명주기 격리 ([ChatWorkflowService.cs](../../GRC/GRC/Services/ChatWorkflowService.cs), [ChatViewModel.cs](../../GRC/GRC/ViewModels/ChatViewModel.cs))**:
+  * `StatusRetryDelaysMs = [2000, 5000]` 재시도 루프와 `isMeaningfulPayload` 검증을 도입하고, 재시도·최종 실패·취소 사유를 `MemoryLog.txt`에 기록.
+  * `ChatViewModel`에서 스트리밍용 `_cancellationTokenSource`와 백그라운드 상태창용 `_statusUpdateCts`를 분리하고, `_isAwaitingPriorStatus`로 동기 재진입을 차단하며, `DeleteMessageAsync`/`ClearChatAsync`/`GoBack`/`InitializeWithSession` 시 `CancelAndAwaitPendingStatusTaskAsync()`로 이전 턴 백그라운드 상태 갱신을 즉시 취소.
+* **NPC 착용·수선 의복 역유입 차단 및 표기 사전 명확화 ([MemoryManagerService.cs](../../GRC/GRC/Services/MemoryManagerService.cs))**:
+  * `<canonical_names>`의 아이템 항목을 `- 정식 아이템명(표기 참조용 사전이며, NPC의 의복·구속구는 주인공이 수선·접촉하더라도 items에 추가 금지):`로 명시하고, `Rule 3`에서 주인공 본인 소유 물품(휴대품·거점 도구·비축품)만 개별 명사로 기록하되 NPC 착용 의복·장신구·구속구는 바늘 등으로 직접 수선해 주더라도 절대 추가하지 않도록 분리(더블 블라인드 라이브 벤치마크 `98.58 / 100.0`, 10/10 런 오염 0건 달성).
+* **핵심 부정 제약 (Never use X)**:
+  * **절대 스트리밍 완료 직후 `Dispose()`되는 `_cancellationTokenSource.Token`을 백그라운드 `statusTask`나 `onDownloadComplete` 추천 답변 프리페치에 그대로 전달하지 말 것.** 반드시 수명주기가 격리된 `_statusUpdateCts.Token` / `_suggestionCts.Token`을 사용할 것.
+  * **절대 `StatusAI`의 `<canonical_names>`에 로어북 `아이템` 목록을 주입할 때 소유 판정 무관(표기 참조용 사전) 경계 문구를 생략하거나, 타인의 의복·장비를 수선해 준 행위를 주인공 소유 완성품 획득으로 취급하지 말 것.**
+
+---
