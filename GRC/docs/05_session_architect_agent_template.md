@@ -115,8 +115,8 @@ GRC/bin/Debug/net8.0-windows/Sessions/{SanitizedSessionTitle}_{yyyyMMdd}_{6CharH
         "Appearance": "[출신·직업·성격에서 도출한 고유 시각 특징(머리색·눈동자색·체형·복식)과 습관적 버릇 명사구 나열]",
         "SurfacePersona": "[대외적 페르소나 및 공적 태도]",
         "InnerMotivation": "[친밀해지거나 감정이 고조될 때 드러나는 독자적 바람·신념·숨겨진 면모]",
-        "InitialContact": "[Turn 0 또는 본편 첫 대면·교류 계기와 초기 태도]",
-        "BondTrigger": "신뢰·호감 30 이상 달성 시 [NPC가 먼저 건네는 구체적 부탁·제안·고민 상담·사건의 시작점]",
+        "InitialContact": "[첫 대면·교류 계기와 초기 태도 ('Turn 0 이후', '본편 첫 조우' 같은 메타 용어 기재 금지)]",
+        "BondTrigger": "[NPC가 먼저 건네는 구체적 부탁·제안·고민 상담·위기 등 유대 심화 사건의 발단 상황 ('신뢰·호감 30 이상 달성 시' 같은 수치·시스템 조건 문구 기재 금지)]",
         "BondPayoff": "[해당 계기를 함께 해결한 뒤에야 개방되는 관계 변화 및 고유 조력·교류 방식]",
         "OtherRelations": "[실제로 직접 얽혀 있는 핵심 인물·집단 2~3개와의 구체적 관계 역학 및 이해관계]",
         "SpeechTone": "[어조 특징 요약 (큰따옴표 제외)]",
@@ -241,8 +241,8 @@ GRC는 로어북을 구형 평문 `"Content"` 문자열 대신 **구조화된 JS
 | **Pool C (2단계): 내면·비밀 해금** (`BOND_SECRET:{Name}`) | 이미 만난 인물 중 **1단계 `BOND:{Name}`이 확정 완수**된 상태에서 호감도/신뢰도 수치가 **60 이상** 달성 시 | `Character.BondPayoff`<br>`Character.InnerMotivation`<br>`Character.EmotionalQuote` | - `InnerMotivation`: 깊은 신뢰·유대 또는 감정 고조 시에만 드러나는 **독자적 바람·신념·숨겨진 면모**(장르 온도에 따라 비밀·상처 또는 소박한 꿈·서툰 진심, 공개 단계 3에서 `SurfacePersona`와 결합 해금).<br>- `EmotionalQuote`: 감정 고조 또는 깊은 신뢰 형성 시의 어조 변화 대사 샘플(공개 단계 3에서 해금).<br>- **1단계 발단 재발 방지 및 기억 보존 분리**: `<world_lore>` 인물 설정집에는 장기 세션 기억 유지를 위해 `InitialContact`·`BondTrigger`·`BondPayoff`·`InnerMotivation` 전체를 영구 보존하되, `<story_seeds>` 및 StatusAI `<offered_story_seeds>`의 `BOND_SECRET:{Name}` 문구에서는 기완수된 `BondTrigger`를 제외하고 `(기완수 유대: {BondPayoff}) -> 내면 단서 해금: {InnerMotivation}` 형태로 제시함. |
 
 > [!CAUTION]
-> **구형 평문 `"Content"` 필드 사용 금지 (`F15_LEGACY_LORE_FORMAT`)**
-> `Preset.json` 및 `Session.json`의 로어북 배열에는 `"Content"` 문자열 필드를 직접 기록하지 마십시오. 인물(`Category == "인물"`)은 반드시 `"Character"` 객체(11개 필수 필드), 비인물(`장소`, `아이템`, `세계관`)은 반드시 `"World"` 객체(4개 필수 필드)로 작성해야 하며, 각 필드 값 내부에 `분류(인물):`, `표면(...)`, `발단 계기:` 같은 중복 라벨이나 대사 바깥쪽 큰따옴표(`"..."`)를 넣지 말고 순수 내용만 기재하십시오.
+> **구형 평문 `"Content"` 필드 및 메타·수치 상용구 사용 금지 (`F15_LEGACY_LORE_FORMAT` & `F09_SANITIZER_FIXEDPOINT`)**
+> `Preset.json` 및 `Session.json`의 로어북 배열에는 `"Content"` 문자열 필드를 직접 기록하지 마십시오. 인물(`Category == "인물"`)은 반드시 `"Character"` 객체(11개 필수 필드), 비인물(`장소`, `아이템`, `세계관`)은 반드시 `"World"` 객체(4개 필수 필드)로 작성해야 하며, 각 필드 값 내부에 `분류(인물):`, `표면(...)`, `발단 계기:` 같은 중복 라벨, `Turn 0 이후` 같은 메타 용어, `신뢰·호감 30 이상 달성 시` 같은 시스템 수치 조건 문구, 또는 대사 바깥쪽 큰따옴표(`"..."`)를 넣지 말고 순수 인게임 서사 내용만 기재하십시오.
 
 </story_seeds_contract>
 
